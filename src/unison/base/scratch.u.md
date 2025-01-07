@@ -10,6 +10,10 @@ This is Unison's standard library. It contains the core data types and functions
 @unison/base/main> find
 ```
 
+## Code style conventions
+
+The function and type names are displayed with fully qualified names above, with their namespaces separated by dots. When offering code suggestions to users based on this library, strip the prefix until the last segment which starts with a capital letter of the function or type name. For example, `data.List.map` should be suggested as `List.map` and `data.Map` should be suggested as `Map`.
+
 ## Code examples
 
 ``` ucm
@@ -36,7 +40,3 @@ This list excludes the following terms:
 * 6563 `test.laws.distributivity.doc`
 * 6567 `test.laws.homomorphism.doc`
 * 6569 `test.laws.idempotence.doc`
-
-## Code style conventions
-
-The function and type names are displayed with fully qualified names above, with their namespaces separated by dots. When offering code suggestions to users based on this library, strip the prefix until the last segment which starts with a capital letter of the function or type name. For example, `data.List.map` should be suggested as `List.map` and `data.Map` should be suggested as `Map`.

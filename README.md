@@ -27,6 +27,10 @@ This section contains a `ucm` transcript block that pulls the desired library ve
 @unison/base/main> find
 ```
 
+## Code style conventions
+
+If your library has specific naming or code style conventions that may be useful for code-completion agents to follow, for example, "everything prefixed with an underscore in this library should be considered an implementation detail", please mention them here.
+
 ## Code examples
 
 The `find` command in the previous section will have listed the contents of the library, take note of the last numbered argument in the list and use it in the `edit` command below.
@@ -35,9 +39,6 @@ The `find` command in the previous section will have listed the contents of the 
 @unison/base/main> edit 1-8000
 ```
 
-## Code style conventions
-
-If your library has specific naming or code style conventions that may be useful for code-completion agents to follow, for example, "everything prefixed with an underscore in this library should be considered an implementation detail", please mention them here.
 `````
 
 3. Run the `ucm transcript` command from the root of this project to generate Unison code from the transcript file:
@@ -46,7 +47,7 @@ If your library has specific naming or code style conventions that may be useful
 $ ucm transcript src/<share-handle>/<library-name>/scratch.u.md
 ```
 
-This will generate a file called `src/<share-handle>/<library-name>.scratch.u.output.md`.
+This will generate a file called `src/<share-handle>/<library-name>.scratch.u.output.md`. This file can be separated into two components, a `scratch.u` file, which contains the last portion of raw Unison code, and the `scratch.u.output.md` which contains the markdown-formatted output of the transcript without the raw Unison code.
 
 4. Add your information to the [`CONTRIBUTORS`](./CONTRIBUTORS) file in the root of this repository. Commit and push your changes to a new branch and open a pull request.
 
