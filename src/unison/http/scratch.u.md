@@ -14,5 +14,3 @@ This project contains functions for working with HTTP requests and responses. It
 ``` ucm
 @unison/http/main> edit 1-484
 ```
-
-## Code style conventions
