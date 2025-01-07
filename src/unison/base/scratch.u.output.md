@@ -5,16 +5,16 @@ This is Unison's standard library. It contains the core data types and functions
 ## Library contents list
 
 ``` ucm
-@yourHandle/base/main> pull.without-history @unison/base/releases/3.28.1
+@unison/base/main> pull.without-history @unison/base/releases/3.28.1
 
   Downloaded 13444 entities.
 
   ✅
 
-  Successfully updated @yourHandle/base/main from
+  Successfully updated @unison/base/main from
   @unison/base/releases/3.28.1.
 
-@yourHandle/base/main> find
+@unison/base/main> find
 
   1.    structural ability abilities.Abort
   2.    abilities.Abort.abort : {Abort} a
@@ -11173,7 +11173,7 @@ This is Unison's standard library. It contains the core data types and functions
 ## Code examples
 
 ``` ucm
-@yourHandle/base/main> edit 1-4102
+@unison/base/main> edit 1-4102
 
   ☝️
 
@@ -11182,7 +11182,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 4104-4288
+@unison/base/main> edit 4104-4288
 
   ☝️
 
@@ -11191,7 +11191,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 4290-4320
+@unison/base/main> edit 4290-4320
 
   ☝️
 
@@ -11200,7 +11200,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 4322
+@unison/base/main> edit 4322
 
   ☝️
 
@@ -11209,7 +11209,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 4324-4377
+@unison/base/main> edit 4324-4377
 
   ☝️
 
@@ -11218,7 +11218,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 4379-6556
+@unison/base/main> edit 4379-6556
 
   ☝️
 
@@ -11227,7 +11227,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 6558-6562
+@unison/base/main> edit 6558-6562
 
   ☝️
 
@@ -11236,7 +11236,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 6564-6566
+@unison/base/main> edit 6564-6566
 
   ☝️
 
@@ -11245,7 +11245,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 6568
+@unison/base/main> edit 6568
 
   ☝️
 
@@ -11254,7 +11254,7 @@ This is Unison's standard library. It contains the core data types and functions
   You can edit them there, then run `update` to replace the
   definitions currently in this namespace.
 
-@yourHandle/base/main> edit 6570-8000
+@unison/base/main> edit 6570-8000
 
   ☝️
 

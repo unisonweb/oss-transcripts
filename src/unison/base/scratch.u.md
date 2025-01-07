@@ -6,23 +6,23 @@ This is Unison's standard library. It contains the core data types and functions
 ## Library contents list
 
 ``` ucm
-@yourHandle/base/main> pull.without-history @unison/base/releases/3.28.1
-@yourHandle/base/main> find
+@unison/base/main> pull.without-history @unison/base/releases/3.28.1
+@unison/base/main> find
 ```
 
 ## Code examples
 
 ``` ucm
-@yourHandle/base/main> edit 1-4102
-@yourHandle/base/main> edit 4104-4288
-@yourHandle/base/main> edit 4290-4320
-@yourHandle/base/main> edit 4322
-@yourHandle/base/main> edit 4324-4377
-@yourHandle/base/main> edit 4379-6556
-@yourHandle/base/main> edit 6558-6562
-@yourHandle/base/main> edit 6564-6566
-@yourHandle/base/main> edit 6568
-@yourHandle/base/main> edit 6570-8000
+@unison/base/main> edit 1-4102
+@unison/base/main> edit 4104-4288
+@unison/base/main> edit 4290-4320
+@unison/base/main> edit 4322
+@unison/base/main> edit 4324-4377
+@unison/base/main> edit 4379-6556
+@unison/base/main> edit 6558-6562
+@unison/base/main> edit 6564-6566
+@unison/base/main> edit 6568
+@unison/base/main> edit 6570-8000
 ```
 
 This list excludes the following terms:
