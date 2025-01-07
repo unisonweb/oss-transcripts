@@ -1,0 +1,5724 @@
+# Http
+
+This project contains functions for working with HTTP requests and responses. It contains both HTTP client and HTTP server utilities.
+
+## Library contents list
+
+``` ucm
+@unison/http/main> pull.without-history @unison/http/releases/3.8.0
+
+  Downloaded 23887 entities.
+
+  ✅
+
+  Successfully updated @unison/http/main from
+  @unison/http/releases/3.8.0.
+
+@unison/http/main> find
+
+  1.   type Body
+  2.   Body.Body : Bytes -> Body
+  3.   Body.decodeBody : msg
+                         -> (msg -> Headers)
+                         -> (Body -> msg -> msg)
+                         ->{Decode} (msg, Headers)
+  4.   Body.decodeChunkedBody : Boolean
+                                ->{Decode} (Body, Headers)
+  5.   Body.decodeNonChunkedBody : Headers ->{Decode} Body
+  6.   Body.decompressBody : Headers -> Body -> Either Text Body
+  7.   Body.empty : Body
+  8.   Body.formEncoded : Query -> Body
+  9.   Body.formEncoded.tests : [Result]
+  10.  Body.fromText : Text -> Body
+  11.  Body.fromText.doc : Doc
+  12.  Body.standardContentDecoders : data.Map
+                                        Text
+                                        (Bytes
+                                        ->{g} Either Text Bytes)
+  13.  Body.toBytes : Body -> Bytes
+  14.  type client.Config
+  15.  client.Config.Config : Optional proxy.Config
+                              -> client.Config
+  16.  client.Config.default : client.Config
+  17.  client.Config.proxy : client.Config
+                             -> Optional proxy.Config
+  18.  client.Config.proxy.modify : (Optional proxy.Config
+                                    ->{g} Optional proxy.Config)
+                                    -> client.Config
+                                    ->{g} client.Config
+  19.  client.Config.proxy.set : Optional proxy.Config
+                                 -> client.Config
+                                 -> client.Config
+  20.  client.Config.proxyPresence : client.Config
+                                     -> ProxyPresence
+  21.  client.Config.withProxy : HostName
+                                 -> Port
+                                 -> client.Config
+                                 -> client.Config
+  22.  client.Config.withProxy.doc : Doc
+  23.  client.examples.query : '{IO, Exception} HttpResponse
+  24.  client.examples.simple : '{IO, Exception} HttpResponse
+  25.  client.examples.trailingSlash : Path
+  26.  type client.failure.ConnectFailure
+  27.  type client.failure.InternalFailure
+  28.  type client.failure.Unsupported
+  29.  client.failure.unsupportedScheme : Scheme -> Failure
+  30.  type client.failure.UpstreamFailure
+  31.  type client.failure.WebSocketHandsakeFailure
+  32.  ability client.Http
+  33.  client.Http.configuredHandler : client.Config
+                                       -> Request {Http} a
+                                       ->{IO} a
+  34.  client.Http.configuredHandler.connect : client.Config
+                                               -> HttpRequest
+                                               ->{IO, Exception} Either
+                                                 HttpResponse
+                                                 Connection
+  35.  client.Http.configuredHandler.connectNoProxy : URI
+                                                      ->{IO,
+                                                      Exception} Connection
+  36.  client.Http.configuredHandler.connectViaProxy : proxy.Config
+                                                       -> HttpRequest
+                                                       ->{IO,
+                                                       Exception} Either
+                                                         HttpResponse
+                                                         Connection
+  37.  client.Http.configuredHandler.connectViaProxy.impl : proxy.Config
+                                                            -> Optional
+                                                              ClientConfig
+                                                            -> HostName
+                                                            -> Port
+                                                            -> Headers
+                                                            ->{IO,
+                                                            Exception} Either
+                                                              HttpResponse
+                                                              Connection
+  38.  client.Http.configuredHandler.http : client.Config
+                                            -> HttpRequest
+                                            ->{Decode,
+                                            Stream Bytes} HttpResponse
+  39.  client.Http.configuredHandler.webSocket : client.Config
+                                                 -> Connection
+                                                 -> HttpRequest
+                                                 ->{IO, Random} Either
+                                                   Failure
+                                                   WebSocket
+  40.  client.Http.delete : URI ->{Exception, Http} HttpResponse
+  41.  client.Http.doc : Doc
+  42.  client.Http.get : URI ->{Exception, Http} HttpResponse
+  43.  client.Http.handler : Request {Http} a ->{IO} a
+  44.  client.Http.handler.doc : Doc
+  45.  client.Http.patch : URI
+                           -> Body
+                           ->{Exception, Http} HttpResponse
+  46.  client.Http.post : URI
+                          -> Body
+                          ->{Exception, Http} HttpResponse
+  47.  client.Http.put : URI
+                         -> Body
+                         ->{Exception, Http} HttpResponse
+  48.  client.Http.request : HttpRequest
+                             ->{Exception, Http} HttpResponse
+  49.  client.Http.run : '{g, Http} a ->{g, IO} a
+  50.  client.Http.run.tests.testHttp : '{IO} [Result]
+  51.  client.Http.run.tests.testHttps : '{IO} [Result]
+  52.  client.Http.runConfigured : client.Config
+                                   -> '{g, Http} a
+                                   ->{g, IO} a
+  53.  client.Http.runConfigured.tests.testProxyHttp : '{IO} [Result]
+  54.  client.Http.runConfigured.tests.testProxyHttp.doc : Doc
+  55.  client.Http.runConfigured.tests.testProxyHttps : '{IO} [Result]
+  56.  client.Http.runConfigured.tests.testProxyHttps.doc : Doc
+  57.  client.Http.tryDelete : URI
+                               ->{Http} Either
+                                 Failure HttpResponse
+  58.  client.Http.tryGet : URI
+                            ->{Http} Either Failure HttpResponse
+  59.  client.Http.tryPatch : URI
+                              -> Body
+                              ->{Http} Either
+                                Failure HttpResponse
+  60.  client.Http.tryPost : URI
+                             ->{Http} Body
+                             ->{Http} Either
+                               Failure HttpResponse
+  61.  client.Http.tryPut : URI
+                            -> Body
+                            ->{Http} Either Failure HttpResponse
+  62.  client.Http.tryRequest : HttpRequest
+                                ->{Http} Either
+                                  Failure HttpResponse
+  63.  ability client.HttpWebSocket
+  64.  client.HttpWebSocket.configuredHandler : client.Config
+                                                -> Request
+                                                  {HttpWebSocket}
+                                                  a
+                                                ->{IO} a
+  65.  client.HttpWebSocket.handler : Request {HttpWebSocket} a
+                                      ->{IO} a
+  66.  client.HttpWebSocket.tryWebSocket : HttpRequest
+                                           ->{HttpWebSocket} Either
+                                             Failure WebSocket
+  67.  client.HttpWebSocket.webSocket : HttpRequest
+                                        ->{Exception,
+                                        HttpWebSocket} WebSocket
+  68.  type client.proxy.Config
+  69.  client.proxy.Config.Config : Authority -> proxy.Config
+  70.  client.proxy.Config.proxy : proxy.Config -> Authority
+  71.  client.proxy.Config.proxy.modify : (Authority
+                                          ->{g} Authority)
+                                          -> proxy.Config
+                                          ->{g} proxy.Config
+  72.  client.proxy.Config.proxy.set : Authority
+                                       -> proxy.Config
+                                       -> proxy.Config
+  73.  client.proxy.connectRequest : proxy.Config
+                                     -> HttpRequest
+                                     -> HttpRequest
+  74.  client.proxy.connectRequest.impl : proxy.Config
+                                          -> HostName
+                                          -> Port
+                                          -> Headers
+                                          -> HttpRequest
+  75.  client.proxy.connectRequest.tests.example1 : [Result]
+  76.  client.proxy.defaultProxyHeaders : Headers -> Headers
+  77.  client.proxy.host : proxy.Config -> HostName
+  78.  client.proxy.port : proxy.Config -> Port
+  79.  type client.proxy.ProxyPresence
+  80.  client.proxy.ProxyPresence.NoProxy : ProxyPresence
+  81.  client.proxy.ProxyPresence.Proxy : ProxyPresence
+  82.  client.README : Doc
+  83.  client.test.formatIOError : IOError -> Text
+  84.  client.test.header_lines : [Text]
+  85.  client.test.localProxyConfig : proxy.Config
+  86.  client.test.redir_response_bytes : Bytes
+  87.  client.test.redir_response_lines : [Text]
+  88.  client.test.redir_response_text : Text
+  89.  client.test.socketSlurp : Socket ->{IO, Exception} Bytes
+  90.  client.test.testGet : '{IO, Exception} Text
+  91.  client.test.unisonDocs : URI
+  92.  client.up.base.IO.net.Connection.receiveByteStream : Connection
+                                                            -> '{IO,
+                                                            Exception,
+                                                            Stream
+                                                              Bytes} ()
+  93.  type Headers
+  94.  Headers.== : Headers -> Headers -> Boolean
+  95.  Headers.add : Text -> Text -> Headers -> Headers
+  96.  Headers.asBytes : Headers -> Bytes
+  97.  Headers.asBytes.tests.multivalue : [Result]
+  98.  Headers.contains : Text -> Headers -> Boolean
+  99.  Headers.delete : Text -> Headers -> Headers
+  100. Headers.doc : Doc
+  101. Headers.empty : Headers
+  102. Headers.equals : Headers -> Headers -> Boolean
+  103. Headers.fromList : [(Text, Text)] -> Headers
+  104. Headers.getCommaDelimitedValues : Text
+                                         -> Headers
+                                         -> [Text]
+  105. Headers.getDateTime : Text
+                             -> Headers
+                             ->{Exception} [OffsetDateTime]
+  106. Headers.getDateTime.doc : Doc
+  107. Headers.getInstant : Text
+                            -> Headers
+                            ->{Exception} [Instant]
+  108. Headers.getInstant.doc : Doc
+  109. Headers.getValues : Text -> Headers -> [Text]
+  110. Headers.Headers : data.Map Text [Text] -> Headers
+  111. Headers.HttpDate.fromGMTDateTime : LocalDateTime -> Text
+  112. Headers.HttpDate.fromGMTDateTime.doc : Doc
+  113. Headers.HttpDate.fromInstant : Instant -> Text
+  114. Headers.HttpDate.fromInstant.doc : Doc
+  115. Headers.HttpDate.fromOffsetDateTime : OffsetDateTime
+                                             -> Text
+  116. Headers.HttpDate.fromOffsetDateTime.doc : Doc
+  117. Headers.HttpDate.parse.localDate : Text
+                                          ->{Abort} LocalDate
+  118. Headers.HttpDate.parse.localDateTime : Text
+                                              ->{Abort} LocalDateTime
+  119. Headers.HttpDate.parse.localTime : Text
+                                          ->{Abort} LocalTime
+  120. Headers.HttpDate.parse.offsetDateTime : Text
+                                               ->{Abort} OffsetDateTime
+  121. Headers.HttpDate.parse.offsetDateTime.doc : Doc
+  122. Headers.isChunked : Headers -> Boolean
+  123. Headers.isEmpty : Headers -> Boolean
+  124. Headers.orElse : Headers -> Headers -> Headers
+  125. Headers.orElse.doc : Doc
+  126. Headers.orElse.test : [Result]
+  127. Headers.parseHeaders : Text -> Either Text Headers
+  128. Headers.requireHeader : Text
+                               -> Headers
+                               ->{Exception} Text
+  129. Headers.requireHeader.doc : Doc
+  130. Headers.retainOnly : Set Text -> Headers -> Headers
+  131. Headers.singleton : Text -> Text -> Headers
+  132. Headers.standard.accept : Text -> Headers
+  133. Headers.standard.acceptEncoding.default : Headers
+  134. Headers.standard.contentLength : Body -> Headers
+  135. Headers.standard.contentLength.doc : Doc
+  136. Headers.standard.contentLength.get : Headers
+                                            -> Optional Nat
+  137. Headers.standard.host.forAuthority : Authority -> Headers
+  138. Headers.standard.host.forAuthority.tests.noPort : [Result]
+  139. Headers.standard.host.forAuthority.tests.withPort : [Result]
+  140. Headers.standard.host.forURI : URI -> Headers
+  141. Headers.standard.host.forUri : URI -> Headers
+  142. Headers.standard.location.get : Headers -> Optional Path
+  143. Headers.standard.location.get.tests : [Result]
+  144. Headers.standard.userAgent : Text -> Headers
+  145. Headers.toMap : Headers -> data.Map Text [Text]
+  146. Headers.union : Headers -> Headers -> Headers
+  147. Headers.union.doc : Doc
+  148. Headers.union.tests.nonempty : [Result]
+  149. Headers.union.tests.withEmpty : [Result]
+  150. structural type Holder g
+  151. Holder.Holder : ('{g} () ->{g} ()) -> Holder g
+  152. type HttpRequest
+  153. HttpRequest.== : HttpRequest -> HttpRequest -> Boolean
+  154. HttpRequest.addHeader : Text
+                               -> Text
+                               -> HttpRequest
+                               -> HttpRequest
+  155. HttpRequest.addHeader.doc : Doc
+  156. HttpRequest.body : HttpRequest -> Body
+  157. HttpRequest.body.set : Body -> HttpRequest -> HttpRequest
+  158. HttpRequest.decode : '{Decode} HttpRequest
+  159. HttpRequest.decodeHeadersOnly.doc : Doc
+  160. HttpRequest.delete : URI -> HttpRequest
+  161. HttpRequest.doc : Doc
+  162. HttpRequest.encode : ProxyPresence
+                            -> HttpRequest
+                            -> Bytes
+  163. HttpRequest.encode.nonProxyRequestLine : HttpRequest
+                                                -> Bytes
+  164. HttpRequest.encode.proxyRequestLineText : HttpRequest
+                                                 -> Text
+  165. HttpRequest.encodeChunked : ProxyPresence
+                                   -> HttpRequest
+                                   -> '{Stream Bytes} Headers
+                                   ->{Stream Bytes} ()
+  166. HttpRequest.encodeChunked.doc : Doc
+  167. HttpRequest.encodeChunked.tests.withoutTrailers : [Result]
+  168. HttpRequest.encodeChunked.tests.withTrailers : [Result]
+  169. HttpRequest.encodeNoBody : ProxyPresence
+                                  -> HttpRequest
+                                  -> Bytes
+  170. HttpRequest.encodeNoBody.doc : Doc
+  171. HttpRequest.ensureEqual : HttpRequest
+                                 -> HttpRequest
+                                 ->{Exception} ()
+  172. HttpRequest.equals : HttpRequest
+                            -> HttpRequest
+                            -> Boolean
+  173. HttpRequest.fromBytes : Bytes ->{Exception} HttpRequest
+  174. HttpRequest.fromBytes.doc : Doc
+  175. HttpRequest.fromStream : '{g, Stream Bytes} a
+                                ->{g, Exception} HttpRequest
+  176. HttpRequest.get : URI -> HttpRequest
+  177. HttpRequest.get.doc : Doc
+  178. HttpRequest.headers : HttpRequest -> Headers
+  179. HttpRequest.headers.modify : (Headers ->{g} Headers)
+                                    -> HttpRequest
+                                    ->{g} HttpRequest
+  180. HttpRequest.headers.pattern.tchar : Pattern Text
+  181. HttpRequest.headers.pattern.tchar.doc : Doc
+  182. HttpRequest.headers.pattern.token : Pattern Text
+  183. HttpRequest.HttpRequest : Method
+                                 -> Version
+                                 -> URI
+                                 -> Headers
+                                 -> Body
+                                 -> HttpRequest
+  184. HttpRequest.method : HttpRequest -> Method
+  185. HttpRequest.method.doc : Doc
+  186. HttpRequest.patch : URI -> Body -> HttpRequest
+  187. HttpRequest.pattern.method : IPattern Capture Text
+  188. HttpRequest.pattern.method.connect : IPattern
+                                              Capture Text
+  189. HttpRequest.pattern.method.delete : IPattern Capture Text
+  190. HttpRequest.pattern.method.get : IPattern Capture Text
+  191. HttpRequest.pattern.method.head : IPattern Capture Text
+  192. HttpRequest.pattern.method.options : IPattern
+                                              Capture Text
+  193. HttpRequest.pattern.method.patch : IPattern Capture Text
+  194. HttpRequest.pattern.method.post : IPattern Capture Text
+  195. HttpRequest.pattern.method.put : IPattern Capture Text
+  196. HttpRequest.pattern.method.trace : IPattern Capture Text
+  197. HttpRequest.pattern.requestLine : IPattern
+                                           (And
+                                             (And
+                                               Capture
+                                               (And
+                                                 (And
+                                                   (And
+                                                     Capture
+                                                     (And
+                                                       (And
+                                                         (And
+                                                           Capture
+                                                           Capture)
+                                                         Capture)
+                                                       Capture))
+                                                   Capture)
+                                                 Capture))
+                                             Capture)
+                                           Text
+  198. HttpRequest.pattern.version : IPattern Capture Text
+  199. HttpRequest.pattern.version.http10 : IPattern
+                                              Capture Text
+  200. HttpRequest.pattern.version.http11 : IPattern
+                                              Capture Text
+  201. HttpRequest.post : URI -> Body -> HttpRequest
+  202. HttpRequest.put : URI -> Body -> HttpRequest
+  203. type HttpRequest.RequestLine
+  204. HttpRequest.RequestLine.RequestLine : Method
+                                             -> URI
+                                             -> Version
+                                             -> RequestLine
+  205. HttpRequest.RequestLine.requestMethod : RequestLine
+                                               -> Method
+  206. HttpRequest.RequestLine.requestMethod.modify : (Method
+                                                      ->{g} Method)
+                                                      -> RequestLine
+                                                      ->{g} RequestLine
+  207. HttpRequest.RequestLine.requestMethod.set : Method
+                                                   -> RequestLine
+                                                   -> RequestLine
+  208. HttpRequest.RequestLine.requestURI : RequestLine -> URI
+  209. HttpRequest.RequestLine.requestUri : RequestLine -> URI
+  210. HttpRequest.RequestLine.requestURI.modify : (URI
+                                                   ->{g} URI)
+                                                   -> RequestLine
+                                                   ->{g} RequestLine
+  211. HttpRequest.RequestLine.requestUri.modify : (URI
+                                                   ->{g} URI)
+                                                   -> RequestLine
+                                                   ->{g} RequestLine
+  212. HttpRequest.RequestLine.requestURI.set : URI
+                                                -> RequestLine
+                                                -> RequestLine
+  213. HttpRequest.RequestLine.requestUri.set : URI
+                                                -> RequestLine
+                                                -> RequestLine
+  214. HttpRequest.RequestLine.requestVersion : RequestLine
+                                                -> Version
+  215. HttpRequest.RequestLine.requestVersion.modify : (Version
+                                                       ->{g} Version)
+                                                       -> RequestLine
+                                                       ->{g} RequestLine
+  216. HttpRequest.RequestLine.requestVersion.set : Version
+                                                    -> RequestLine
+                                                    -> RequestLine
+  217. HttpRequest.requestLine.tests : [Result]
+  218. HttpRequest.setHeader : Text
+                               -> [Text]
+                               -> HttpRequest
+                               -> HttpRequest
+  219. HttpRequest.setHeader.doc : Doc
+  220. HttpRequest.tests.roundTrip : [Result]
+  221. HttpRequest.uri : HttpRequest -> URI
+  222. HttpRequest.uri.modify : (URI ->{g} URI)
+                                ->{g} HttpRequest
+                                ->{g} HttpRequest
+  223. HttpRequest.version : HttpRequest -> Version
+  224. HttpRequest.version.doc : Doc
+  225. type HttpResponse
+  226. HttpResponse.== : HttpResponse -> HttpResponse -> Boolean
+  227. HttpResponse.addHeader : Text
+                                -> Text
+                                -> HttpResponse
+                                -> HttpResponse
+  228. HttpResponse.badRequest : HttpResponse
+  229. HttpResponse.body : HttpResponse -> Body
+  230. HttpResponse.body.modify : (Body ->{g} Body)
+                                  ->{g} HttpResponse
+                                  ->{g} HttpResponse
+  231. HttpResponse.body.set : Body
+                               -> HttpResponse
+                               -> HttpResponse
+  232. HttpResponse.bodyText : HttpResponse ->{Exception} Text
+  233. HttpResponse.bodyText.doc : Doc
+  234. HttpResponse.decode : Boolean ->{Decode} HttpResponse
+  235. HttpResponse.doc : Doc
+  236. HttpResponse.encode : HttpResponse -> Bytes
+  237. HttpResponse.encodeChunked : HttpResponse
+                                    -> '{Stream Bytes} Headers
+                                    ->{Exception, Stream Bytes} ()
+  238. HttpResponse.encodeChunked.doc : Doc
+  239. HttpResponse.encodeChunked.tests.withoutTrailers : [Result]
+  240. HttpResponse.encodeChunked.tests.withTrailers : [Result]
+  241. HttpResponse.encodeNoBody : HttpResponse -> Bytes
+  242. HttpResponse.ensureEqual : HttpResponse
+                                  -> HttpResponse
+                                  ->{Exception} ()
+  243. HttpResponse.ensureStatus : (HttpResponse.Status
+                                   -> Boolean)
+                                   -> HttpResponse
+                                   ->{Exception} HttpResponse
+  244. HttpResponse.ensureStatus.doc : Doc
+  245. HttpResponse.ensureSuccess : HttpResponse
+                                    ->{Exception} HttpResponse
+  246. HttpResponse.ensureSuccess.doc : Doc
+  247. HttpResponse.error : HttpResponse
+  248. HttpResponse.expectStatus : (HttpResponse.Status
+                                   -> Boolean)
+                                   -> HttpResponse
+                                   ->{Exception} ()
+  249. HttpResponse.expectStatus.doc : Doc
+  250. HttpResponse.expectSuccess : HttpResponse
+                                    ->{Exception} ()
+  251. HttpResponse.fromBytes : Boolean
+                                -> Bytes
+                                ->{Exception} HttpResponse
+  252. HttpResponse.fromBytes.doc : Doc
+  253. HttpResponse.fromStream : Boolean
+                                 -> '{g, Stream Bytes} a
+                                 ->{g, Exception} HttpResponse
+  254. HttpResponse.headers : HttpResponse -> Headers
+  255. HttpResponse.HttpResponse : HttpResponse.Status
+                                   -> Version
+                                   -> Headers
+                                   -> Body
+                                   -> HttpResponse
+  256. HttpResponse.isSuccess : HttpResponse -> Boolean
+  257. HttpResponse.noContent : HttpResponse
+  258. HttpResponse.notFound : HttpResponse
+  259. HttpResponse.ok : Body -> HttpResponse
+  260. HttpResponse.pattern.reason : IPattern Capture Text
+  261. HttpResponse.pattern.status : IPattern Capture Text
+  262. HttpResponse.pattern.statusLine : IPattern
+                                           (And
+                                             (And
+                                               Capture Capture)
+                                             Capture)
+                                           Text
+  263. HttpResponse.pattern.statusLine.testReasonIsOptional : [Result]
+  264. HttpResponse.setBody : Body
+                              -> HttpResponse
+                              -> HttpResponse
+  265. type HttpResponse.Status
+  266. HttpResponse.status : HttpResponse -> HttpResponse.Status
+  267. HttpResponse.Status.code : HttpResponse.Status -> Nat
+  268. HttpResponse.Status.code.modify : (Nat ->{g} Nat)
+                                         -> HttpResponse.Status
+                                         ->{g} HttpResponse.Status
+  269. HttpResponse.Status.code.set : Nat
+                                      -> HttpResponse.Status
+                                      -> HttpResponse.Status
+  270. HttpResponse.Status.isFailure : HttpResponse.Status
+                                       -> Boolean
+  271. HttpResponse.Status.isSuccess : HttpResponse.Status
+                                       -> Boolean
+  272. HttpResponse.Status.reason : HttpResponse.Status -> Text
+  273. HttpResponse.Status.reason.modify : (Text ->{g} Text)
+                                           -> HttpResponse.Status
+                                           ->{g} HttpResponse.Status
+  274. HttpResponse.Status.reason.set : Text
+                                        -> HttpResponse.Status
+                                        -> HttpResponse.Status
+  275. HttpResponse.Status.Status : Nat
+                                    -> Text
+                                    -> HttpResponse.Status
+  276. HttpResponse.Status.toText : HttpResponse.Status -> Text
+  277. type HttpResponse.Status.UnexpectedResponseStatus
+  278. LICENSE : License
+  279. LICENSE.doc : Doc
+  280. message.encodeChunkedBody : '{g, Stream Bytes} Headers
+                                   ->{g, Stream Bytes} ()
+  281. message.encodeChunkedBody.doc : Doc
+  282. Method.fromText : Text -> Optional Method
+  283. Method.toText : Method -> Text
+  284. type proxy.ProxyPresence
+  285. proxy.ProxyPresence.NoProxy : ProxyPresence
+  286. proxy.ProxyPresence.Proxy : ProxyPresence
+  287. README : Doc
+  288. ReleaseNotes : Doc
+  289. server.CHANGELOG : Doc
+  290. server.changelogs.v10 : Doc
+  291. server.changelogs.v6 : Doc
+  292. server.changelogs.v7 : Doc
+  293. server.changelogs.v8 : Doc
+  294. server.changelogs.v9 : Doc
+  295. type server.Config
+  296. server.Config.Config : Optional HostName
+                              -> Port
+                              -> Nat
+                              -> Optional ServerConfig
+                              -> server.Config
+  297. server.Config.createSemaphore : server.Config ->{IO} Sem
+  298. server.Config.hostName : server.Config
+                                -> Optional HostName
+  299. server.Config.hostName.modify : (Optional HostName
+                                       ->{g} Optional HostName)
+                                       -> server.Config
+                                       ->{g} server.Config
+  300. server.Config.hostName.set : Optional HostName
+                                    -> server.Config
+                                    -> server.Config
+  301. server.Config.numThreads : server.Config -> Nat
+  302. server.Config.numThreads.modify : (Nat ->{g} Nat)
+                                         -> server.Config
+                                         ->{g} server.Config
+  303. server.Config.numThreads.set : Nat
+                                      -> server.Config
+                                      -> server.Config
+  304. server.Config.port : server.Config -> Port
+  305. server.Config.port.modify : (Port ->{g} Port)
+                                   -> server.Config
+                                   ->{g} server.Config
+  306. server.Config.port.set : Port
+                                -> server.Config
+                                -> server.Config
+  307. server.Config.serve : Routes {IO}
+                             -> server.Config
+                             ->{IO, Exception} '{IO, Exception} ()
+  308. server.Config.serve.doc : Doc
+  309. server.Config.tlsConfig : server.Config
+                                 -> Optional ServerConfig
+  310. server.Config.tlsConfig.modify : (Optional ServerConfig
+                                        ->{g} Optional
+                                          ServerConfig)
+                                        -> server.Config
+                                        ->{g} server.Config
+  311. server.Config.tlsConfig.set : Optional ServerConfig
+                                     -> server.Config
+                                     -> server.Config
+  312. server.example.alohaHandler : Handler IO
+  313. server.example.helloHandler : Handler IO
+  314. server.example.helloHandler2 : Handler IO
+  315. server.example.main : '{IO, Exception} ()
+  316. server.example.tracing404 : HttpRequest -> HttpResponse
+  317. server.forkServer : server.Config
+                           -> (HttpRequest
+                           ->{IO, Exception} Either
+                             HttpResponse WebSocketHandler)
+                           ->{IO, Exception} '{IO, Exception} ()
+  318. type server.Handler g
+  319. server.Handler.doc : Doc
+  320. server.Handler.Handler : (HttpRequest
+                                ->{g, Exception, Abort} HttpResponse)
+                                -> Handler g
+  321. server.Handler.HandlerWebSocket : (HttpRequest
+                                         ->{g, Exception, Abort} WebSocketHandler)
+                                         -> Handler g
+  322. server.Http.webSocket : HttpRequest
+                               ->{Exception, HttpWebSocket} WebSocket
+  323. server.internal.handleConnection : (HttpRequest
+                                          ->{IO, Exception} Either
+                                            HttpResponse
+                                            WebSocketHandler)
+                                          -> Connection
+                                          ->{IO,
+                                          Exception,
+                                          Abort} ()
+  324. server.internal.handleRequest : Connection
+                                       -> HttpRequest
+                                       -> (HttpRequest
+                                       ->{IO, Exception} Either
+                                         HttpResponse
+                                         WebSocketHandler)
+                                       ->{IO, Exception} ()
+  325. server.internal.socketListener : server.Config
+                                        -> (HttpRequest
+                                        ->{IO, Exception} Either
+                                          HttpResponse
+                                          WebSocketHandler)
+                                        -> ListeningServerSocket
+                                        ->{IO} ()
+  326. server.README : Doc
+  327. type server.Routes g
+  328. server.Routes.<<< : Routes {g} -> Handler g -> Routes {g}
+  329. server.Routes.>>> : Handler g -> Routes {g} -> Routes {g}
+  330. server.Routes.default : Routes g
+  331. server.Routes.default404 : HttpRequest -> HttpResponse
+  332. server.Routes.default500 : Failure
+                                  -> HttpRequest
+                                  -> HttpResponse
+  333. server.Routes.doc : Doc
+  334. server.Routes.get : Path -> HttpRequest -> Boolean
+  335. server.Routes.path : Path -> HttpRequest -> Boolean
+  336. server.Routes.post : Path -> HttpRequest -> Boolean
+  337. server.Routes.Routes : [Handler g]
+                              -> (HttpRequest
+                              ->{g} HttpResponse)
+                              -> (Failure
+                              -> HttpRequest
+                              ->{g} HttpResponse)
+                              -> Routes g
+  338. server.Routes.toFunction : Routes IO
+                                  -> HttpRequest
+                                  ->{IO} Either
+                                    HttpResponse
+                                    WebSocketHandler
+  339. server.Routes.with404 : (HttpRequest ->{g} HttpResponse)
+                               -> Routes {g}
+                               -> Routes {g}
+  340. server.Routes.with500 : (Failure
+                               -> HttpRequest
+                               ->{g} HttpResponse)
+                               -> Routes {g}
+                               -> Routes {g}
+  341. server.Routes.withHeader : Text
+                                  -> Text
+                                  -> HttpRequest
+                                  -> Boolean
+  342. server.runServer : server.Config
+                          -> (HttpRequest
+                          ->{IO, Exception} Either
+                            HttpResponse WebSocketHandler)
+                          ->{IO, Exception} ()
+  343. type server.State g
+  344. server.State.error : State g
+                            -> Failure
+                            -> HttpRequest
+                            ->{g} HttpResponse
+  345. server.State.handlerReq.internal.webSocketKey : HttpRequest
+                                                       -> Optional
+                                                         Text
+  346. server.State.handlerReq.internal.webSocketKey.tests : [Result]
+  347. server.State.handlers : State g -> [Handler g]
+  348. server.State.notFound : State g
+                               -> HttpRequest
+                               ->{g} HttpResponse
+  349. server.State.semaphore : State g -> Sem
+  350. server.State.semaphore.set : Sem
+                                    -> State {g}
+                                    -> State {g}
+  351. server.State.State : Routes g -> Sem -> State g
+  352. server.test.integration.all : ['{g,
+                                     IO,
+                                     Http,
+                                     HttpWebSocket,
+                                     Stream Result} ()]
+  353. server.test.integration.baseUri : URI
+  354. server.test.integration.client.get : '{IO,
+                                            Http,
+                                            HttpWebSocket,
+                                            Stream Result} ()
+  355. server.test.integration.client.handleClientException : '{IO,
+                                                              Exception,
+                                                              Http,
+                                                              HttpWebSocket,
+                                                              Stream
+                                                                Result} ()
+                                                              ->{IO,
+                                                              Http,
+                                                              HttpWebSocket,
+                                                              Stream
+                                                                Result} ()
+  356. server.test.integration.client.handleWSClientException : '{IO,
+                                                                Exception,
+                                                                HttpWebSocket,
+                                                                Stream
+                                                                  Result} ()
+                                                                ->{IO,
+                                                                Http,
+                                                                HttpWebSocket,
+                                                                Stream
+                                                                  Result} ()
+  357. server.test.integration.client.manyRequests : '{IO,
+                                                     Http,
+                                                     HttpWebSocket,
+                                                     Stream
+                                                       Result} ()
+  358. server.test.integration.client.post : '{IO,
+                                             Http,
+                                             HttpWebSocket,
+                                             Stream Result} ()
+  359. server.test.integration.client.statusResults : Text
+                                                      -> HttpResponse.Status
+                                                      ->{Stream
+                                                        Result} ()
+  360. server.test.integration.client.webSocket : '{IO,
+                                                  Http,
+                                                  HttpWebSocket,
+                                                  Stream Result} ()
+  361. server.test.integration.expectedGetResponse : Body
+  362. server.test.integration.expectedPostResponse : Body
+  363. server.test.integration.host : Text
+  364. server.test.integration.main : '{IO, Exception} [Result]
+  365. server.test.integration.newServer : HttpRequest
+                                           -> Either
+                                             HttpResponse
+                                             WebSocketHandler
+  366. server.test.integration.port : Text
+  367. server.test.integration.server : Routes g
+  368. server.test.integration.server.getHandler : Handler g
+  369. server.test.integration.server.postHandler : Handler g
+  370. server.test.integration.server.routes : Routes g
+  371. server.test.integration.server.webSocketHandler : Handler
+                                                           g
+  372. server.up.base.IO.logAndIgnore : '{IO, Exception} a
+                                        ->{IO} ()
+  373. type server.WebSocketHandler
+  374. server.WebSocketHandler.async : (Message
+                                       ->{IO, Stream Message} ())
+                                       -> '{IO,
+                                       Exception,
+                                       Stream Message} ()
+                                       ->{IO, Exception} WebSocketHandler
+  375. server.WebSocketHandler.async.doc : Doc
+  376. server.WebSocketHandler.async.doc.example1 : '{IO,
+                                                    Exception} ()
+  377. server.WebSocketHandler.doc : Doc
+  378. server.WebSocketHandler.sync : '{IO,
+                                      Exception,
+                                      Ask Message,
+                                      Stream Message} ()
+                                      ->{IO} WebSocketHandler
+  379. server.WebSocketHandler.sync.doc : Doc
+  380. server.WebSocketHandler.sync.doc.example1 : '{IO,
+                                                   Exception} ()
+  381. server.WebSocketHandler.WebSocketHandler : (WebSocket
+                                                  -> ((Either
+                                                    Failure ()
+                                                  ->{IO,
+                                                  Exception} ())
+                                                  ->{IO,
+                                                  Exception} ())
+                                                  ->{IO,
+                                                  Exception} ())
+                                                  -> WebSocketHandler
+  382. tests.checkHttpRequestRoundTrip : HttpRequest
+                                         ->{Exception, Each} ()
+  383. tests.checkHttpRequestRoundTrip.doc : Doc
+  384. tests.chunkedWithoutTrailers : [Result]
+  385. tests.chunkedWithTrailers : [Result]
+  386. tests.chunkedWithTrailersAreActuallyOptional : [Result]
+  387. tests.exampleRequest : Bytes
+  388. tests.exampleResponse : Bytes
+  389. tests.testChunkedRequestRoundTrip : [Result]
+  390. tests.testChunkedRequestRoundTripNoTrailers : [Result]
+  391. tests.testChunkedRequestRoundTripWithTrailers : [Result]
+  392. tests.testChunkedResponseRoundTrip : [Result]
+  393. tests.testFromStream : [Result]
+  394. tests.testHttpRequestRoundTrip : [Result]
+  395. tests.testHttpResponseRoundTrip : [Result]
+  396. tests.testParseRequest : [Result]
+  397. tests.testParseResponse : [Result]
+  398. tests.testRequestLine : [Result]
+  399. tests.testStatusLine : [Result]
+  400. up.base.Bytes.encodeNat8 : Nat -> Bytes
+  401. up.base.data.Map.filterKeys : (k ->{g2} Boolean)
+                                     -> data.Map k v
+                                     ->{g2} data.Map k v
+  402. up.base.test.ensureEqualBy : (a -> a -> Boolean)
+                                    -> a
+                                    -> a
+                                    ->{Exception} ()
+  403. util.slurpByteStream : '{Stream Bytes} r -> Bytes
+  404. type Version
+  405. Version.fromText : Text -> Either Text Version
+  406. Version.http10 : Version
+  407. Version.http11 : Version
+  408. Version.http20 : Version
+  409. Version.major : Version -> Nat
+  410. Version.major.modify : (Nat ->{g} Nat)
+                              -> Version
+                              ->{g} Version
+  411. Version.major.set : Nat -> Version -> Version
+  412. Version.minor : Version -> Nat
+  413. Version.minor.modify : (Nat ->{g} Nat)
+                              -> Version
+                              ->{g} Version
+  414. Version.minor.set : Nat -> Version -> Version
+  415. Version.toText : Version -> Text
+  416. Version.Version : Nat -> Nat -> Version
+  417. type websockets.Endpoint
+  418. websockets.Endpoint.Client : Endpoint
+  419. websockets.Endpoint.isClient : Endpoint -> Boolean
+  420. websockets.Endpoint.Server : Endpoint
+  421. type websockets.errors.WebSocketClosed
+  422. websockets.example : '{IO, Exception} ()
+  423. type websockets.Frame
+  424. websockets.Frame.Binary : Boolean -> Bytes -> Frame
+  425. websockets.Frame.Close : Optional (Nat, Text) -> Frame
+  426. websockets.Frame.Continuation : Boolean -> Bytes -> Frame
+  427. websockets.Frame.decoder : '{Decode,
+                                  DecodeBits,
+                                  Throw DecodeError} Frame
+  428. websockets.Frame.decoder.decodeCloseReason : Bytes
+                                                    ->{Throw
+                                                      DecodeError} Optional
+                                                      ( Nat,
+                                                        Text)
+  429. websockets.Frame.decoder.maskOrUnmask : Bytes
+                                               -> Bytes
+                                               -> Bytes
+  430. websockets.Frame.decoder.tests.fragmentedContinuation : [Result]
+  431. websockets.Frame.decoder.tests.fragmentedTextUnmasked : [Result]
+  432. websockets.Frame.decoder.tests.ping : [Result]
+  433. websockets.Frame.decoder.tests.pong : [Result]
+  434. websockets.Frame.decoder.tests.singleTextMasked : [Result]
+  435. websockets.Frame.decoder.tests.singleTextUnmasked : [Result]
+  436. websockets.Frame.encoder : Optional Bytes
+                                  -> Frame
+                                  -> Bytes
+  437. websockets.Frame.encoder.tests.fragmentedContinuation : [Result]
+  438. websockets.Frame.encoder.tests.fragmentedTextUnasked : [Result]
+  439. websockets.Frame.encoder.tests.ping : [Result]
+  440. websockets.Frame.encoder.tests.pong : [Result]
+  441. websockets.Frame.encoder.tests.singleTextMasked : [Result]
+  442. websockets.Frame.encoder.tests.singleTextUnmasked : [Result]
+  443. websockets.Frame.Ping : Bytes -> Frame
+  444. websockets.Frame.Pong : Bytes -> Frame
+  445. websockets.Frame.Text : Boolean -> Text -> Frame
+  446. websockets.handshake : HttpRequest
+                              -> Connection
+                              ->{IO, Exception} ()
+  447. websockets.handshake.doc : Doc
+  448. websockets.internal.readFrame : Connection
+                                       ->{IO, Exception} Frame
+  449. type websockets.Message
+  450. websockets.Message.binary : Bytes -> Message
+  451. websockets.Message.binary.doc : Doc
+  452. websockets.Message.BinaryMessage : Bytes -> Message
+  453. websockets.Message.doc : Doc
+  454. websockets.Message.text : Text -> Message
+  455. websockets.Message.text.doc : Doc
+  456. websockets.Message.TextMessage : Text -> Message
+  457. websockets.Message.toFrames : Nat
+                                     -> Message
+                                     ->{Stream Frame} ()
+  458. websockets.metadata.authors.alvaroc1 : Author
+  459. websockets.metadata.authors.alvaroc1.guid : GUID
+  460. websockets.metadata.copyrightHolders.alvaroc1 : CopyrightHolder
+  461. websockets.metadata.licenses.alvaroc12023 : License
+  462. websockets.protocol.receive : '{Abort,
+                                     Decode,
+                                     DecodeBits,
+                                     Throw DecodeError,
+                                     Stream Bytes} Message
+  463. websockets.README : Doc
+  464. websockets.upgradeResponse : HttpRequest
+                                    ->{Exception} HttpResponse
+  465. websockets.util.createAcceptString : Text
+                                            ->{Exception} Text
+  466. websockets.util.createAcceptString.tests.ex1 : [Result]
+  467. websockets.util.handshakeRequestDecoder : '{Exception,
+                                                 Decode} HttpRequest
+  468. websockets.util.magicKeyString : Text
+  469. type websockets.WebSocket
+  470. websockets.WebSocket.close : WebSocket
+                                    ->{IO, Exception} ()
+  471. websockets.WebSocket.closer : WebSocket
+                                     -> '{IO, Exception} ()
+  472. websockets.WebSocket.closer.modify : ('{IO, Exception} ()
+                                            ->{g} '{IO,
+                                            Exception} ())
+                                            -> WebSocket
+                                            ->{g} WebSocket
+  473. websockets.WebSocket.closer.set : '{IO, Exception} ()
+                                         -> WebSocket
+                                         -> WebSocket
+  474. websockets.WebSocket.doc : Doc
+  475. websockets.WebSocket.receive : WebSocket
+                                      ->{IO, Exception} Message
+  476. websockets.WebSocket.receiver : WebSocket
+                                       -> '{IO, Exception} Message
+  477. websockets.WebSocket.receiver.modify : ('{IO, Exception} Message
+                                              ->{g} '{IO,
+                                              Exception} Message)
+                                              -> WebSocket
+                                              ->{g} WebSocket
+  478. websockets.WebSocket.receiver.set : '{IO, Exception} Message
+                                           -> WebSocket
+                                           -> WebSocket
+  479. websockets.WebSocket.send : WebSocket
+                                   -> Message
+                                   ->{IO, Exception} ()
+  480. websockets.WebSocket.send.modify : ((Message
+                                          ->{IO, Exception} ())
+                                          ->{g} Message
+                                          ->{IO, Exception} ())
+                                          -> WebSocket
+                                          ->{g} WebSocket
+  481. websockets.WebSocket.send.set : (Message
+                                       ->{IO, Exception} ())
+                                       -> WebSocket
+                                       -> WebSocket
+  482. websockets.WebSocket.threadSafeWebSocket : Connection
+                                                  -> Endpoint
+                                                  -> Nat
+                                                  -> Bytes
+                                                  ->{IO} WebSocket
+  483. websockets.WebSocket.threadSafeWebSocket.doc : Doc
+  484. websockets.WebSocket.WebSocket : (Message
+                                        ->{IO, Exception} ())
+                                        -> '{IO, Exception} Message
+                                        -> '{IO, Exception} ()
+                                        -> WebSocket
+```
+
+## Code examples
+
+``` ucm
+@unison/http/main> edit 1-484
+
+  ☝️
+
+  I added 443 definitions to the top of scratch.u
+
+  You can edit them there, then run `update` to replace the
+  definitions currently in this namespace.
+```
+
+```` unison :added-by-ucm scratch.u
+type Body
+  = Body Bytes
+
+type client.Config
+  = { proxy : Optional proxy.Config }
+
+type client.failure.ConnectFailure
+  = 
+
+type client.failure.InternalFailure
+  = 
+
+type client.failure.Unsupported
+  = 
+
+type client.failure.UpstreamFailure
+  = 
+
+type client.failure.WebSocketHandsakeFailure
+  = 
+
+ability client.Http where
+  tryRequest : HttpRequest ->{client.Http} Either Failure HttpResponse
+
+ability client.HttpWebSocket where
+  tryWebSocket : HttpRequest ->{client.HttpWebSocket} Either Failure WebSocket
+
+type client.proxy.Config
+  = { proxy : Authority }
+
+type client.proxy.ProxyPresence
+  = Proxy
+  | NoProxy
+
+type Headers
+  = Headers (data.Map Text [Text])
+
+structural type Holder g
+  = Holder ('{g} () ->{g} ())
+
+type HttpRequest
+  = HttpRequest Method Version URI Headers Body
+
+type HttpRequest.RequestLine
+  = { requestMethod : Method, requestURI : URI, requestVersion : Version }
+
+type HttpResponse
+  = HttpResponse HttpResponse.Status Version Headers Body
+
+type HttpResponse.Status
+  = { code : Nat, reason : Text }
+
+type HttpResponse.Status.UnexpectedResponseStatus
+  = 
+
+type server.Config
+  = { hostName : Optional HostName,
+      port : Port,
+      numThreads : Nat,
+      tlsConfig : Optional ServerConfig }
+
+type server.Handler g
+  = HandlerWebSocket (HttpRequest ->{g, Exception, Abort} WebSocketHandler)
+  | Handler (HttpRequest ->{g, Exception, Abort} HttpResponse)
+
+type server.Routes g
+  = Routes
+      [Handler g]
+      (HttpRequest ->{g} HttpResponse)
+      (Failure -> HttpRequest ->{g} HttpResponse)
+
+type server.State g
+  = State (Routes g) Sem
+
+type server.WebSocketHandler
+  = WebSocketHandler
+      (WebSocket
+      -> ((Either Failure () ->{IO, Exception} ()) ->{IO, Exception} ())
+      ->{IO, Exception} ())
+
+type Version
+  = { major : Nat, minor : Nat }
+
+type websockets.Endpoint
+  = Client
+  | Server
+
+type websockets.errors.WebSocketClosed
+  = 
+
+type websockets.Frame
+  = Text Boolean Text
+  | Close (Optional (Nat, Text))
+  | Binary Boolean Bytes
+  | Continuation Boolean Bytes
+  | Ping Bytes
+  | Pong Bytes
+
+type websockets.Message
+  = TextMessage Text
+  | BinaryMessage Bytes
+
+type websockets.WebSocket
+  = { send : Message ->{IO, Exception} (),
+      receiver : '{IO, Exception} Message,
+      closer : '{IO, Exception} () }
+
+Body.decodeBody :
+  msg -> (msg -> Headers) -> (Body -> msg -> msg) ->{Decode} (msg, Headers)
+Body.decodeBody req getHeaders attach =
+  use Text ++
+  headers = getHeaders req
+  expectTrailers = Headers.contains "Trailer" headers
+  let
+    (maybeCompressed, trailers) =
+      if isChunked headers then decodeChunkedBody expectTrailers
+      else (decodeNonChunkedBody headers, Headers.empty)
+    body = match decompressBody headers maybeCompressed with
+      Right b -> b
+      Left e  -> Decode.failWith ("Error decoding HTTP body: " ++ e)
+    (attach body req, trailers)
+
+Body.decodeChunkedBody : Boolean ->{Decode} (Body, Headers)
+Body.decodeChunkedBody expectTrailers =
+  use Decode failWith label until utf8
+  use fromList impl
+  decodeChunkSize : '{Decode} Nat
+  decodeChunkSize =
+    do
+      use Text ++
+      until 0xs0d0a do
+        label "hex-encoded chunk length" do
+          chunkLengthHex = utf8()
+          match Nat.fromHex chunkLengthHex with
+            None ->
+              failWith
+                ("Expected a hex-encoded chunk length but got: "
+                  ++ chunkLengthHex)
+            Some chunkLength -> chunkLength
+  decodeBodyChunks bodyAcc =
+    use Nat ==
+    chunkSize = decodeChunkSize()
+    if chunkSize == 0 then Body bodyAcc
+    else
+      nextChunk = 
+        label ("Chunk of " Text.++ Nat.toText chunkSize Text.++ " bytes") do
+          nextBytes chunkSize
+      Decode.skip 2
+      decodeBodyChunks (bodyAcc Bytes.++ nextChunk)
+  body = decodeBodyChunks Bytes.empty
+  if expectTrailers then
+    emptyTrailers = do
+      ignore (literalBytes 0xs0d0a)
+      Headers.empty
+    populatedTrailers = do
+      until 0xs0d0a0d0a do match parseHeaders utf8() with
+        Right headers -> headers
+        Left e        -> failWith e
+    trailers = Decode.or emptyTrailers populatedTrailers
+    (body, trailers)
+  else (body, Headers.empty)
+
+Body.decodeNonChunkedBody : Headers ->{Decode} Body
+Body.decodeNonChunkedBody headers = match contentLength.get headers with
+  Some byteCount ->
+    use Nat ==
+    bs = if byteCount == 0 then Bytes.empty else nextBytes byteCount
+    Body bs
+  None           -> Body.empty
+
+Body.decompressBody : Headers -> Body -> Either Text Body
+Body.decompressBody headers = cases
+  body@(Body bs) ->
+    if Bytes.size bs === 0 then Right body
+    else
+      use Text ++
+      encodings = getCommaDelimitedValues "Content-Encoding" headers
+      decode : Text -> Bytes ->{Throw Text} Bytes
+      decode encoding bytes =
+        match Map.get encoding standardContentDecoders with
+          None   -> throw ("Unknown content encoding: " ++ encoding)
+          Some f -> Either.toThrow (f bytes)
+      toEither do List.foldRight decode bs encodings |> Body
+
+Body.empty : Body
+Body.empty = Body Bytes.empty
+
+Body.formEncoded : Query -> Body
+Body.formEncoded = Body << Text.toUtf8 << encode.impl false
+
+test> Body.formEncoded.tests = 
+  verifyAndIgnore do
+    use test ensureEqual
+    ensureEqual (Body Bytes.empty) (formEncoded Query.empty)
+    ensureEqual "? " (RawQuery.encode (RawQuery " "))
+    ensureEqual
+      "baz=%25&foo=bar"
+      (formEncoded (Query.empty & ("foo", "bar") & ("baz", "%"))
+        |> Body.toBytes
+        |> fromUtf8)
+
+Body.fromText : Text -> Body
+Body.fromText = Text.toUtf8 >> Body
+
+Body.fromText.doc : Doc
+Body.fromText.doc =
+  {{
+  Creates a {type Body} from a {type Text} value by encoding the text as UTF-8.
+  
+  # Example
+  
+    {{ docExampleBlock 0 do Body.fromText "Hello, world!" }}
+  }}
+
+Body.standardContentDecoders : data.Map Text (Bytes ->{g} Either Text Bytes)
+Body.standardContentDecoders =
+  Map.fromList
+    [("gzip", gzip.decompress.impl), ("deflate", zlib.decompress.impl)]
+
+Body.toBytes : Body -> Bytes
+Body.toBytes = cases Body bs -> bs
+
+client.Config.default : client.Config
+client.Config.default = client.Config.Config None
+
+client.Config.proxy : client.Config -> Optional proxy.Config
+client.Config.proxy = cases client.Config.Config proxy -> proxy
+
+client.Config.proxy.modify :
+  (Optional proxy.Config ->{g} Optional proxy.Config)
+  -> client.Config
+  ->{g} client.Config
+client.Config.proxy.modify f = cases
+  client.Config.Config proxy -> client.Config.Config (f proxy)
+
+client.Config.proxy.set :
+  Optional proxy.Config -> client.Config -> client.Config
+client.Config.proxy.set proxy1 = cases
+  client.Config.Config _ -> client.Config.Config proxy1
+
+client.Config.proxyPresence : client.Config -> client.proxy.ProxyPresence
+client.Config.proxyPresence cfg = match client.Config.proxy cfg with
+  None   -> client.proxy.ProxyPresence.NoProxy
+  Some _ -> client.proxy.ProxyPresence.Proxy
+
+client.Config.withProxy : HostName -> Port -> client.Config -> client.Config
+client.Config.withProxy host port =
+  client.Config.proxy.modify
+    (Optional.map (proxy.Config.proxy.set (Authority None host (Some port))))
+
+client.Config.withProxy.doc : Doc
+client.Config.withProxy.doc =
+  {{
+  Takes a {type HostName} and a {type Port} and sets the proxy settings on a
+  {type client.Config}.
+  
+  # Example
+  
+    {{
+    docExampleBlock 0 do
+      withProxy (HostName "localhost") (Port "8080") Config.default }}
+    
+    This will create a {type client.Config} with the proxy settings set to use
+    the proxy at `localhost:8080`.
+  }}
+
+client.examples.query : '{IO, Exception} HttpResponse
+client.examples.query _ =
+  use Path /
+  google = Authority None (HostName "www.google.com") None
+  path = root / "search"
+  query = Query.empty & ("q", "Unison Programming Language")
+  uri = URI Scheme.https (Some google) path (fromQuery query) Fragment.empty
+  Http.run do Http.get uri
+
+client.examples.simple : '{IO, Exception} HttpResponse
+client.examples.simple =
+  do Http.run do Http.get (parseOrBug "https://www.unison-lang.org")
+
+client.examples.trailingSlash : Path
+client.examples.trailingSlash =
+  use Path /
+  root / "docs" / "language-reference" / ""
+
+client.failure.unsupportedScheme : Scheme -> Failure
+client.failure.unsupportedScheme = cases
+  scheme@(Scheme schemeText) ->
+    Failure
+      (typeLink Unsupported)
+      ("Unsupported scheme: " Text.++ schemeText)
+      (Any (scheme : Scheme))
+
+client.Http.configuredHandler : client.Config -> Request {Http} a ->{IO} a
+client.Http.configuredHandler cfg =
+  use Either fold
+  go : Request {Http} a ->{IO} a
+  go = cases
+    { a } -> a
+    { tryRequest req -> k } ->
+      res = 
+        catchAll do
+          bracket
+            (do configuredHandler.connect cfg req)
+            (fold (do ()) Connection.close)
+            (fold
+              Right
+              (conn ->
+                (handle withConnection conn do configuredHandler.http cfg req
+                with cases
+                  { r } -> Right r
+                  { throw decodeFailure -> _ } ->
+                    Left (toFailure decodeFailure))))
+      handle k (Either.flatMapRight id res) with go
+  go
+
+client.Http.configuredHandler.connect :
+  client.Config -> HttpRequest ->{IO, Exception} Either HttpResponse Connection
+client.Http.configuredHandler.connect cfg req =
+  match client.Config.proxy cfg with
+    None     -> Right (connectNoProxy (HttpRequest.uri req))
+    Some cfg -> connectViaProxy cfg req
+
+client.Http.configuredHandler.connectNoProxy : URI ->{IO, Exception} Connection
+client.Http.configuredHandler.connectNoProxy uri = match URI.scheme uri with
+  Scheme "https" ->
+    use URI host
+    sock = Socket.client (host uri) (URI.port uri)
+    onException (_ -> Socket.close sock) do
+      tryEval do
+        tlsConfig = default.impl (HostName.toText (host uri)) Bytes.empty
+        tls = newClient tlsConfig sock |> Tls.handshake
+        tls.deprecated tls
+  Scheme "http"  ->
+    sock = Socket.client (URI.host uri) (URI.port uri)
+    socket sock
+  otherScheme    -> Exception.raise (unsupportedScheme otherScheme)
+
+client.Http.configuredHandler.connectViaProxy :
+  proxy.Config -> HttpRequest ->{IO, Exception} Either HttpResponse Connection
+client.Http.configuredHandler.connectViaProxy cfg origReq =
+  uri = HttpRequest.uri origReq
+  match URI.scheme uri with
+    Scheme "https" ->
+      use URI host
+      tlsConfig = default.impl (HostName.toText (host uri)) Bytes.empty
+      connectViaProxy.impl
+        cfg
+        (Some tlsConfig)
+        (host uri)
+        (URI.port uri)
+        (defaultProxyHeaders (HttpRequest.headers origReq))
+    Scheme "http" ->
+      sock = Socket.client (proxy.host cfg) (proxy.port cfg)
+      Right (socket sock)
+    otherScheme -> Exception.raise (unsupportedScheme otherScheme)
+
+client.Http.configuredHandler.connectViaProxy.impl :
+  proxy.Config
+  -> Optional ClientConfig
+  -> HostName
+  -> Port
+  -> Headers
+  ->{IO, Exception} Either HttpResponse Connection
+client.Http.configuredHandler.connectViaProxy.impl
+  proxyConf tlsConf host port additionalProxyHeaders =
+  connectReq = connectRequest.impl proxyConf host port additionalProxyHeaders
+  sock = Socket.client (proxy.host proxyConf) (proxy.port proxyConf)
+  onException (_ -> Socket.close sock) do
+    tryEval do
+      tcpConnection = socket sock
+      Connection.send
+        tcpConnection
+        (HttpRequest.encode client.proxy.ProxyPresence.NoProxy connectReq)
+      connectResponse =
+        HttpResponse.fromStream true (receiveByteStream tcpConnection)
+      if HttpResponse.isSuccess connectResponse then
+        match tlsConf with
+          None           -> Right (socket sock)
+          Some tlsConfig ->
+            tls = newClient tlsConfig sock |> Tls.handshake
+            Right (tls.deprecated tls)
+      else Left connectResponse
+
+client.Http.configuredHandler.http :
+  client.Config -> HttpRequest ->{Decode, Stream Bytes} HttpResponse
+client.Http.configuredHandler.http cfg = cases
+  origReq@(HttpRequest method version uri headers body) ->
+    use Headers orElse
+    req =
+      headers.modify
+        (origHeaders ->
+          orElse (orElse (forURI uri) origHeaders) (userAgent "unison-http"))
+        origReq
+    proxyPresence =
+      match client.Config.proxy cfg with
+        Some _| URI.scheme uri === Scheme.http  ->
+          client.proxy.ProxyPresence.Proxy
+        _ -> client.proxy.ProxyPresence.NoProxy
+    reqPayload = HttpRequest.encode proxyPresence req
+    emit reqPayload
+    HttpResponse.decode (method === HEAD)
+
+client.Http.configuredHandler.webSocket :
+  client.Config
+  -> Connection
+  -> HttpRequest
+  ->{IO, Random} Either Failure WebSocket
+client.Http.configuredHandler.webSocket cfg conn req =
+  go =
+    do
+      use Exception raise
+      keyStr = Random.bytes 2 |> toBase64 |> fromUtf8
+      validate txt =
+        use Text ++ ==
+        expected =
+          keyStr ++ magicKeyString
+            |> Text.toUtf8
+            |> hashBytes Sha1
+            |> toBase64
+            |> fromUtf8
+        txt == expected
+      req' =
+        req
+          |> setHeader "Connection" ["Upgrade"]
+          |> setHeader "Upgrade" ["websocket"]
+          |> setHeader "Sec-WebSocket-Version" ["13"]
+          |> setHeader "Sec-WebSocket-Key" [keyStr]
+      let
+        (resp, leftoverBytes) =
+          withConnection conn do
+            decodePartial do configuredHandler.http cfg req'
+        match HttpResponse.headers resp |> getValues "Sec-WebSocket-Accept" with
+          [x] ->
+            if validate x then
+              threadSafeWebSocket conn Client 4096 leftoverBytes
+            else
+              raise
+                (Failure
+                  (typeLink WebSocketHandsakeFailure)
+                  "Failed websocket handshake"
+                  (Any ()))
+          _ ->
+            raise
+              (Failure
+                (typeLink WebSocketHandsakeFailure)
+                "Failed websocket handshake"
+                (Any ()))
+  catch go
+
+client.Http.delete : URI ->{Exception, Http} HttpResponse
+client.Http.delete = Either.toException << tryDelete
+
+client.Http.doc : Doc
+client.Http.doc =
+  use Http get run
+  use URI parse
+  {{
+  The {type Http} ability provides an abstract interface for making requests to
+  HTTP servers.
+  
+  # Making a request
+  
+    The basic operation provided by the {type Http} ability is:
+    
+        @signature{tryRequest}
+    
+    This function takes an {type HttpRequest} and returns {type Either} a
+    {type Failure} or an {type HttpResponse}.
+    
+    To throw an exception on failure, use the {request} function instead:
+    
+        @signature{request}
+    
+    There are also convenience functions for making specific types of requests:
+    
+        @signature{get}     @signature{Http.post}     @signature{Http.put}
+        @signature{Http.delete}     @signature{Http.patch}
+    
+    Each of these has a corresponding function that catches exceptions and
+    returns an {type Either}:
+    
+        @signature{tryGet}     @signature{tryPost}     @signature{Http.tryPut}
+        @signature{tryDelete}     @signature{tryPatch}
+  
+  # Dispatching requests
+  
+    The {type Http} ability is completely abstract, meaning that it doesn't
+    actually perform any network operations itself. To actually send requests,
+    you need a handler of the {type Http} ability that performs the network
+    operations.
+    
+    Provided in this library is a handler that uses {type IO} to perform
+    network operations:
+    
+        @signature{run}
+    
+    This function takes a block of code that uses the {type Http} ability and
+    runs it, performing the network operations as needed. For example:
+    
+    @typecheck ```
+    run do get (parse "https://api.example.com/data")
+    ```
+  
+  # Configuring requests
+  
+    The {runConfigured} function accepts a {type client.Config} value that can
+    be used to configure the behavior of the HTTP client. Currently the only
+    configuration option is to set a proxy server.
+    
+    For example:
+    
+    @typecheck ```
+    config = Config.default |> withProxy (HostName "myproxy") (Port "8080")
+    runConfigured config do get (parse "https://api.example.com/data")
+    ```
+  
+  # See also
+  
+    * {type HttpRequest} for details on constructing requests, including
+      setting headers and body content
+    * {type HttpResponse} for details on handling responses from the server,
+      getting the status code, headers, and body content
+  }}
+
+client.Http.get : URI ->{Exception, Http} HttpResponse
+client.Http.get = Either.toException << tryGet
+
+client.Http.handler : Request {Http} a ->{IO} a
+client.Http.handler = Http.configuredHandler Config.default
+
+client.Http.handler.doc : Doc
+client.Http.handler.doc =
+  {{
+  Handles each {type Http} request by opening a single-use socket to the host.
+  
+  Example usage:
+  
+  {{ docSource [docSourceElement (docEmbedTermLink do examples.simple) []] }}
+  
+  This handler supports the following: tryWebSocket : HttpRequest ->{Http}
+  Either Failure WebSocket
+  
+  * schemes: {Scheme.http} and {Scheme.https}
+  * transfer encoding: unchunked and chunked
+  * content encoding: `gzip` and `deflate` (zlib)
+  
+  In the future support may be added for connection reuse and conection pools.
+  }}
+
+client.Http.patch : URI -> Body ->{Exception, Http} HttpResponse
+client.Http.patch uri body = Either.toException (tryPatch uri body)
+
+client.Http.post : URI -> Body ->{Exception, Http} HttpResponse
+client.Http.post uri body = Either.toException (tryPost uri body)
+
+client.Http.put : URI -> Body ->{Exception, Http} HttpResponse
+client.Http.put uri body = Either.toException (Http.tryPut uri body)
+
+client.Http.request : HttpRequest ->{Exception, Http} HttpResponse
+client.Http.request request = Either.toException (tryRequest request)
+
+client.Http.run : '{g, Http} a ->{g, IO} a
+client.Http.run = runConfigured Config.default
+
+client.Http.run.tests.testHttp : '{IO} [Result]
+client.Http.run.tests.testHttp =
+  do
+    verifyAndIgnore do
+      use Nat ==
+      uri = parseOrBug "http://www.unison-lang.org/docs/"
+      resp = Http.run do Http.get uri
+      test.ensureEqual
+        (HttpResponse.status resp) (Status 301 "Moved Permanently")
+      ensuring do
+        (resp |> HttpResponse.headers |> getValues "Location" |> List.size)
+          == 1
+      ensuring do
+        isRight (resp |> HttpResponse.body |> Body.toBytes |> fromUtf8.impl)
+
+client.Http.run.tests.testHttps : '{IO} [Result]
+client.Http.run.tests.testHttps =
+  do
+    verifyAndIgnore do
+      uri = parseOrBug "https://www.unison-lang.org/docs/"
+      resp = Http.run do Http.get uri
+      test.ensureEqual (HttpResponse.status resp) (Status 200 "OK")
+      ensuring do
+        isRight (resp |> HttpResponse.body |> Body.toBytes |> fromUtf8.impl)
+
+client.Http.runConfigured : client.Config -> '{g, Http} a ->{g, IO} a
+client.Http.runConfigured cfg =
+  handler = Http.configuredHandler cfg
+  thunk -> (handle thunk() with handler)
+
+client.Http.runConfigured.tests.testProxyHttp : '{IO} [Result]
+client.Http.runConfigured.tests.testProxyHttp =
+  do
+    verifyAndIgnore do
+      use Nat ==
+      uri = parseOrBug "http://www.unison-lang.org/docs/"
+      resp = 
+        runConfigured (client.Config.Config (Some localProxyConfig)) do
+          Http.get uri
+      test.ensureEqual
+        (HttpResponse.status resp) (Status 301 "Moved Permanently")
+      ensuring do
+        (resp |> HttpResponse.headers |> getValues "Location" |> List.size)
+          == 1
+      ensuring do
+        isRight (resp |> HttpResponse.body |> Body.toBytes |> fromUtf8.impl)
+
+client.Http.runConfigured.tests.testProxyHttp.doc : Doc
+client.Http.runConfigured.tests.testProxyHttp.doc =
+  {{
+  Test using {Scheme.http} through a proxy.
+  
+  **Note:** This test requires a proxy server to be running at the address
+  specified in {{ docLink (docEmbedTermLink do localProxyConfig) }}.
+  }}
+
+client.Http.runConfigured.tests.testProxyHttps : '{IO} [Result]
+client.Http.runConfigured.tests.testProxyHttps =
+  do
+    verifyAndIgnore do
+      use Nat >
+      uri = parseOrBug "https://www.unison-lang.org/docs/"
+      resp = 
+        runConfigured (client.Config.Config (Some localProxyConfig)) do
+          Http.get uri
+      test.ensureEqual (HttpResponse.status resp) (Status 200 "OK")
+      bodyBytes = resp |> HttpResponse.body |> Body.toBytes
+      ensuring do Bytes.size bodyBytes > 0
+      ensuring do isRight (fromUtf8.impl bodyBytes)
+
+client.Http.runConfigured.tests.testProxyHttps.doc : Doc
+client.Http.runConfigured.tests.testProxyHttps.doc =
+  {{
+  Test using {Scheme.https} through a proxy.
+  
+  **Note:** This test requires a proxy server to be running at the address
+  specified in {{ docLink (docEmbedTermLink do localProxyConfig) }}.
+  }}
+
+client.Http.tryDelete : URI ->{Http} Either Failure HttpResponse
+client.Http.tryDelete uri = tryRequest (HttpRequest.delete uri)
+
+client.Http.tryGet : URI ->{Http} Either Failure HttpResponse
+client.Http.tryGet uri = tryRequest (HttpRequest.get uri)
+
+client.Http.tryPatch : URI -> Body ->{Http} Either Failure HttpResponse
+client.Http.tryPatch uri body = tryRequest (HttpRequest.patch uri body)
+
+client.Http.tryPost : URI ->{Http} Body ->{Http} Either Failure HttpResponse
+client.Http.tryPost uri body = tryRequest (HttpRequest.post uri body)
+
+client.Http.tryPut : URI -> Body ->{Http} Either Failure HttpResponse
+client.Http.tryPut uri body = tryRequest (HttpRequest.put uri body)
+
+client.HttpWebSocket.configuredHandler :
+  client.Config -> Request {HttpWebSocket} a ->{IO} a
+client.HttpWebSocket.configuredHandler cfg =
+  connectFailure httpResponse =
+    Failure
+      (typeLink ConnectFailure)
+      "Failed to connect"
+      (Any (httpResponse : HttpResponse))
+  go : Request {HttpWebSocket} a ->{IO} a
+  go = cases
+    { a } -> a
+    { tryWebSocket req -> k } ->
+      res = 
+        catchAll do
+          go conn =
+            seed = nanosecondOfSecond now()
+            splitmix seed do configuredHandler.webSocket cfg conn req
+          Either.fold
+            (connectFailure >> Left) go (configuredHandler.connect cfg req)
+      handle k (Either.flatMapRight id res) with go
+  go
+
+client.HttpWebSocket.handler : Request {HttpWebSocket} a ->{IO} a
+client.HttpWebSocket.handler = HttpWebSocket.configuredHandler Config.default
+
+client.proxy.Config.proxy : proxy.Config -> Authority
+client.proxy.Config.proxy = cases proxy.Config.Config proxy -> proxy
+
+client.proxy.Config.proxy.modify :
+  (Authority ->{g} Authority) -> proxy.Config ->{g} proxy.Config
+client.proxy.Config.proxy.modify f = cases
+  proxy.Config.Config proxy -> proxy.Config.Config (f proxy)
+
+client.proxy.Config.proxy.set : Authority -> proxy.Config -> proxy.Config
+client.proxy.Config.proxy.set proxy1 = cases
+  proxy.Config.Config _ -> proxy.Config.Config proxy1
+
+client.proxy.connectRequest : proxy.Config -> HttpRequest -> HttpRequest
+client.proxy.connectRequest = cases
+  proxyCfg, HttpRequest _ _ origUri origHeaders _ ->
+    headers = defaultProxyHeaders origHeaders
+    connectRequest.impl proxyCfg (URI.host origUri) (URI.port origUri) headers
+
+client.proxy.connectRequest.impl :
+  proxy.Config -> HostName -> Port -> Headers -> HttpRequest
+client.proxy.connectRequest.impl cfg host port additionalProxyHeaders =
+  use Text ++
+  hostHeader =
+    Headers.singleton "Host" (HostName.toText host ++ ":" ++ Port.toText port)
+  headers = Headers.orElse hostHeader additionalProxyHeaders
+  uri =
+    URI
+      Scheme.http
+      (Some (proxy.Config.proxy cfg))
+      root
+      RawQuery.empty
+      Fragment.empty
+  HttpRequest CONNECT Version.http11 uri headers Body.empty
+
+test> client.proxy.connectRequest.tests.example1 = 
+  verifyAndIgnore do
+    use Text ++
+    origReq =
+      addUserAgent =
+        headers.modify
+          (Headers.union (Headers.singleton "User-Agent" "curl/7.82.0"))
+      test.unisonDocs |> HttpRequest.get |> addUserAgent
+    proxy =
+      host = HostName "proxy.megacorp.com"
+      port = Port "1080"
+      auth = Authority None host (Some port)
+      proxy.Config.Config auth
+    connectReq = connectRequest proxy origReq
+    requestText =
+      HttpRequest.encode client.proxy.ProxyPresence.NoProxy connectReq
+        |> fromUtf8
+    expectedRequestText =
+      "CONNECT www.unison-lang.org:443 HTTP/1.1\r\n"
+        ++ "Host: www.unison-lang.org:443\r\n"
+        ++ "User-Agent: curl/7.82.0\r\n\r\n"
+    test.ensureEqual requestText expectedRequestText
+
+client.proxy.defaultProxyHeaders : Headers -> Headers
+client.proxy.defaultProxyHeaders origRequestHeaders =
+  retainOnly (Set.fromList ["User-Agent"]) origRequestHeaders
+
+client.proxy.host : proxy.Config -> HostName
+client.proxy.host cfg = cfg |> proxy.Config.proxy |> Authority.host
+
+client.proxy.port : proxy.Config -> Port
+client.proxy.port cfg =
+  cfg
+    |> proxy.Config.proxy
+    |> Authority.port
+    |> Optional.getOrElse (Port "1080")
+
+client.README : Doc
+client.README =
+  {{
+  This library can be used to make HTTP requests and inspect their responses.
+  
+  # Usage
+  
+    Here is a basic example of fetching the unison-lang.org home page:
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do examples.simple) []] }}
+    
+    Below is an example of making a simple HTTP request and getting back a
+    response. It uses the {&} helper for creating a {type RawQuery} (which will
+    be converted to a URI query string).
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do examples.query) []] }}
+  
+  # Response Status
+  
+    By default, {{ docLink (docEmbedTermLink do Http.run) }} does not return a
+    {type Failure} for a non-success HTTP status code (such as
+    `500 Internal Server Error`). It is left up to the user to determine
+    whether they want to treat a `404` as an error or as an expected case which
+    they should handle accordingly (for example by returning {None}). You can
+    use {{ docLink (docEmbedTermLink do HttpResponse.isSuccess) }} to check
+    whether a response has a success code. In the future we may want to provide
+    some helper methods for common use-cases of status code handling.
+  
+  # Response Body
+  
+    The response body is treated as raw bytes.
+    
+        @source{type Body}
+    
+    {{ docSignature [docEmbedSignatureLink do HttpResponse.body] }}
+    
+    This library handles decoding chunked and compressed responses but it is up
+    to the user to further interpret those bytes. For example you may want to
+    use {fromUtf8} if you are expecting a text response, and/or you may want to
+    use a JSON library to parse the response as JSON. In the future we may add
+    more helper methods for common use-cases.
+  
+  # URI Encoding
+  
+    You should __not__ attempt to URI-encode the segments in the {type Path} or
+    the keys/values in the {type RawQuery}. This library will automatically
+    encode these values when serializing the HTTP request.
+  
+  # Trailing Slash
+  
+    According to the HTTP specification,
+    `http://www.unison-lang.org/docs/quickstart` and
+    `http://www.unison-lang.org/docs/quickstart/` (with a trailing slash) are
+    two different URIs. The URI __without__ the trailing slash has two path
+    segments: `docs` and `quickstart`. The URI __with__ the trailing slash
+    technically has a third path segment that is an empty string. Therefore if
+    you need to create a path with a trailing slash you can add an empty
+    segment to the end:
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do trailingSlash) []] }}
+    
+    ```
+    unsafeRun! do fromUtf8 (Path.encode trailingSlash)
+    ```
+  
+  # Inspiration
+  
+    This library was heavily inspired by the excellent
+    [http4s](https://http4s.org/) Scala library.
+  }}
+
+client.test.formatIOError : IOError -> Text
+client.test.formatIOError = cases
+  AlreadyExists     -> "Already Exists"
+  NoSuchThing       -> "NoSuchThing"
+  ResourceBusy      -> "ResourceBusy"
+  ResourceExhausted -> "ResourceExhausted"
+  EOF               -> "EOF"
+  IllegalOperation  -> "IllegalOperation"
+  PermissionDenied  -> "PermissionDenied"
+  UserError         -> "UserError"
+
+client.test.header_lines : [Text]
+client.test.header_lines =
+  [ "Location: http://www.google.com/"
+  , "Content-Type: text/html; charset=UTF-8"
+  , "Date: Sat, 10 Oct 2020 16:48:40 GMT"
+  , "Expires: Mon, 09 Nov 2020 16:48:40 GMT"
+  , "Cache-Control: public, max-age=2592000"
+  , "Server: gws"
+  , "Content-Length: 219"
+  , "X-XSS-Protection: 0"
+  , "X-Frame-Options: SAMEORIGIN"
+  ]
+
+client.test.localProxyConfig : proxy.Config
+client.test.localProxyConfig =
+  proxy.Config.Config
+    (Authority None (HostName "localhost") (Some (Port "3128")))
+
+client.test.redir_response_bytes : Bytes
+client.test.redir_response_bytes =
+  lines : [[Char]]
+  lines = List.map toCharList redir_response_lines
+  chars = intercalate [?\r, ?\n] lines
+  chars |> fromCharList |> Text.toUtf8
+
+client.test.redir_response_lines : [Text]
+client.test.redir_response_lines =
+  [ "HTTP/1.1 301 Moved Permanently"
+  , "Location: http://www.google.com/"
+  , "Content-Type: text/html; charset=UTF-8"
+  , "Date: Sat, 10 Oct 2020 16:48:40 GMT"
+  , "Expires: Mon, 09 Nov 2020 16:48:40 GMT"
+  , "Cache-Control: public, max-age=2592000"
+  , "Server: gws"
+  , "Content-Length: 219"
+  , "X-XSS-Protection: 0"
+  , "X-Frame-Options: SAMEORIGIN"
+  , ""
+  , "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">"
+  , "<TITLE>301 Moved</TITLE></HEAD><BODY>"
+  , "<H1>301 Moved</H1>"
+  , "The document has moved"
+  , "<A HREF=\"http://www.google.com/\">here</A>."
+  , "</BODY></HTML>"
+  ]
+
+client.test.redir_response_text : Text
+client.test.redir_response_text =
+  lines : [[Char]]
+  lines = List.map toCharList redir_response_lines
+  chars = intercalate [?\r, ?\n] lines
+  chars |> fromCharList
+
+client.test.socketSlurp : Socket ->{IO, Exception} Bytes
+client.test.socketSlurp sock =
+  get = 5
+  go acc =
+    use Bytes ++
+    use Nat ==
+    printLine "a"
+    new = receiveAtMost sock get
+    printLine "b"
+    got = Bytes.size new
+    printLine (Nat.toText got)
+    if got == get then go (acc ++ new) else acc ++ new
+  go Bytes.empty
+
+client.test.testGet : '{IO, Exception} Text
+client.test.testGet _ =
+  use Text ++
+  (HttpResponse status version headers (Body body)) =
+    handle Http.get test.unisonDocs with Http.handler
+  match status with
+    Status 200 _ -> fromUtf8 body
+    Status code text ->
+      Exception.raise
+        (Failure
+          (typeLink Unit)
+          ("Failed (" ++ Nat.toText code ++ "), Reason: " ++ text)
+          (Any code))
+
+client.test.unisonDocs : URI
+client.test.unisonDocs =
+  use Path /
+  URI
+    Scheme.https
+    (Some (Authority None (HostName "www.unison-lang.org") None))
+    (root / "learn" / "")
+    RawQuery.empty
+    Fragment.empty
+
+client.up.base.IO.net.Connection.receiveByteStream :
+  Connection -> '{IO, Exception, Stream Bytes} ()
+client.up.base.IO.net.Connection.receiveByteStream connection =
+  receiveBytes = do
+    use Nat ==
+    chunk = Connection.receive connection
+    if Bytes.size chunk == 0 then ()
+    else
+      emit chunk
+      receiveBytes()
+  receiveBytes
+
+(Headers.==) : Headers -> Headers -> Boolean
+(Headers.==) = cases Headers h1, Headers h2 -> h1 Map.== h2
+
+Headers.add : Text -> Text -> Headers -> Headers
+Headers.add name value = cases
+  Headers headers -> Headers (Map.putWith (List.++) name [value] headers)
+
+Headers.asBytes : Headers -> Bytes
+Headers.asBytes =
+  crlf = 0xs0d0a
+  cases
+    Headers headers ->
+      keyValueBytes key value =
+        Text.toUtf8 (key Text.++ ": " Text.++ value) Bytes.++ crlf
+      headerLines =
+        List.flatMapRight
+          (cases (key, values) -> List.map (keyValueBytes key) values)
+          (Map.toList headers)
+      List.foldLeft (Bytes.++) Bytes.empty headerLines
+
+test> Headers.asBytes.tests.multivalue =
+  headers =
+    Map.fromList
+      [("Host", ["localhost:1234"]), ("User-Agent", ["cody/1.0", "stew/1.1"])]
+  expected =
+    Text.toUtf8
+      "Host: localhost:1234\r\nUser-Agent: cody/1.0\r\nUser-Agent: stew/1.1\r\n"
+  actual = asBytes (Headers headers)
+  check (actual === expected)
+
+Headers.contains : Text -> Headers -> Boolean
+Headers.contains name = cases Headers m -> Map.contains name m
+
+Headers.delete : Text -> Headers -> Headers
+Headers.delete name = cases
+  Headers headers -> Headers (data.Map.delete name headers)
+
+Headers.doc : Doc
+Headers.doc =
+  use Headers == add empty fromList singleton
+  {{
+  A {type Headers} value represents a collection of HTTP headers.
+  
+  # Constructing headers
+  
+    You can construct an empty {type Headers} value using the {empty} function:
+    
+        @signature{empty}
+    
+    Construct a {type Headers} value with a single header using the {singleton}
+    function:
+    
+        @signature{singleton}
+    
+    Add a header to a {type Headers} value using the {add} function:
+    
+        @signature{add}
+    
+    Headers can have multiple values. To add a header with multiple values, use
+    the {add} function multiple times.
+    
+    A {type Headers} value can also be constructed from a list of key-value
+    pairs using the {fromList} function:
+    
+        @signature{fromList}
+    
+    You can parse a {type Headers} value from a {type Text} value using
+    {parseHeaders}. The format of the text should be a list of key-value pairs
+    separated by newlines, with each key-value pair separated by a colon:
+    
+        @signature{parseHeaders}
+  
+  # Standard headers
+  
+    A number of standard headers are provided as convenience functions:
+    
+    * {standard.accept} - Constructs a {type Headers} value with an `Accept`
+      header.
+    * {acceptEncoding.default} - A {type Headers} value with an
+      `Accept-Encoding` header set to `gzip, deflate`.
+    * {contentLength} - Constructs a {type Headers} value with a
+      `Content-Length` header.
+    * {forAuthority} - Constructs a {type Headers} value with a `Host` header
+      for an {type Authority}.
+    * {forURI} - Constructs a {type Headers} value with a `Host` header for a
+      {type URI}.
+    * {userAgent} - Constructs a {type Headers} value with a `User-Agent`
+      header.
+  
+  # Accessing headers
+  
+    Get the values of a header:
+    
+        @signature{getValues}
+    
+    Get the value of a header and raise an exception if it's not present.
+    Returns the first value if the header has multiple values:
+    
+        @signature{requireHeader}
+    
+    Get the values of a comma-separated header:
+    
+        @signature{getCommaDelimitedValues}
+    
+    Get the value of a HTTP date header as an {type OffsetDateTime}:
+    
+        @signature{getDateTime}
+    
+    Get the value of a HTTP date header as an {type Instant}:
+    
+        @signature{getInstant}
+    
+    A few standard headers have convenience functions for getting their values:
+    
+    {contentLength.get} - Get the value of the `Content-Length` header as an
+    {type Optional} {type Nat}. {location.get} - Get the value of the
+    `Location` header as an {type Optional} {type URI}.
+  
+  # Modifying headers
+  
+    Delete a header from a {type Headers} value:
+    
+        @signature{Headers.delete}
+    
+    Delete all headers except those with the given names:
+    
+        @signature{retainOnly}
+  
+  # Combining headers
+  
+    Combine two {type Headers} values:
+    
+        @signature{Headers.union}
+    
+    Combine two {type Headers} values, ignoring duplicate headers:
+    
+        @signature{Headers.orElse}
+  
+  # Querying headers
+  
+    Check if a {type Headers} value contains a header:
+    
+        @signature{Headers.contains}
+    
+    Check if a {type Headers} value is empty:
+    
+        @signature{Headers.isEmpty}
+    
+    Check if two {type Headers} values are equal:
+    
+        @signature{==}
+    
+    Check if the `Transfer-Encoding` header is set to `chunked`:
+    
+        @signature{isChunked}
+  }}
+
+Headers.empty : Headers
+Headers.empty = Headers data.Map.empty
+
+Headers.fromList : [(Text, Text)] -> Headers
+Headers.fromList headers =
+  use List :+
+  use Map insert
+  use data Map
+  update : Text -> Text -> Map Text [Text] -> Map Text [Text]
+  update k v m = match Map.get k m with
+    Some vs -> insert k (vs :+ v) m
+    None    -> insert k [v] m
+  go acc = cases
+    []             -> acc
+    (k, v) +: tail -> go (update k v acc) tail
+  Headers (go data.Map.empty headers)
+
+Headers.getCommaDelimitedValues : Text -> Headers -> [Text]
+Headers.getCommaDelimitedValues key headers =
+  parse : Text -> [Text]
+  parse t = List.map trim (Text.split ?, t)
+  List.flatMapRight parse (getValues key headers)
+
+Headers.getDateTime : Text -> Headers ->{Exception} [OffsetDateTime]
+Headers.getDateTime headerName headers =
+  vs = getValues headerName headers
+  Abort.toGenericException "Invalid date" vs do List.map offsetDateTime vs
+
+Headers.getDateTime.doc : Doc
+Headers.getDateTime.doc =
+  {{
+  Gets the date and time value of a header, as an {type OffsetDateTime}.
+  
+  The header value is parsed as a date and time in the format specified by
+  [RFC 7231](https://datatracker.ietf.org/doc/html/rfc7231).
+  
+  If the header is not present, or if the value is not a valid date and time,
+  an exception is thrown.
+  }}
+
+Headers.getInstant : Text -> Headers ->{Exception} [Instant]
+Headers.getInstant headerName headers =
+  vs = getValues headerName headers
+  Abort.toGenericException "Invalid date" vs do
+    List.map (offsetDateTime >> toInstant) vs
+
+Headers.getInstant.doc : Doc
+Headers.getInstant.doc =
+  {{
+  Gets the date and time value of a header with the given name, as an
+  {type Instant}.
+  
+  The header value is parsed as a date and time in the format specified by
+  [RFC 7231](https://datatracker.ietf.org/doc/html/rfc7231).
+  
+  If the header is not present, or if the value is not a valid date and time,
+  an exception is thrown.
+  }}
+
+Headers.getValues : Text -> Headers -> [Text]
+Headers.getValues =
+  asciiToLower : Text -> Text
+  asciiToLower = fromCharList << List.map ascii.toLower << toCharList
+  keys key =
+    use Text ==
+    lower = asciiToLower key
+    if lower == key then [key] else [key, lower]
+  lookup m key = Map.getOrElse [] key m
+  key ve6ccs68a11 -> let
+    (Headers m) = ve6ccs68a11
+    List.flatMapRight (lookup m) (keys key)
+
+Headers.HttpDate.fromGMTDateTime : LocalDateTime -> Text
+Headers.HttpDate.fromGMTDateTime = cases
+  LocalDateTime d@(LocalDate year month day) (LocalTime hour minute second _) ->
+    use Nat -
+    use Text ++
+    wkDay = LocalDate.dayOfWeek d
+    dd = leftPad 2 "0" (Nat.toText day)
+    mon = List.at (month - 1) monthNamesShort |> Optional.getOrElse "???"
+    yyyy = leftPad 4 "0" (Int.toText year)
+    hh = leftPad 2 "0" (Nat.toText hour)
+    mm = leftPad 2 "0" (Nat.toText minute)
+    ss = leftPad 2 "0" (Nat.toText second)
+    shortName wkDay
+      ++ ", "
+      ++ dd
+      ++ " "
+      ++ mon
+      ++ " "
+      ++ yyyy
+      ++ " "
+      ++ hh
+      ++ ":"
+      ++ mm
+      ++ ":"
+      ++ ss
+      ++ " GMT"
+
+Headers.HttpDate.fromGMTDateTime.doc : Doc
+Headers.HttpDate.fromGMTDateTime.doc =
+  {{
+  Converts a {type LocalDateTime} to a {type Text} in the format specified by
+  RFC 1123. This is the format used in HTTP headers.
+  
+  # Example
+  
+    ```
+    fromGMTDateTime
+      (LocalDateTime (LocalDate +2023 6 18) (LocalTime 23 45 0 0))
+    ```
+  }}
+
+Headers.HttpDate.fromInstant : Instant -> Text
+Headers.HttpDate.fromInstant =
+  atUTC >> OffsetDateTime.localDateTime >> fromGMTDateTime
+
+Headers.HttpDate.fromInstant.doc : Doc
+Headers.HttpDate.fromInstant.doc =
+  use HttpDate fromInstant
+  {{
+  Converts an {type Instant} to a {type Text} in the format specified by RFC
+  1123. This is the format used in HTTP headers.
+  
+  # Examples
+  
+    ```
+    fromInstant (fromEpochMilliseconds +1624068300000)
+    ```
+    
+    ```
+    fromInstant epoch
+    ```
+  }}
+
+Headers.HttpDate.fromOffsetDateTime : OffsetDateTime -> Text
+Headers.HttpDate.fromOffsetDateTime = cases
+  OffsetDateTime (UTCOffset o) dt ->
+    fromGMTDateTime
+      (LocalDateTime.addDuration dt (Duration.negate (minutes o)))
+
+Headers.HttpDate.fromOffsetDateTime.doc : Doc
+Headers.HttpDate.fromOffsetDateTime.doc =
+  {{
+  Converts a {type OffsetDateTime} to a {type Text} in the format specified by
+  RFC 1123. This is the format used in HTTP headers.
+  
+  # Example
+  
+    ```
+    fromOffsetDateTime
+      (OffsetDateTime
+        AST (LocalDateTime (LocalDate +2023 6 18) (LocalTime 23 45 0 0)))
+    ```
+  }}
+
+Headers.HttpDate.parse.localDate : Text ->{Abort} LocalDate
+Headers.HttpDate.parse.localDate text =
+  match Optional.toAbort (Pattern.run rfc7231Date text) with
+    ([weekday, day, month, year], _) ->
+      use Int + <
+      use Optional toAbort
+      month' = match month with
+        "Jan" -> 1
+        "Feb" -> 2
+        "Mar" -> 3
+        "Apr" -> 4
+        "May" -> 5
+        "Jun" -> 6
+        "Jul" -> 7
+        "Aug" -> 8
+        "Sep" -> 9
+        "Oct" -> 10
+        "Nov" -> 11
+        "Dec" -> 12
+        _     -> abort
+      day' = toAbort (Nat.fromText day)
+      year' = toAbort (Int.fromText year)
+      year'' =
+        if year' < +100 then year' + (if year' < +50 then +2000 else +1900)
+        else year'
+      LocalDate year' month' day'
+    _ -> abort
+
+Headers.HttpDate.parse.localDateTime : Text ->{Abort} LocalDateTime
+Headers.HttpDate.parse.localDateTime text =
+  match Optional.toAbort
+    (Pattern.run
+      (Pattern.join
+        [ Pattern.capture rfc7231Date
+        , Pattern.some space
+        , Pattern.capture rfc7231Time
+        ])
+      text) with
+    ([dt, tm], _) -> LocalDateTime (localDate dt) (localTime tm)
+    _             -> abort
+
+Headers.HttpDate.parse.localTime : Text ->{Abort} LocalTime
+Headers.HttpDate.parse.localTime text =
+  match Optional.toAbort (Pattern.run rfc7231Time text) with
+    ([hour, minute, second], _) ->
+      LocalTime
+        (Optional.toAbort (Nat.fromText hour))
+        (Optional.toAbort (Nat.fromText minute))
+        (Optional.toAbort (Nat.fromText second))
+        0
+    e -> abort
+
+Headers.HttpDate.parse.offsetDateTime : Text ->{Abort} OffsetDateTime
+Headers.HttpDate.parse.offsetDateTime text =
+  OffsetDateTime UTC (parse.localDateTime text)
+
+Headers.HttpDate.parse.offsetDateTime.doc : Doc
+Headers.HttpDate.parse.offsetDateTime.doc =
+  {{
+  Parses a date and time in the HTTP date format specified by
+  [RFC 7231](https://datatracker.ietf.org/doc/html/rfc7231).
+  
+  The date and time are assumed to be in UTC.
+  
+  If the date and time is not in the correct format, an exception is thrown.
+  }}
+
+Headers.isChunked : Headers -> Boolean
+Headers.isChunked headers =
+  List.any ((===) "chunked") (getValues "Transfer-Encoding" headers)
+
+Headers.isEmpty : Headers -> Boolean
+Headers.isEmpty = cases Headers h -> Map.isEmpty h
+
+Headers.orElse : Headers -> Headers -> Headers
+Headers.orElse = cases Headers h1, Headers h2 -> Headers (Map.union h1 h2)
+
+Headers.orElse.doc : Doc
+Headers.orElse.doc =
+  {{
+  {{ docLink (docEmbedTermLink do Headers.orElse) }} `primary` `backup`
+  performs a left-biased union of headers. The result will contain all headers
+  from `primary` and will only contain headers from `backup` if their key was
+  not present in `primary`.
+  
+  This is different than {{ docLink (docEmbedTermLink do Headers.union) }},
+  which will concatenate the value lists for matching keys.
+  }}
+
+test> Headers.orElse.test = verifyAndIgnore do
+  use Headers == fromList
+  primary = fromList [("a", "1"), ("b", "2"), ("c", "3")]
+  backup = fromList [("b", "4"), ("c", "5"), ("d", "6")]
+  expected = fromList [("a", "1"), ("b", "2"), ("c", "3"), ("d", "6")]
+  result = Headers.orElse primary backup
+  ensureEqualBy (==) result expected
+
+Headers.parseHeaders : Text -> Either Text Headers
+Headers.parseHeaders =
+  use Text ++
+  pairs : [Text] -> [(Text, Text)]
+  pairs as =
+    pair = cases
+      [a, b] ++ rest -> Some ((a, b), rest)
+      _              -> None
+    List.unfold as pair
+  headerPattern =
+    use Pattern capture join many
+    space = patterns.char (anyOf [?\s, ?\t])
+    colon = join [literal ":", many space]
+    payload = many (notCharIn [?\n, ?\r])
+    join [capture token, colon, capture payload]
+  headersPattern = sepMany (literal "\r\n") headerPattern
+  headersText ->
+    (match Pattern.run headersPattern headersText with
+      Some (headerPairs, "") -> Right (Headers.fromList (pairs headerPairs))
+      Some (_, extra) ->
+        Left ("Unexpected content after HTTP headers\n" ++ extra)
+      None -> Left ("Invalid HTTP headers\n" ++ headersText))
+
+Headers.requireHeader : Text -> Headers ->{Exception} Text
+Headers.requireHeader h hs = 
+  hs
+    |> getValues h
+    |> List.head
+    |> (cases
+         None ->
+           Exception.raise
+             <| Failure
+               (typeLink Headers)
+               ("Missing " Text.++ h Text.++ " header in response.")
+               (Any hs)
+         Some v -> v)
+
+Headers.requireHeader.doc : Doc
+Headers.requireHeader.doc =
+  {{
+  Given a {type Text} header name and a {type Headers} object, returns the
+  value of the header. If the header is not present, this raises an
+  {type Exception}.
+  }}
+
+Headers.retainOnly : Set Text -> Headers -> Headers
+Headers.retainOnly toRetain origHeaders =
+  use Text toLowercase
+  toRetainLowercase = Set.map toLowercase toRetain
+  retain k = Set.contains (toLowercase k) toRetainLowercase
+  origHeaders |> Headers.toMap |> up.base.data.Map.filterKeys retain |> Headers
+
+Headers.singleton : Text -> Text -> Headers
+Headers.singleton k v = Headers (Map.singleton k [v])
+
+Headers.standard.accept : Text -> Headers
+Headers.standard.accept = Headers.singleton "Accept"
+
+Headers.standard.acceptEncoding.default : Headers
+Headers.standard.acceptEncoding.default =
+  Headers (Map.fromList [("Accept-Encoding", ["gzip", "deflate"])])
+
+Headers.standard.contentLength : Body -> Headers
+Headers.standard.contentLength = cases
+  Body bytes
+    | Bytes.size bytes === 0  -> Headers.empty
+    | otherwise               ->
+      Headers.singleton "Content-Length" (Nat.toText (Bytes.size bytes))
+
+Headers.standard.contentLength.doc : Doc
+Headers.standard.contentLength.doc =
+  {{
+  Creates the `Content-Length` header with the correct length for the number of
+  {type Bytes} in the given request body.
+  
+  If the given body is empty, the header will be omitted.
+  }}
+
+Headers.standard.contentLength.get : Headers -> Optional Nat
+Headers.standard.contentLength.get headers =
+  findMap Nat.fromText (getValues "Content-Length" headers)
+
+Headers.standard.host.forAuthority : Authority -> Headers
+Headers.standard.host.forAuthority = cases
+  Authority _ (HostName h) port ->
+    use Text ++
+    host = Optional.fold (do h) (cases Port p -> h ++ ":" ++ p) port
+    Headers.singleton "Host" host
+
+test> Headers.standard.host.forAuthority.tests.noPort =
+  authority = Authority None (HostName "geocities.com") None
+  expected = Headers.singleton "Host" "geocities.com"
+  actual = forAuthority authority
+  check (actual === expected)
+
+test> Headers.standard.host.forAuthority.tests.withPort =
+  authority = Authority None (HostName "geocities.com") (Some (Port "22"))
+  expected = Headers.singleton "Host" "geocities.com:22"
+  actual = forAuthority authority
+  check (actual === expected)
+
+Headers.standard.host.forURI : URI -> Headers
+Headers.standard.host.forURI uri =
+  Optional.fold (do Headers.empty) forAuthority (URI.authority uri)
+
+Headers.standard.location.get : Headers -> Optional Path
+Headers.standard.location.get =
+  use Nat >
+  parsePath : Text -> Optional Path
+  parsePath pathText =
+    match Pattern.run (Pattern.capture pattern.path) pathText with
+      Some (_, remain) | Text.size remain > 0 -> None
+      Some ([path], _) -> toOptional! do _internal.parsePath path
+      _                -> None
+  getValues "Location" >> findMap parsePath
+
+test> Headers.standard.location.get.tests = 
+  verifyAndIgnore do
+    use Headers singleton
+    use location get
+    use test ensureEqual
+    ensureEqual
+      (Path ["foo", "bar"] |> Some) (get (singleton "Location" "/foo/bar"))
+    ensureEqual None (get (singleton "Stuff" "/foo/bar"))
+    ensureEqual None (get Headers.empty)
+
+Headers.standard.userAgent : Text -> Headers
+Headers.standard.userAgent = Headers.singleton "User-Agent"
+
+Headers.toMap : Headers -> data.Map Text [Text]
+Headers.toMap = cases Headers h -> h
+
+Headers.union : Headers -> Headers -> Headers
+Headers.union = cases
+  Headers h1, Headers h2 -> Headers (Map.unionWith (List.++) h1 h2)
+
+Headers.union.doc : Doc
+Headers.union.doc =
+  {{
+  Create a new {type Headers} instance with all of the headers of the first
+  argument __and__ all of the headers from the second argument.
+  
+  NOTE: if both headers include the same key, the value lists for that key are
+  concatenated. This means that you can potentially end up with duplicate
+  values for a key.
+  }}
+
+test> Headers.union.tests.nonempty =
+  use Map fromList
+  h1 = Headers (fromList [("key1", ["v1", "v2"]), ("key2", ["v3", "v4"])])
+  h2 =
+    Headers
+      (fromList
+        [ ("key1", ["v1", "v5"])
+        , ("key2", ["v6", "v4", "v7"])
+        , ("key3", ["v8"])
+        ])
+  expected =
+    Headers
+      (fromList
+        [ ("key1", ["v1", "v2", "v1", "v5"])
+        , ("key2", ["v3", "v4", "v6", "v4", "v7"])
+        , ("key3", ["v8"])
+        ])
+  actual = Headers.union h1 h2
+  check (actual === expected)
+
+test> Headers.union.tests.withEmpty =
+  use Headers union
+  h1 = Headers.empty
+  h2 = Headers (Map.fromList [("key1", ["v1", "v2"]), ("key2", ["v3", "v4"])])
+  check (union h1 h2 === h2 && union h1 h2 === union h2 h1)
+
+(HttpRequest.==) : HttpRequest -> HttpRequest -> Boolean
+(HttpRequest.==) = cases
+  HttpRequest method1 version1 uri1 headers1 body1,
+    HttpRequest method2 version2 uri2 headers2 body2 ->
+    method1 === method2 && version1 === version2 && uri1 === uri2
+      && headers1 Headers.== headers2
+      && body1 === body2
+
+HttpRequest.addHeader : Text -> Text -> HttpRequest -> HttpRequest
+HttpRequest.addHeader name value = cases
+  HttpRequest method version uri headers body ->
+    HttpRequest method version uri (Headers.add name value headers) body
+
+HttpRequest.addHeader.doc : Doc
+HttpRequest.addHeader.doc =
+  {{
+  Adds a header to an {type HttpRequest}.
+  
+  If the header already exists, the value is appended to the existing header.
+  }}
+
+HttpRequest.body : HttpRequest -> Body
+HttpRequest.body = cases HttpRequest _ _ _ _ b -> b
+
+HttpRequest.body.set : Body -> HttpRequest -> HttpRequest
+HttpRequest.body.set body = cases
+  HttpRequest m v u h _ -> HttpRequest m v u h body
+
+HttpRequest.decode : '{Decode} HttpRequest
+HttpRequest.decode =
+  pairs : [Text] -> [(Text, Text)]
+  pairs as =
+    pair = cases
+      [a, b] ++ rest -> Some ((a, b), rest)
+      _              -> None
+    List.unfold as pair
+  do
+    use Decode failWith
+    use Text ++
+    head = 
+      Decode.label "HTTP request head" do Decode.until 0xs0d0a0d0a Decode.utf8
+    req =
+      match IPattern.run requestLine head with
+        Some
+          ( [method, scheme, userInfo, host, port, path, query, fragment, version],
+            headersWithTrailingCrLf) ->
+          method' =
+            Method.fromText method
+              |> (getOrElse' do failWith ("Invalid method: " ++ method))
+          version' = match Version.fromText version with
+            Right v -> v
+            Left t  -> failWith ("Unsupported HTTP version: " ++ t)
+          path' = getOrBug "heir part" (toOptional! do parsePath path)
+          authority =
+            handle parseAuthority userInfo host port
+            with cases
+              { a } -> a
+              { abort -> _ } ->
+                failWith
+                  ("Invalid Authority ("
+                    ++ Text.join ", " [userInfo, host, port]
+                    ++ ")")
+          uri =
+            URI
+              (Scheme scheme)
+              authority
+              path'
+              (RawQuery query)
+              (Fragment fragment)
+          headers =
+            match parseHeaders (Text.drop 2 headersWithTrailingCrLf) with
+              Right headers -> headers
+              Left e        -> failWith e
+          HttpRequest method' version' uri headers Body.empty
+        _ -> failWith ("Invalid HTTP request line\n" ++ head)
+    match decodeBody req HttpRequest.headers HttpRequest.body.set with
+      (req, trailers) ->
+        (HttpRequest m v u h b) = req
+        HttpRequest m v u (Headers.union h trailers) b
+
+HttpRequest.decodeHeadersOnly.doc : Doc
+HttpRequest.decodeHeadersOnly.doc =
+  {{
+  an alternative to HttpRequest.decode that doesn't expoect a body. This is to
+  be used when parsing the response to a HEAD request.
+  }}
+
+HttpRequest.delete : URI -> HttpRequest
+HttpRequest.delete uri =
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  HttpRequest DELETE Version.http11 uri headers Body.empty
+
+HttpRequest.doc : Doc
+HttpRequest.doc =
+  use HttpRequest addHeader fromBytes fromStream headers post
+  use HttpRequest.body set
+  use headers modify
+  {{
+  # HttpRequest
+  
+    The {type HttpRequest} type represents an HTTP request as defined by
+    [RFC 2616](https://www.rfc-editor.org/rfc/rfc2616).
+    
+    It could be used to represent either a request received by a server, or a
+    request to be sent by a client.
+    
+    ## Constructing an {type HttpRequest}
+    
+       There are a number of helper methods for constructing an
+       {type HttpRequest}:
+       
+       * {{ docLink (docEmbedTermLink do HttpRequest.get) }}
+       * {{ docLink (docEmbedTermLink do post) }}
+       * {{ docLink (docEmbedTermLink do HttpRequest.put) }}
+       * {{ docLink (docEmbedTermLink do HttpRequest.delete) }}
+       
+       {{ docExampleBlock 0 do
+         uri = parseOrBug "https://post.it/here"
+         body = "{\"Hello\": \"World\"}" |> Body.fromText
+         post uri body }}
+       
+       Or you could construct a HttpRequest directly using its constructor:
+       
+       @typecheck ```
+       uri = parseOrBug "http://some.where"
+       HttpRequest POST Version.http11 uri Headers.empty Body.empty
+       ```
+       
+       A request can also be decoded from {type Bytes} using the {fromBytes}
+       and {fromStream} functions:
+       
+           @signature{fromBytes}     @signature{fromStream}
+    
+    ## Headers
+    
+       You can add a header to an {type HttpRequest} using the {addHeader}
+       function:
+       
+           @signature{addHeader}
+       
+       To set a header to a specific set of values, use {setHeader} (a header
+       with multiple values will be sent as multiple headers):
+       
+           @signature{setHeader}
+       
+       Given an {type HttpRequest} `req`, you can get the headers using the
+       {headers} field:
+       
+           @signature{headers}
+       
+       You can modify the headers of an {type HttpRequest} using the {modify}
+       function:
+       
+           @signature{modify}
+    
+    ## Body
+    
+       The body of an {type HttpRequest} is represented by a {type Body} value.
+       You can get the body of an {type HttpRequest} using the
+       {HttpRequest.body} field:
+       
+           @signature{HttpRequest.body}
+       
+       You can set the body of an {type HttpRequest} using the {set} function:
+       
+           @signature{set}
+    
+    ## Other fields
+    
+       The other fields of an {type HttpRequest} are:
+       
+       * {HttpRequest.method} - the HTTP method of the request
+       * {HttpRequest.version} - the HTTP version of the request
+       * {HttpRequest.uri} - the URI of the request
+  }}
+
+HttpRequest.encode : client.proxy.ProxyPresence -> HttpRequest -> Bytes
+HttpRequest.encode proxyPresence req =
+  use Bytes ++
+  headers = HttpRequest.encodeNoBody proxyPresence req
+  let
+    (Body body) = HttpRequest.body req
+    headers ++ body
+
+HttpRequest.encode.nonProxyRequestLine : HttpRequest -> Bytes
+HttpRequest.encode.nonProxyRequestLine = cases
+  HttpRequest method version uri headers _ ->
+    use Bytes ++
+    use Text toUtf8
+    space = 0xs20
+    resource =
+      match method with
+        CONNECT ->
+          authorityText = match getValues "Host" headers with
+            host +: _ -> host
+            []        -> forceHostAndPort uri |> Authority.toText
+          toUtf8 authorityText
+        _ ->
+          Path.encode (URI.path uri)
+            ++ toUtf8 (RawQuery.encode (URI.query uri))
+    toUtf8 (Method.toText method)
+      ++ space
+      ++ resource
+      ++ space
+      ++ toUtf8 (Version.toText version)
+
+HttpRequest.encode.proxyRequestLineText : HttpRequest -> Text
+HttpRequest.encode.proxyRequestLineText = cases
+  HttpRequest method version uri _ _ ->
+    use Text ++
+    space = " "
+    uri' = match method with
+      OPTIONS ->
+        u = URI.toText uri
+        if u === "/*" then "*" else u
+      _       -> URI.toText uri
+    Method.toText method
+      ++ space
+      ++ URI.toText uri
+      ++ space
+      ++ Version.toText version
+
+HttpRequest.encodeChunked :
+  client.proxy.ProxyPresence
+  -> HttpRequest
+  -> '{Stream Bytes} Headers
+  ->{Stream Bytes} ()
+HttpRequest.encodeChunked proxyPresence request body =
+  request' = HttpRequest.addHeader "Transfer-Encoding" "chunked" request
+  emit (HttpRequest.encodeNoBody proxyPresence request')
+  encodeChunkedBody body
+
+HttpRequest.encodeChunked.doc : Doc
+HttpRequest.encodeChunked.doc =
+  {{
+  Given an {type HttpRequest}, and a {type Stream} of {type Bytes}, encode this
+  request into a stream of bytes represeinting the request. If the given
+  request has a body, the body will be encoded as the first chunk, and each
+  {type Bytes}. Any {type Headers} returned at the end of the Stream will be
+  encoded as Trailers
+  }}
+
+test> HttpRequest.encodeChunked.tests.withoutTrailers = 
+  verifyAndIgnore do
+    use Bytes ++
+    bodyStream = do
+      use Text toUtf8
+      emit (toUtf8 "hello")
+      emit (toUtf8 ", ")
+      emit Bytes.empty
+      emit (toUtf8 "world!")
+      emit (toUtf8 "Sincerely,\n  me")
+      Headers.empty
+    head = HttpRequest.post (parseOrBug "http://google.com") Body.empty
+    requestStream =
+      do
+        HttpRequest.encodeChunked
+          client.proxy.ProxyPresence.NoProxy head bodyStream
+    encodedRequest = Stream.fold (++) Bytes.empty requestStream |> fromUtf8
+    expected =
+      Text.join
+        "\n"
+        [ "POST / HTTP/1.1\r"
+        , "Accept-Encoding: gzip\r"
+        , "Accept-Encoding: deflate\r"
+        , "Host: google.com\r"
+        , "Transfer-Encoding: chunked\r"
+        , "\r"
+        , "5\r"
+        , "hello\r"
+        , "2\r"
+        , ", \r"
+        , "6\r"
+        , "world!\r"
+        , "F\r"
+        , "Sincerely,\n  me\r"
+        , "0\r"
+        , "\r\n"
+        ]
+    test.ensureEqual encodedRequest expected
+
+test> HttpRequest.encodeChunked.tests.withTrailers = 
+  verifyAndIgnore do
+    use Bytes ++
+    use HttpRequest addHeader
+    use Text toUtf8
+    trailers =
+      Headers.fromList
+        [ ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+        , ("Client-Timing", "cache;desc=\"Cache Read\";dur=23.2")
+        ]
+    bodyStream = do
+      emit (toUtf8 "hello")
+      emit (toUtf8 ", ")
+      emit Bytes.empty
+      emit (toUtf8 "world!")
+      emit (toUtf8 "Sincerely,\n  me")
+      trailers
+    head =
+      HttpRequest.post (parseOrBug "http://google.com") Body.empty
+        |> addHeader "Trailer" "Expires"
+        |> addHeader "Trailer" "Client-Timing"
+    requestStream =
+      do
+        HttpRequest.encodeChunked
+          client.proxy.ProxyPresence.NoProxy head bodyStream
+    encodedRequest = Stream.fold (++) Bytes.empty requestStream
+    expected =
+      toUtf8
+        <| Text.join
+          "\n"
+          [ "POST / HTTP/1.1\r"
+          , "Accept-Encoding: gzip\r"
+          , "Accept-Encoding: deflate\r"
+          , "Host: google.com\r"
+          , "Trailer: Client-Timing\r"
+          , "Trailer: Expires\r"
+          , "Transfer-Encoding: chunked\r"
+          , "\r"
+          , "5\r"
+          , "hello\r"
+          , "2\r"
+          , ", \r"
+          , "6\r"
+          , "world!\r"
+          , "F\r"
+          , "Sincerely,\n  me\r"
+          , "0\r"
+          , "Client-Timing: cache;desc=\"Cache Read\";dur=23.2\r"
+          , "Expires: Wed, 21 Oct 2015 07:28:00 GMT\r"
+          , "\r\n"
+          ]
+    test.ensureEqual encodedRequest expected
+
+HttpRequest.encodeNoBody : client.proxy.ProxyPresence -> HttpRequest -> Bytes
+HttpRequest.encodeNoBody proxyPresence req =
+  use Bytes ++
+  use fromList impl
+  (HttpRequest method version uri headers body) = req
+  headers' =
+    use Headers empty orElse
+    use Nat !=
+    contentLengthHeader =
+      if isChunked headers then empty
+      else
+        contentLength = Bytes.size (Body.toBytes body)
+        if
+          contentLength != 0 || (match method with
+            CONNECT -> false
+            GET     -> false
+            HEAD    -> false
+            _       -> true)
+        then Headers.singleton "Content-Length" (Nat.toText contentLength)
+        else empty
+    orElse headers (orElse (forURI uri) contentLengthHeader)
+  requestLine =
+    match proxyPresence with
+      client.proxy.ProxyPresence.Proxy ->
+        proxyRequestLineText req |> Text.toUtf8
+      client.proxy.ProxyPresence.NoProxy -> nonProxyRequestLine req
+  requestLine ++ 0xs0d0a ++ asBytes headers' ++ 0xs0d0a
+
+HttpRequest.encodeNoBody.doc : Doc
+HttpRequest.encodeNoBody.doc =
+  {{
+  Encodes the head (request line and headers) of an HTTP request, then `\r\n`,
+  but not the body.
+  }}
+
+HttpRequest.ensureEqual : HttpRequest -> HttpRequest ->{Exception} ()
+HttpRequest.ensureEqual a b =
+  use HttpRequest ==
+  if a == b then () else test.raiseFailure "HttpRequests not equal" (a, b)
+
+HttpRequest.fromBytes : Bytes ->{Exception} HttpRequest
+HttpRequest.fromBytes bs = HttpRequest.fromStream do emit bs
+
+HttpRequest.fromBytes.doc : Doc
+HttpRequest.fromBytes.doc = {{ Parse an {type HttpRequest} }}
+
+HttpRequest.fromStream : '{g, Stream Bytes} a ->{g, Exception} HttpRequest
+HttpRequest.fromStream stream = 
+  Throw.toException toFailure do Decode.fromStream HttpRequest.decode stream
+
+HttpRequest.get : URI -> HttpRequest
+HttpRequest.get uri =
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  HttpRequest GET Version.http11 uri headers Body.empty
+
+HttpRequest.get.doc : Doc
+HttpRequest.get.doc =
+  use Path /
+  {{
+  Construct a simple HTTP GET {type HttpRequest} for a {type URI}.
+  
+  This function can be convenient when you don't need to customize request
+  components such as HTTP headers.
+  
+  Example:
+  
+  ```
+  HttpRequest.get
+    (URI
+      Scheme.https
+      (Some (Authority None (HostName "unison-lang.org") None))
+      (root / "docs")
+      RawQuery.empty
+      Fragment.empty)
+  ```
+  }}
+
+HttpRequest.headers : HttpRequest -> Headers
+HttpRequest.headers = cases HttpRequest _ _ _ h _ -> h
+
+HttpRequest.headers.modify :
+  (Headers ->{g} Headers) -> HttpRequest ->{g} HttpRequest
+HttpRequest.headers.modify f = cases
+  HttpRequest version method uri origHeaders body ->
+    HttpRequest version method uri (f origHeaders) body
+
+HttpRequest.headers.pattern.tchar : Pattern Text
+HttpRequest.headers.pattern.tchar =
+  Pattern.or
+    (patterns.char
+      (anyOf [?!, ?#, ?$, ?%, ?&, ?\', ?*, ?+, ?-, ?., ?^, ?_, ?`, ?|, ?~]))
+    alphaNum
+
+HttpRequest.headers.pattern.tchar.doc : Doc
+HttpRequest.headers.pattern.tchar.doc =
+  {{
+  Each header field consists of a case-insensitive field name followed by a
+  colon (":"), optional leading whitespace, the field value, and optional
+  trailing whitespace.
+  
+  '''
+  
+               token          = 1*tchar
+  
+               tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+                              / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+                              / DIGIT / ALPHA
+                              ; any VCHAR, except delimiters
+  
+  
+               header-field   = field-name ":" OWS field-value OWS
+  
+               field-name     = token
+               field-value    = *( field-content / obs-fold )
+               field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+               field-vchar    = VCHAR / obs-text
+  
+               obs-fold       = CRLF 1*( SP / HTAB )
+                              ; obsolete line folding
+                              ; see Section 3.2.4
+  '''
+  }}
+
+HttpRequest.headers.pattern.token : Pattern Text
+HttpRequest.headers.pattern.token = Pattern.some tchar
+
+HttpRequest.method : HttpRequest -> Method
+HttpRequest.method = cases HttpRequest m _ _ _ _ -> m
+
+HttpRequest.method.doc : Doc
+HttpRequest.method.doc = {{ Gets the {type Method} of an {type HttpRequest}. }}
+
+HttpRequest.patch : URI -> Body -> HttpRequest
+HttpRequest.patch uri body =
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  HttpRequest PATCH Version.http11 uri headers body
+
+HttpRequest.pattern.method : IPattern Capture Text
+HttpRequest.pattern.method =
+  use IPattern <|>
+  method.connect
+    <|> method.delete
+    <|> method.get
+    <|> method.head
+    <|> method.options
+    <|> method.patch
+    <|> method.post
+    <|> method.put
+    <|> method.trace
+
+HttpRequest.pattern.method.connect : IPattern Capture Text
+HttpRequest.pattern.method.connect =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?c, ?C])
+      , char (anyOf [?o, ?O])
+      , char (anyOf [?n, ?N])
+      , char (anyOf [?n, ?N])
+      , char (anyOf [?e, ?E])
+      , char (anyOf [?c, ?C])
+      , char (anyOf [?t, ?T])
+      ])
+
+HttpRequest.pattern.method.delete : IPattern Capture Text
+HttpRequest.pattern.method.delete =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?d, ?D])
+      , char (anyOf [?e, ?E])
+      , char (anyOf [?l, ?L])
+      , char (anyOf [?e, ?E])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?e, ?E])
+      ])
+
+HttpRequest.pattern.method.get : IPattern Capture Text
+HttpRequest.pattern.method.get =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [char (anyOf [?g, ?G]), char (anyOf [?e, ?E]), char (anyOf [?t, ?T])])
+
+HttpRequest.pattern.method.head : IPattern Capture Text
+HttpRequest.pattern.method.head =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?h, ?H])
+      , char (anyOf [?e, ?E])
+      , char (anyOf [?a, ?A])
+      , char (anyOf [?d, ?D])
+      ])
+
+HttpRequest.pattern.method.options : IPattern Capture Text
+HttpRequest.pattern.method.options =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?o, ?O])
+      , char (anyOf [?p, ?P])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?i, ?I])
+      , char (anyOf [?o, ?O])
+      , char (anyOf [?n, ?N])
+      , char (anyOf [?s, ?S])
+      ])
+
+HttpRequest.pattern.method.patch : IPattern Capture Text
+HttpRequest.pattern.method.patch =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?p, ?P])
+      , char (anyOf [?a, ?A])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?c, ?C])
+      , char (anyOf [?h, ?H])
+      ])
+
+HttpRequest.pattern.method.post : IPattern Capture Text
+HttpRequest.pattern.method.post =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?p, ?P])
+      , char (anyOf [?o, ?O])
+      , char (anyOf [?s, ?S])
+      , char (anyOf [?t, ?T])
+      ])
+
+HttpRequest.pattern.method.put : IPattern Capture Text
+HttpRequest.pattern.method.put =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [char (anyOf [?p, ?P]), char (anyOf [?u, ?U]), char (anyOf [?t, ?T])])
+
+HttpRequest.pattern.method.trace : IPattern Capture Text
+HttpRequest.pattern.method.trace =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?t, ?T])
+      , char (anyOf [?r, ?R])
+      , char (anyOf [?a, ?A])
+      , char (anyOf [?c, ?C])
+      , char (anyOf [?e, ?E])
+      ])
+
+HttpRequest.pattern.requestLine :
+  IPattern
+    (And
+      (And
+        Capture
+        (And
+          (And
+            (And Capture (And (And (And Capture Capture) Capture) Capture))
+            Capture)
+          Capture))
+      Capture)
+    Text
+HttpRequest.pattern.requestLine =
+  use IPattern ++ :+
+  space = Pattern.some (patterns.char (anyOf [?\s, ?\t]))
+  pattern.method :+ space ++ pattern.uri :+ space ++ pattern.version
+
+HttpRequest.pattern.version : IPattern Capture Text
+HttpRequest.pattern.version =
+  use IPattern <|>
+  version.http10 <|> version.http11
+
+HttpRequest.pattern.version.http10 : IPattern Capture Text
+HttpRequest.pattern.version.http10 =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?h, ?H])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?p, ?P])
+      , char (anyOf [?/, ?/])
+      , char (anyOf [?1, ?1])
+      , char (anyOf [?., ?.])
+      , char (anyOf [?0, ?0])
+      ])
+
+HttpRequest.pattern.version.http11 : IPattern Capture Text
+HttpRequest.pattern.version.http11 =
+  use patterns char
+  IPattern.capture
+    (Pattern.join
+      [ char (anyOf [?h, ?H])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?t, ?T])
+      , char (anyOf [?p, ?P])
+      , char (anyOf [?/, ?/])
+      , char (anyOf [?1, ?1])
+      , char (anyOf [?., ?.])
+      , char (anyOf [?1, ?1])
+      ])
+
+HttpRequest.post : URI -> Body -> HttpRequest
+HttpRequest.post uri body =
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  HttpRequest POST Version.http11 uri headers body
+
+HttpRequest.put : URI -> Body -> HttpRequest
+HttpRequest.put uri body =
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  HttpRequest PUT Version.http11 uri headers body
+
+HttpRequest.RequestLine.requestMethod : RequestLine -> Method
+HttpRequest.RequestLine.requestMethod = cases
+  RequestLine requestMethod _ _ -> requestMethod
+
+HttpRequest.RequestLine.requestMethod.modify :
+  (Method ->{g} Method) -> RequestLine ->{g} RequestLine
+HttpRequest.RequestLine.requestMethod.modify f = cases
+  RequestLine requestMethod requestUri requestVersion ->
+    RequestLine (f requestMethod) requestUri requestVersion
+
+HttpRequest.RequestLine.requestMethod.set :
+  Method -> RequestLine -> RequestLine
+HttpRequest.RequestLine.requestMethod.set requestMethod1 = cases
+  RequestLine _ requestUri requestVersion ->
+    RequestLine requestMethod1 requestUri requestVersion
+
+HttpRequest.RequestLine.requestURI : RequestLine -> URI
+HttpRequest.RequestLine.requestURI = cases
+  RequestLine _ requestURI _ -> requestURI
+
+HttpRequest.RequestLine.requestURI.modify :
+  (URI ->{g} URI) -> RequestLine ->{g} RequestLine
+HttpRequest.RequestLine.requestURI.modify f = cases
+  RequestLine requestMethod requestURI requestVersion ->
+    RequestLine requestMethod (f requestURI) requestVersion
+
+HttpRequest.RequestLine.requestURI.set : URI -> RequestLine -> RequestLine
+HttpRequest.RequestLine.requestURI.set requestURI1 = cases
+  RequestLine requestMethod _ requestVersion ->
+    RequestLine requestMethod requestURI1 requestVersion
+
+HttpRequest.RequestLine.requestVersion : RequestLine -> Version
+HttpRequest.RequestLine.requestVersion = cases
+  RequestLine _ _ requestVersion -> requestVersion
+
+HttpRequest.RequestLine.requestVersion.modify :
+  (Version ->{g} Version) -> RequestLine ->{g} RequestLine
+HttpRequest.RequestLine.requestVersion.modify f = cases
+  RequestLine requestMethod requestUri requestVersion ->
+    RequestLine requestMethod requestUri (f requestVersion)
+
+HttpRequest.RequestLine.requestVersion.set :
+  Version -> RequestLine -> RequestLine
+HttpRequest.RequestLine.requestVersion.set requestVersion1 = cases
+  RequestLine requestMethod requestUri _ ->
+    RequestLine requestMethod requestUri requestVersion1
+
+test> HttpRequest.requestLine.tests = 
+  verifyAndIgnore do
+    use Path /
+    use Version http10 http11
+    unisonweb = Authority None (HostName "www.unison-lang.org") None
+    req version method path query =
+      uri = URI Scheme.http (Some unisonweb) path query Fragment.empty
+      HttpRequest method version uri Headers.empty Body.empty
+    expectations =
+      [ (req http11 GET root RawQuery.empty, "GET / HTTP/1.1")
+      , (req http10 POST (root / "docs") RawQuery.empty, "POST /docs HTTP/1.0")
+      , (req http11 PUT (root / "") RawQuery.empty, "PUT / HTTP/1.1")
+      , ( req http11 PUT (root / "docs" / "") RawQuery.empty
+        , "PUT /docs/ HTTP/1.1"
+        )
+      , ( req
+            http10
+            GET
+            (root / "docs")
+            (fromQuery
+              (Query
+                (Map.fromList
+                  [("%wei?rd", ["&he llo/", " th#er=e%"]), ("simple", ["foo"])])))
+        , "GET /docs?%25wei?rd=%26he+llo/&%25wei?rd=+th%23er%3de%25&simple=foo HTTP/1.0"
+        )
+      ]
+    check = cases
+      (request, expected) ->
+        test.ensureEqual
+          (nonProxyRequestLine request |> fromUtf8.impl |> Either.toOptional)
+          (Some expected)
+    flipped.deprecated expectations check
+
+HttpRequest.setHeader : Text -> [Text] -> HttpRequest -> HttpRequest
+HttpRequest.setHeader name value req =
+  setIt = cases Headers map -> Headers (Map.insert name value map)
+  headers.modify setIt req
+
+HttpRequest.setHeader.doc : Doc
+HttpRequest.setHeader.doc =
+  {{
+  Sets a header on an {type HttpRequest}.
+  
+  If the header already exists, the value is replaced.
+  }}
+
+test> HttpRequest.tests.roundTrip = 
+  verifyAndIgnore do
+    use Headers singleton
+    use HttpRequest ==
+    use Path /
+    scheme = Scheme "http"
+    authority = 
+      Each.append (do None) do
+        userInfo = each [None, Some (UserInfo "Grace")]
+        host =
+          HostName
+            <| each
+              [ "localhost"
+              , "127.0.0.1"
+              , "unison-lang.org"
+              , "www.unison-lang.org"
+              ]
+        port = each [None, Some (Port "80"), Some (Port "8080")]
+        Some (Authority userInfo host port)
+    path = each [root, root / "foo", root / "foo" / "&%3" / "bar" / ""]
+    query =
+      fromQuery
+        <| each
+          [ Query.empty
+          , Query.empty & ("foo", "bar")
+          , Query.empty & ("foo", "bar") & ("baz", "/&?%")
+          ]
+    fragment = Fragment.empty
+    uri = URI scheme authority path query fragment
+    method = each [GET, HEAD, POST, PUT, DELETE, TRACE, PATCH, OPTIONS]
+    headers =
+      each
+        [ Headers.empty
+        , singleton "My-Header" "42"
+        , Headers.fromList [("foo", "bar"), ("baz", "")]
+        ]
+    body = Body.empty
+    origReq = each [HttpRequest method Version.http11 uri headers body]
+    normalizedEncoded =
+      use Headers orElse
+      use Nat !=
+      contentLength = Bytes.size (Body.toBytes body)
+      maybeAddContentLengthHeader : HttpRequest -> HttpRequest
+      maybeAddContentLengthHeader =
+        if
+          contentLength != 0 || (match method with
+            CONNECT -> false
+            GET     -> false
+            HEAD    -> false
+            _       -> true)
+        then
+          headers.modify
+            (orElse (singleton "Content-Length" (Nat.toText contentLength)))
+        else id
+      origReq
+        |> uri.modify (authority.set None)
+        |> headers.modify (orElse (forURI uri))
+        |> maybeAddContentLengthHeader
+    decoded =
+      HttpRequest.fromBytes
+        (HttpRequest.encode client.proxy.ProxyPresence.NoProxy origReq)
+    normalizedDecoded =
+      decoded |> uri.modify (scheme.set Scheme.http >> authority.set None)
+    ensuring do normalizedEncoded == normalizedDecoded
+
+HttpRequest.uri : HttpRequest -> URI
+HttpRequest.uri = cases HttpRequest _ _ u _ _ -> u
+
+HttpRequest.uri.modify : (URI ->{g} URI) ->{g} HttpRequest ->{g} HttpRequest
+HttpRequest.uri.modify f = cases
+  HttpRequest method version oldURI headers body ->
+    HttpRequest method version (f oldURI) headers body
+
+HttpRequest.version : HttpRequest -> Version
+HttpRequest.version = cases HttpRequest _ v _ _ _ -> v
+
+HttpRequest.version.doc : Doc
+HttpRequest.version.doc = {{ Gets the {type Version} of an {HttpRequest}. }}
+
+(HttpResponse.==) : HttpResponse -> HttpResponse -> Boolean
+(HttpResponse.==) = cases
+  HttpResponse s1 v1 h1 b1, HttpResponse s2 v2 h2 b2 ->
+    s1 === s2 && v1 === v2 && h1 Headers.== h2 && b1 === b2
+
+HttpResponse.addHeader : Text -> Text -> HttpResponse -> HttpResponse
+HttpResponse.addHeader name value = cases
+  HttpResponse (Status code reason) version headers body ->
+    HttpResponse
+      (Status code reason) version (Headers.add name value headers) body
+
+HttpResponse.badRequest : HttpResponse
+HttpResponse.badRequest =
+  HttpResponse
+    (Status 400 "Bad Request") Version.http11 Headers.empty Body.empty
+
+HttpResponse.body : HttpResponse -> Body
+HttpResponse.body = cases HttpResponse _ _ _ b -> b
+
+HttpResponse.body.modify :
+  (Body ->{g} Body) ->{g} HttpResponse ->{g} HttpResponse
+HttpResponse.body.modify f = cases
+  HttpResponse status version headers oldBody ->
+    HttpResponse status version headers (f oldBody)
+
+HttpResponse.body.set : Body -> HttpResponse -> HttpResponse
+HttpResponse.body.set body = cases
+  HttpResponse s v h _ -> HttpResponse s v h body
+
+HttpResponse.bodyText : HttpResponse ->{Exception} Text
+HttpResponse.bodyText = HttpResponse.body >> Body.toBytes >> fromUtf8
+
+HttpResponse.bodyText.doc : Doc
+HttpResponse.bodyText.doc =
+  {{
+  Extracts the body of an {type HttpResponse} as a UTF-8 encoded text value.
+  
+  # Example
+  
+    {{ docExampleBlock 0 do
+      response = Http.get (URI.parse "https://api.example.com/data")
+      bodyText response }}
+  }}
+
+HttpResponse.decode : Boolean ->{Decode} HttpResponse
+HttpResponse.decode headersOnly =
+  use Decode failWith
+  use Text ++
+  pairs : [Text] -> [(Text, Text)]
+  pairs as =
+    pair = cases
+      [a, b] ++ rest -> Some ((a, b), rest)
+      _              -> None
+    List.unfold as pair
+  head = 
+    Decode.label "HTTP response head" do Decode.until 0xs0d0a0d0a Decode.utf8
+  res =
+    match IPattern.run statusLine head with
+      Some ([version, status, reason], headersWithTrailingCrLf) ->
+        version' = match Version.fromText version with
+          Right v -> v
+          Left t  -> failWith ("Unsupported HTTP version: " ++ t)
+        statusCode =
+          Nat.fromText status
+            |> (getOrElse' do failWith ("Invalid HTTP status code: " ++ status))
+        status' = Status statusCode reason
+        headers = match parseHeaders (Text.drop 2 headersWithTrailingCrLf) with
+          Right headers -> headers
+          Left e        -> failWith e
+        HttpResponse status' version' headers Body.empty
+      _ -> failWith ("Invalid HTTP response status line\n" ++ head)
+  if headersOnly then res
+  else
+    (resp, trailers) =
+      decodeBody res HttpResponse.headers HttpResponse.body.set
+    (HttpResponse s v h b) = resp
+    HttpResponse s v (Headers.union h trailers) b
+
+HttpResponse.doc : Doc
+HttpResponse.doc =
+  {{
+  # HttpResponse
+  
+    The {type HttpResponse} type represents an HTTP response as defined by
+    [RFC 7231](https://www.rfc-editor.org/rfc/rfc7231).
+    
+    It could be used to represent either a response received by a client, or a
+    response to be sent by a server.
+    
+    ## Constructing an {type HttpResponse}
+    
+       There are a number of helper methods for constructing common
+       {type HttpResponse}s:
+       
+       * {{ docLink (docEmbedTermLink do HttpResponse.ok) }}
+       * {{ docLink (docEmbedTermLink do HttpResponse.notFound) }}
+       * {{ docLink (docEmbedTermLink do noContent) }}
+       * {{ docLink (docEmbedTermLink do badRequest) }}
+       
+       Or you could construct a HttpResponse directly using its constructor:
+       
+       ```
+       HttpResponse
+         (Status 200 "OK") Version.http11 Headers.empty (Body Bytes.empty)
+       ```
+  }}
+
+HttpResponse.encode : HttpResponse -> Bytes
+HttpResponse.encode response =
+  use Bytes ++
+  headers = HttpResponse.encodeNoBody response
+  let
+    (Body body) = HttpResponse.body response
+    headers ++ body
+
+HttpResponse.encodeChunked :
+  HttpResponse -> '{Stream Bytes} Headers ->{Exception, Stream Bytes} ()
+HttpResponse.encodeChunked response body =
+  response' = HttpResponse.addHeader "Transfer-Encoding" "chunked" response
+  emit (HttpResponse.encodeNoBody response')
+  encodeChunkedBody body
+
+HttpResponse.encodeChunked.doc : Doc
+HttpResponse.encodeChunked.doc =
+  {{
+  Given an {type HttpResponse}, and a {type Stream} of {type Bytes}, encode
+  this response into a stream of bytes represeinting the response. If the given
+  response has a body, the body will be encoded as the first chunk, and each
+  {type Bytes}. Any {type Headers} returned at the end of the Stream will be
+  encoded as Trailers
+  }}
+
+test> HttpResponse.encodeChunked.tests.withoutTrailers = 
+  verifyAndIgnore do
+    use Bytes ++
+    bodyStream = do
+      use Text toUtf8
+      emit (toUtf8 "hello")
+      emit (toUtf8 ", ")
+      emit Bytes.empty
+      emit (toUtf8 "world!")
+      emit (toUtf8 "Sincerely,\n  me")
+      Headers.empty
+    head =
+      HttpResponse.ok Body.empty
+        |> HttpResponse.addHeader "Content-Type" "text/plain"
+    responseStream = do HttpResponse.encodeChunked head bodyStream
+    encodedResponse = Stream.fold (++) Bytes.empty responseStream |> fromUtf8
+    expected =
+      Text.join
+        "\n"
+        [ "HTTP/1.1 200 OK\r"
+        , "Content-Type: text/plain\r"
+        , "Transfer-Encoding: chunked\r"
+        , "\r"
+        , "5\r"
+        , "hello\r"
+        , "2\r"
+        , ", \r"
+        , "6\r"
+        , "world!\r"
+        , "F\r"
+        , "Sincerely,\n  me\r"
+        , "0\r"
+        , "\r\n"
+        ]
+    test.ensureEqual encodedResponse expected
+
+test> HttpResponse.encodeChunked.tests.withTrailers = 
+  verifyAndIgnore do
+    use Bytes ++
+    use HttpResponse addHeader
+    trailers =
+      Headers.fromList
+        [ ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+        , ("Server-Timing", "cache;desc=\"Cache Read\";dur=23.2")
+        ]
+    bodyStream = do
+      use Text toUtf8
+      emit (toUtf8 "hello")
+      emit (toUtf8 ", ")
+      emit Bytes.empty
+      emit (toUtf8 "world!")
+      emit (toUtf8 "Sincerely,\n  me")
+      trailers
+    head =
+      HttpResponse.ok Body.empty
+        |> addHeader "Content-Type" "text/plain"
+        |> addHeader "Trailer" "Expires"
+        |> addHeader "Trailer" "Server-Timing"
+    responseStream = do HttpResponse.encodeChunked head bodyStream
+    encodedResponse = Stream.fold (++) Bytes.empty responseStream |> fromUtf8
+    expected =
+      Text.join
+        "\n"
+        [ "HTTP/1.1 200 OK\r"
+        , "Content-Type: text/plain\r"
+        , "Trailer: Server-Timing\r"
+        , "Trailer: Expires\r"
+        , "Transfer-Encoding: chunked\r"
+        , "\r"
+        , "5\r"
+        , "hello\r"
+        , "2\r"
+        , ", \r"
+        , "6\r"
+        , "world!\r"
+        , "F\r"
+        , "Sincerely,\n  me\r"
+        , "0\r"
+        , "Expires: Wed, 21 Oct 2015 07:28:00 GMT\r"
+        , "Server-Timing: cache;desc=\"Cache Read\";dur=23.2\r"
+        , "\r\n"
+        ]
+    test.ensureEqual encodedResponse expected
+
+HttpResponse.encodeNoBody : HttpResponse -> Bytes
+HttpResponse.encodeNoBody = cases
+  HttpResponse (Status code reason) version headers body ->
+    use fromList impl
+    headers' =
+      if Headers.contains "Content-Length" headers then headers
+      else Headers.union headers (contentLength body)
+    statusLine =
+      Version.toText version
+        Text.++ " "
+        Text.++ Nat.toText code
+        Text.++ " "
+        Text.++ reason
+    headers'' = asBytes headers'
+    Text.toUtf8 statusLine Bytes.++ 0xs0d0a Bytes.++ headers'' Bytes.++ 0xs0d0a
+
+HttpResponse.ensureEqual : HttpResponse -> HttpResponse ->{Exception} ()
+HttpResponse.ensureEqual a b =
+  use HttpResponse ==
+  if a == b then () else test.raiseFailure "HttpResponses not equal" (a, b)
+
+HttpResponse.ensureStatus :
+  (HttpResponse.Status -> Boolean) -> HttpResponse ->{Exception} HttpResponse
+HttpResponse.ensureStatus predicate response =
+  expectStatus predicate response
+  response
+
+HttpResponse.ensureStatus.doc : Doc
+HttpResponse.ensureStatus.doc =
+  {{
+  Ensures that the given {type HttpResponse} has a status code that satisfies
+  the given predicate. If the predicate is not satisfied, raises an exception
+  with the response's status code and body.
+  
+  # See also
+  
+    * {{ docLink (docEmbedTermLink do expectStatus) }} for a version of this
+      function that just returns {type Unit} if the status code satisfies the
+      predicate.
+    * {{ docLink (docEmbedTermLink do ensureSuccess) }} for a version of this
+      function that checks for a successful status code.
+  }}
+
+HttpResponse.ensureSuccess : HttpResponse ->{Exception} HttpResponse
+HttpResponse.ensureSuccess response =
+  expectSuccess response
+  response
+
+HttpResponse.ensureSuccess.doc : Doc
+HttpResponse.ensureSuccess.doc =
+  {{
+  Ensures that the given {type HttpResponse} is a successful response. If it is
+  not, raise an exception with the response's status code and body.
+  
+  # See also
+  
+    * {{ docLink (docEmbedTermLink do expectSuccess) }} for a version of this
+      function that just returns {type Unit} if the response is successful.
+    * {{ docLink (docEmbedTermLink do ensureStatus) }} for a version of this
+      function that checks for a specific status code.
+  }}
+
+HttpResponse.error : HttpResponse
+HttpResponse.error =
+  HttpResponse
+    (Status 500 "Internal Server Error")
+    Version.http11
+    Headers.empty
+    Body.empty
+
+HttpResponse.expectStatus :
+  (HttpResponse.Status -> Boolean) -> HttpResponse ->{Exception} ()
+HttpResponse.expectStatus predicate response =
+  use HttpResponse status
+  use Text ++
+  if predicate (status response) then ()
+  else
+    Failure
+      (typeLink UnexpectedResponseStatus)
+      ("unexpected response status: " ++ (status response |> Status.toText))
+      (Any response)
+      |> Exception.raise
+
+HttpResponse.expectStatus.doc : Doc
+HttpResponse.expectStatus.doc =
+  {{
+  Checks that the given {type HttpResponse} has a status code that satisfies
+  the given predicate. If the predicate is not satisfied, raises an exception
+  with the response's status code and body.
+  
+  # See also
+  
+    * {{ docLink (docEmbedTermLink do ensureStatus) }} for a version of this
+      function that returns the response if the status code satisfies the
+      predicate.
+    * {{ docLink (docEmbedTermLink do expectSuccess) }} for a version of this
+      function that checks for a successful status code.
+  }}
+
+HttpResponse.expectSuccess : HttpResponse ->{Exception} ()
+HttpResponse.expectSuccess response = expectStatus Status.isSuccess response
+
+HttpResponse.fromBytes : Boolean -> Bytes ->{Exception} HttpResponse
+HttpResponse.fromBytes headersOnly bs = 
+  HttpResponse.fromStream headersOnly do emit bs
+
+HttpResponse.fromBytes.doc : Doc
+HttpResponse.fromBytes.doc =
+  {{
+  Parse an {type HttpResponse}. Takes a boolen which indicates whother or not
+  we expect a body. This would normally be `false` unless the response is to a
+  {HEAD} request.
+  }}
+
+HttpResponse.fromStream :
+  Boolean -> '{g, Stream Bytes} a ->{g, Exception} HttpResponse
+HttpResponse.fromStream headersOnly stream = 
+  Throw.toException toFailure do
+    Decode.fromStream (do HttpResponse.decode headersOnly) stream
+
+HttpResponse.headers : HttpResponse -> Headers
+HttpResponse.headers = cases HttpResponse _ _ h _ -> h
+
+HttpResponse.isSuccess : HttpResponse -> Boolean
+HttpResponse.isSuccess = cases
+  HttpResponse (Status code _) _ _ _| code Nat.>= 200 && code Nat.< 300  ->
+    true
+  x -> false
+
+HttpResponse.noContent : HttpResponse
+HttpResponse.noContent =
+  HttpResponse
+    (Status 204 "No Content") Version.http11 Headers.empty Body.empty
+
+HttpResponse.notFound : HttpResponse
+HttpResponse.notFound =
+  HttpResponse (Status 404 "Not Found") Version.http11 Headers.empty Body.empty
+
+HttpResponse.ok : Body -> HttpResponse
+HttpResponse.ok body =
+  HttpResponse (Status 200 "OK") Version.http11 (contentLength body) body
+
+HttpResponse.pattern.reason : IPattern Capture Text
+HttpResponse.pattern.reason =
+  IPattern.capture (Pattern.many (notCharIn [?\r, ?\n]))
+
+HttpResponse.pattern.status : IPattern Capture Text
+HttpResponse.pattern.status =
+  IPattern.capture (Pattern.replicate 3 3 patterns.digit)
+
+HttpResponse.pattern.statusLine :
+  IPattern (And (And Capture Capture) Capture) Text
+HttpResponse.pattern.statusLine =
+  use IPattern ++ :+
+  pattern.version :+ literal " " ++ pattern.status :+ literal " "
+    ++ pattern.reason
+
+test> HttpResponse.pattern.statusLine.testReasonIsOptional =
+  parsed = catch do
+    statusNoReason =
+      """
+      HTTP/1.1 200 
+      rest
+      """
+    IPattern.run statusLine statusNoReason
+  verifyAndIgnore do
+    assertEquals parsed (Right (Some (["HTTP/1.1", "200", ""], "\r\nrest")))
+
+HttpResponse.setBody : Body -> HttpResponse -> HttpResponse
+HttpResponse.setBody body = cases
+  HttpResponse s v h _ ->
+    cl = contentLength body
+    HttpResponse s v (Headers.union cl h) body
+
+HttpResponse.status : HttpResponse -> HttpResponse.Status
+HttpResponse.status = cases HttpResponse s _ _ _ -> s
+
+HttpResponse.Status.code : HttpResponse.Status -> Nat
+HttpResponse.Status.code = cases Status code _ -> code
+
+HttpResponse.Status.code.modify :
+  (Nat ->{g} Nat) -> HttpResponse.Status ->{g} HttpResponse.Status
+HttpResponse.Status.code.modify f = cases
+  Status code reason -> Status (f code) reason
+
+HttpResponse.Status.code.set :
+  Nat -> HttpResponse.Status -> HttpResponse.Status
+HttpResponse.Status.code.set code1 = cases
+  Status _ reason -> Status code1 reason
+
+HttpResponse.Status.isFailure : HttpResponse.Status -> Boolean
+HttpResponse.Status.isFailure s = Boolean.not (Status.isSuccess s)
+
+HttpResponse.Status.isSuccess : HttpResponse.Status -> Boolean
+HttpResponse.Status.isSuccess s =
+  use Nat /
+  digit = code s / 100
+  digit === 1 || digit === 2 || digit === 3
+
+HttpResponse.Status.reason : HttpResponse.Status -> Text
+HttpResponse.Status.reason = cases Status _ reason -> reason
+
+HttpResponse.Status.reason.modify :
+  (Text ->{g} Text) -> HttpResponse.Status ->{g} HttpResponse.Status
+HttpResponse.Status.reason.modify f = cases
+  Status code reason -> Status code (f reason)
+
+HttpResponse.Status.reason.set :
+  Text -> HttpResponse.Status -> HttpResponse.Status
+HttpResponse.Status.reason.set reason1 = cases
+  Status code _ -> Status code reason1
+
+HttpResponse.Status.toText : HttpResponse.Status -> Text
+HttpResponse.Status.toText = cases
+  Status code msg -> Nat.toText code Text.++ ": " Text.++ msg
+
+LICENSE : License
+LICENSE = License [unisoncomputing, copyrightHolders.alvaroc1] [Year 2023] mit
+
+LICENSE.doc : Doc
+LICENSE.doc = License.toDoc LICENSE
+
+message.encodeChunkedBody : '{g, Stream Bytes} Headers ->{g, Stream Bytes} ()
+message.encodeChunkedBody =
+  use fromList impl
+  emitChunk : Bytes ->{Stream Bytes} ()
+  emitChunk chunk =
+    use Bytes ++
+    size =
+      Bytes.size chunk
+        |> Nat.toTextBase 16
+        |> getOrBug "chunkSize"
+        |> Text.toUtf8
+    emit (size ++ 0xs0d0a ++ chunk ++ 0xs0d0a)
+  emitChunks = cases
+    { emit bytes -> rest } ->
+      if Bytes.isEmpty bytes then () else emitChunk bytes
+      handle rest() with emitChunks
+    { trailers }           ->
+      emit 0xs300d0a
+      emit (asBytes trailers)
+      emit 0xs0d0a
+  bodyAndTrailers -> (handle bodyAndTrailers() with emitChunks)
+
+message.encodeChunkedBody.doc : Doc
+message.encodeChunkedBody.doc =
+  {{
+  {{ docExample 1 do bodyAndTrailers -> encodeChunkedBody bodyAndTrailers }}
+  encodes the body byte stream and trailers of a chunked request or response.
+  }}
+
+Method.fromText : Text -> Optional Method
+Method.fromText = cases
+  "GET"     -> Some GET
+  "POST"    -> Some POST
+  "PUT"     -> Some PUT
+  "DELETE"  -> Some DELETE
+  "HEAD"    -> Some HEAD
+  "PATCH"   -> Some PATCH
+  "OPTIONS" -> Some OPTIONS
+  "CONNECT" -> Some CONNECT
+  "TRACE"   -> Some TRACE
+  _         -> None
+
+Method.toText : Method -> Text
+Method.toText = cases
+  GET     -> "GET"
+  HEAD    -> "HEAD"
+  POST    -> "POST"
+  PUT     -> "PUT"
+  DELETE  -> "DELETE"
+  CONNECT -> "CONNECT"
+  TRACE   -> "TRACE"
+  PATCH   -> "PATCH"
+  OPTIONS -> "OPTIONS"
+
+README : Doc
+README =
+  {{
+  # The Unison HTTP library
+  
+    This project contains the following:
+    
+    * Basic types for working with the HTTP protocol. Notably this includes
+      definitions of an {type HttpRequest} and {type HttpResponse}.
+    * An HTTP client. See {{ docLink (docEmbedTermLink do client.README) }}.
+    * An HTTP server. See {{ docLink (docEmbedTermLink do server.README) }}.
+    * WebSocket support. See
+      {{ docLink (docEmbedTermLink do websockets.README) }}. WebSocket
+      functionality is also baked into the client and server.
+  
+  # Attribution and licensing
+  
+    See {{ docLink (docEmbedTermLink do LICENSE) }} for license information.
+    
+    The WebSocket support in this library was originally authored by {{
+    shareSlug "@alvaroc1" }} in {{ shareSlug "@alvaroc1/websocket" }} and has
+    been merged into this library with Alvaro's permission.
+  
+  # Basic types
+  
+    {{ HttpRequest.doc }}
+    
+    {{ HttpResponse.doc }}
+  
+  # HTTP client
+  
+    {{ client.README }}
+  
+  # HTTP server
+  
+    {{ server.README }}
+  
+  # WebSockets
+  
+    {{ websockets.README }}
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  Changes since 3.7.0:
+  
+  * Added {{ docLink (docEmbedTermLink do Body.fromText) }}
+  * Added {withProxy}
+  * Improved documentation for {type HttpRequest}, {type Headers}, and
+    {type Http}
+  }}
+
+server.CHANGELOG : Doc
+server.CHANGELOG =
+  {{
+  {{ v10 }}
+  
+  {{ v9 }}
+  
+  {{ v8 }}
+  
+  {{ v7 }}
+  
+  {{ v6 }}
+  }}
+
+server.changelogs.v10 : Doc
+server.changelogs.v10 =
+  {{
+  # v10
+  
+    Thu Feb 9 03:10:05 PM PST 2023
+    
+    * upgrade to the latest httpclient (v11)
+    
+    {authors.stew}
+  }}
+
+server.changelogs.v6 : Doc
+server.changelogs.v6 =
+  {{
+  # v6
+  
+    * updated to latest http release (v6)
+    
+    {authors.stew}
+  }}
+
+server.changelogs.v7 : Doc
+server.changelogs.v7 =
+  {{
+  # v7
+  
+    * added httpclient as a dependency so that I could start adding integration
+      tests
+    * added a README
+    * added a {type Handler} type to clean up the type signatures
+    
+    {authors.stew}
+  }}
+
+server.changelogs.v8 : Doc
+server.changelogs.v8 =
+  {{
+  # v8
+  
+    Mon Nov 14 08:55:52 PM PST 2022
+    
+    * upgrade to latest http
+  }}
+
+server.changelogs.v9 : Doc
+server.changelogs.v9 =
+  {{
+  # v9
+  
+    Wed Nov 16 02:24:39 PM PST 2022
+    
+    * upgrade to the latest httpclient (v10)
+    
+    {authors.stew}
+  }}
+
+server.Config.createSemaphore : server.Config ->{IO} Sem
+server.Config.createSemaphore = cases
+  server.Config.Config _ _ numThreads _ -> Sem.new numThreads
+
+server.Config.hostName : server.Config -> Optional HostName
+server.Config.hostName = cases server.Config.Config hostName _ _ _ -> hostName
+
+server.Config.hostName.modify :
+  (Optional HostName ->{g} Optional HostName)
+  -> server.Config
+  ->{g} server.Config
+server.Config.hostName.modify f = cases
+  server.Config.Config hostName port numThreads tlsConfig ->
+    server.Config.Config (f hostName) port numThreads tlsConfig
+
+server.Config.hostName.set :
+  Optional HostName -> server.Config -> server.Config
+server.Config.hostName.set hostName1 = cases
+  server.Config.Config _ port numThreads tlsConfig ->
+    server.Config.Config hostName1 port numThreads tlsConfig
+
+server.Config.numThreads : server.Config -> Nat
+server.Config.numThreads = cases
+  server.Config.Config _ _ numThreads _ -> numThreads
+
+server.Config.numThreads.modify :
+  (Nat ->{g} Nat) -> server.Config ->{g} server.Config
+server.Config.numThreads.modify f = cases
+  server.Config.Config hostName port numThreads tlsConfig ->
+    server.Config.Config hostName port (f numThreads) tlsConfig
+
+server.Config.numThreads.set : Nat -> server.Config -> server.Config
+server.Config.numThreads.set numThreads1 = cases
+  server.Config.Config hostName port _ tlsConfig ->
+    server.Config.Config hostName port numThreads1 tlsConfig
+
+server.Config.port : server.Config -> Port
+server.Config.port = cases server.Config.Config _ port _ _ -> port
+
+server.Config.port.modify :
+  (Port ->{g} Port) -> server.Config ->{g} server.Config
+server.Config.port.modify f = cases
+  server.Config.Config hostName port numThreads tlsConfig ->
+    server.Config.Config hostName (f port) numThreads tlsConfig
+
+server.Config.port.set : Port -> server.Config -> server.Config
+server.Config.port.set port1 = cases
+  server.Config.Config hostName _ numThreads tlsConfig ->
+    server.Config.Config hostName port1 numThreads tlsConfig
+
+server.Config.serve :
+  Routes {IO} -> server.Config ->{IO, Exception} '{IO, Exception} ()
+server.Config.serve routes config = forkServer config (toFunction routes)
+
+server.Config.serve.doc : Doc
+server.Config.serve.doc =
+  {{
+  {{ docLink (docEmbedTermLink do Config.serve) }} Starts a webserver, returns
+  a thunk that when evaluated, will stop the server
+  }}
+
+server.Config.tlsConfig : server.Config -> Optional ServerConfig
+server.Config.tlsConfig = cases
+  server.Config.Config _ _ _ tlsConfig -> tlsConfig
+
+server.Config.tlsConfig.modify :
+  (Optional ServerConfig ->{g} Optional ServerConfig)
+  -> server.Config
+  ->{g} server.Config
+server.Config.tlsConfig.modify f = cases
+  server.Config.Config hostName port numThreads tlsConfig ->
+    server.Config.Config hostName port numThreads (f tlsConfig)
+
+server.Config.tlsConfig.set :
+  Optional ServerConfig -> server.Config -> server.Config
+server.Config.tlsConfig.set tlsConfig1 = cases
+  server.Config.Config hostName port numThreads _ ->
+    server.Config.Config hostName port numThreads tlsConfig1
+
+server.example.alohaHandler : Handler IO
+server.example.alohaHandler = 
+  Handler cases
+    req
+      | Boolean.and
+        (Routes.get (root Path./ "aloha") req)
+        (withHeader "Accept" "application/json" req)  ->
+        HttpResponse.ok (Body (Text.toUtf8 "{\"aloha\": \"World\"}"))
+      | Routes.get (root Path./ "aloha") req                                                             ->
+        HttpResponse.ok (Body (Text.toUtf8 "Aloha, world"))
+    _ -> abort
+
+server.example.helloHandler : Handler IO
+server.example.helloHandler = 
+  Handler cases
+    req| Routes.get (root Path./ "hello") req  ->
+      HttpResponse.ok (Body (Text.toUtf8 "Hello World"))
+    _ -> abort
+
+server.example.helloHandler2 : Handler IO
+server.example.helloHandler2 = 
+  Handler cases
+    HttpRequest GET _ (URI _ _ (Path ["hello"]) _ _) _ _ ->
+      HttpResponse.ok (Body (Text.toUtf8 "Hello World"))
+    _ -> abort
+
+server.example.main : '{IO, Exception} ()
+server.example.main = do
+  use Nat *
+  config = server.Config.Config None (Port "8081") 1000 None
+  routes = Routes.default <<< alohaHandler <<< helloHandler
+  stopServer = Config.serve routes config
+  printLine "started server on port 8081"
+  sleepMicroseconds (24 * 60 * 60 * 1000000)
+  stopServer()
+
+server.example.tracing404 : HttpRequest -> HttpResponse
+server.example.tracing404 req =
+  bug "out"
+  Debug.trace "404" req
+  default404 req
+
+server.forkServer :
+  server.Config
+  -> (HttpRequest ->{IO, Exception} Either HttpResponse WebSocketHandler)
+  ->{IO, Exception} '{IO, Exception} ()
+server.forkServer config handler =
+  interrupt = Interrupt.new()
+  ignore
+    <| (fork do
+      IO.logAndIgnore do
+        toDefault! (do ()) do
+          interruptibly interrupt do runServer config handler
+      signalFinalization interrupt)
+  stopServer = do interruptAndAwaitFinalization interrupt
+  stopServer
+
+server.Handler.doc : Doc
+server.Handler.doc =
+  {{
+  a {type Handler} represents a function which handles one "Route" of the
+  server. Handlers come in two types, {Handler} which haandles HTTP 1.1
+  requests and {WebSocketHandler} which handles WebSocket requests.
+  
+  # Http Handlers
+  
+    Http Handlers are functions from a {type HttpRequest} to a {HttpResponse}.
+    
+    A `` Handler g `` is a {type Handler} which uses `g` Effects in order to
+    produce a {type HttpResponse} If a Handler uses the {type Abort} ability,
+    it will indicate that this handler is not interested in the given
+    {type HttpRequest} and this request should be sent to the next handler. If
+    a Handler uses the {type Exception} ability, it indicates a Server error
+    which will be sent to the user using the 500 handler.
+  
+  # Creating a Handler
+  
+    A handler is just a function from a {type HttpRequest} to a
+    {type HttpResponse}, so one could pattern match on the {type HttpRequest}
+    and return a {type HttpResponse}:
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do helloHandler2) []] }}
+    
+    However, this is not very convenient, so we provide a {type Handler} type
+    which is a wrapper around a function from {type HttpRequest} to
+    {type HttpResponse}. This type provides a number of helper functions to
+    make it easier to create handlers, for example, the above pattern match can
+    be rewritten using the {{ docLink (docEmbedTermLink do Routes.get) }}
+    function as a
+    [pattern guard](https://www.unison-lang.org/learn/language-reference/guard-patterns/):
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do helloHandler) []] }}
+    
+    This example shows how can provide different responses based on
+    {type Headers}:
+    
+    {{ docSource [docSourceElement (docEmbedTermLink do alohaHandler) []] }}
+    
+    ## WebSocket Handlers
+    
+       WebSocket Handlers are functions that take a Http Request and return a
+       {type WebSocketHandler}.
+       
+       {{ WebSocketHandler.doc }}
+  }}
+
+server.Http.webSocket : HttpRequest ->{Exception, HttpWebSocket} WebSocket
+server.Http.webSocket request = Either.toException (tryWebSocket request)
+
+server.internal.handleConnection :
+  (HttpRequest ->{IO, Exception} Either HttpResponse WebSocketHandler)
+  -> Connection
+  ->{IO, Exception, Abort} ()
+server.internal.handleConnection handler conn =
+  match catchAll do HttpRequest.fromStream (receiveByteStream conn) with
+    Left (Failure _ t a) ->
+      Connection.send
+        conn
+        (HttpResponse.encode
+          (HttpResponse
+            (Status 400 "Bad Request")
+            Version.http11
+            Headers.empty
+            (Body (Text.toUtf8 t))))
+    Right request -> handleRequest conn request handler
+
+server.internal.handleRequest :
+  Connection
+  -> HttpRequest
+  -> (HttpRequest ->{IO, Exception} Either HttpResponse WebSocketHandler)
+  ->{IO, Exception} ()
+server.internal.handleRequest conn request handler =
+  use List +:
+  sendResponse = HttpResponse.encode >> Connection.send conn
+  match handler request with
+    Left response -> sendResponse response
+    Right (WebSocketHandler webSocketHandler) ->
+      response = upgradeResponse request
+      sendResponse response
+      webSocket = threadSafeWebSocket conn Server 4096 Bytes.empty
+      finalizers : Ref IO [Either Failure () ->{IO, Exception} ()]
+      finalizers = IO.ref []
+      addFinalizer :
+        (Either Failure () ->{IO, Exception} ()) ->{IO, Exception} ()
+      addFinalizer f = Ref.atomically finalizers (fs -> (f +: fs, ()))
+      res : Either Failure ()
+      res = catch do webSocketHandler webSocket addFinalizer
+      foreach.flipped
+        (Ref.read finalizers)
+        (f -> ignore ((catchAll do f res) : Either Failure ()))
+
+server.internal.socketListener :
+  server.Config
+  -> (HttpRequest ->{IO, Exception} Either HttpResponse WebSocketHandler)
+  -> ListeningServerSocket
+  ->{IO} ()
+server.internal.socketListener config handler sock =
+  semaphore = createSemaphore config
+  acceptWith :
+    (Connection ->{IO, Exception, Abort} ()) ->{IO, Exception} ThreadId
+  acceptWith handleWithoutRelease =
+    Sem.acquire semaphore
+    useAndRelease : Connection ->{IO, Exception} ()
+    useAndRelease connection = 
+      finally (do Sem.release semaphore) do
+        tryEval do
+          finally (do ignore (catchAll do Connection.close connection)) do
+            tryEval do
+              handle handleWithoutRelease connection
+              with cases
+                { abort -> _ } ->
+                  Connection.send
+                    connection
+                    (HttpResponse.encode
+                      (HttpResponse
+                        (Status 400 "Bad Request")
+                        Version.http11
+                        Headers.empty
+                        (Body (Text.toUtf8 "Expected a WebSocket request"))))
+                { _ } -> ()
+    match Config.tlsConfig config with
+      None -> Tcp.acceptFork sock (useAndRelease << socket)
+      Some tlsConfig ->
+        Tls.acceptFork tlsConfig sock (useAndRelease << tls.deprecated)
+  go : '{IO, Exception} ()
+  go _ = forever do acceptWith (handleConnection handler)
+  IO.logAndIgnore go
+
+server.README : Doc
+server.README =
+  {{
+  This library allows you to run an HTTP server.
+  
+  # Quickstart
+  
+    {{ docSource [docSourceElement (docEmbedTermLink do example.main) []] }}
+    
+    {{ Handler.doc }}
+    
+    {{ Routes.doc }}
+  }}
+
+(server.Routes.<<<) : Routes {g} -> Handler g -> Routes {g}
+routes server.Routes.<<< handler =
+  use List +:
+  (Routes handlers notFound error) = routes
+  Routes (handler +: handlers) notFound error
+
+(server.Routes.>>>) : Handler g -> Routes {g} -> Routes {g}
+(server.Routes.>>>) handler = cases
+  Routes handlers notFound error ->
+    Routes (handler List.+: handlers) notFound error
+
+server.Routes.default : Routes g
+server.Routes.default = Routes [] default404 default500
+
+server.Routes.default404 : HttpRequest -> HttpResponse
+server.Routes.default404 = cases
+  HttpRequest _ _ uri _ _ ->
+    use Text ++
+    body = "Not found: " ++ Path.toText (URI.path uri) |> Text.toUtf8 |> Body
+    HttpResponse.notFound |> setBody body
+
+server.Routes.default500 : Failure -> HttpRequest -> HttpResponse
+server.Routes.default500 = cases
+  Failure _ t _ ->
+    use Text ++
+    body = "Internal server error: " ++ t |> Text.toUtf8 |> Body
+    response = HttpResponse.error |> setBody body
+    do response
+
+server.Routes.doc : Doc
+server.Routes.doc =
+  {{
+  {type Routes} is a mechanism for finding a {type Handler} for a given
+  {type HttpRequest}.
+  
+  Routes are made up of a list of {type Handler}s, a "notFound" function and a
+  "error" function
+  
+  When a {type HttpRequest} is received list of handlers will be tried one by
+  one to handle a given {type HttpRequest}. The first {type HttpResponse}
+  produced by a {type Handler} will be returned to the client. If one of the
+  handlers rasises an exception, it will be passed to the "error" function to
+  produce an {type HttpResponse}. If none of the handlers are able to handle
+  the {type HttpRequest}, the "notFound" function will be used to produce an
+  {type HttpResponse}.
+  
+  # Creating Routes
+  
+    {{ docLink (docEmbedTermLink do Routes.default) }} returns a {type Routes}
+    with a default "notFound" and "error" functions, and no other Handlers, so
+    every request would get a 404 response. {{
+    docLink (docEmbedTermLink do (<<<)) }} is a function which takes a
+    {type Handler} and a {type Routes} and returns a new {type Routes} with the
+    {type Handler} added to the list of handlers.
+    
+    so {{ docExample 2 do default helloHandler -> default <<< helloHandler }}
+    creates a {type Routes} that will only responsd to {GET} reqeusts to
+    "/hello"
+  }}
+
+server.Routes.get : Path -> HttpRequest -> Boolean
+server.Routes.get path = cases
+  HttpRequest GET _ (URI _ _ p _ _) _ _ | p === path -> true
+  _                                     -> false
+
+server.Routes.path : Path -> HttpRequest -> Boolean
+server.Routes.path p = cases HttpRequest _ _ (URI _ _ p' _ _) _ _ -> p === p'
+
+server.Routes.post : Path -> HttpRequest -> Boolean
+server.Routes.post path = cases
+  HttpRequest POST _ (URI _ _ p _ _) _ _ | p === path -> true
+  _                                      -> false
+
+server.Routes.toFunction :
+  Routes IO -> HttpRequest ->{IO} Either HttpResponse WebSocketHandler
+server.Routes.toFunction = cases
+  Routes routes notFound error, req ->
+    use Exception raise
+    go : [Handler IO] ->{IO} Either HttpResponse WebSocketHandler
+    go = cases
+      []                      -> Left (notFound req)
+      Handler h +: t          ->
+        handle h req
+        with cases
+          { abort -> _ }         -> go t
+          { raise failure -> _ } -> Left (error failure req)
+          { response }           ->
+            v : Either HttpResponse WebSocketHandler
+            v = Left response
+            v
+      HandlerWebSocket h +: t ->
+        handle h req
+        with cases
+          { abort -> _ }         -> go t
+          { raise failure -> _ } -> Left (error failure req)
+          { f }                  -> Right f
+    go routes
+
+server.Routes.with404 :
+  (HttpRequest ->{g} HttpResponse) -> Routes {g} -> Routes {g}
+server.Routes.with404 f = cases
+  Routes routes notFound error -> Routes routes f error
+
+server.Routes.with500 :
+  (Failure -> HttpRequest ->{g} HttpResponse) -> Routes {g} -> Routes {g}
+server.Routes.with500 f = cases
+  Routes routes notFound error -> Routes routes notFound f
+
+server.Routes.withHeader : Text -> Text -> HttpRequest -> Boolean
+server.Routes.withHeader header value = cases
+  HttpRequest _ _ _ headers _ ->
+    List.any (a -> value === a) (getValues header headers)
+
+server.runServer :
+  server.Config
+  -> (HttpRequest ->{IO, Exception} Either HttpResponse WebSocketHandler)
+  ->{IO, Exception} ()
+server.runServer = cases
+  config@(server.Config.Config hostname port _ _), handler ->
+    Tcp.listen hostname port (socketListener config handler)
+
+server.State.error : State g -> Failure -> HttpRequest ->{g} HttpResponse
+server.State.error = cases State (Routes _ _ f) _ -> f
+
+server.State.handlerReq.internal.webSocketKey : HttpRequest -> Optional Text
+server.State.handlerReq.internal.webSocketKey = cases
+  HttpRequest _ _ _ headers _ ->
+    if List.any
+      (v -> Text.toLowercase v Text.== "websocket")
+      (getCommaDelimitedValues "Upgrade" headers)
+      && List.any
+        (v -> Text.toLowercase v Text.== "upgrade")
+        (getCommaDelimitedValues "Connection" headers) then
+      match getValues "Sec-WebSocket-Key" headers with
+        [webSocketKey] -> Some webSocketKey
+        _              -> None
+    else None
+
+test> server.State.handlerReq.internal.webSocketKey.tests = 
+  test.verify do
+    use Headers fromList
+    testKey = each ["dGhlIHNhbXBsZSBub25jZQ==", "aGhlIHNhbXBsZSBub25jZQ=="]
+    let
+      (expectedKey, headers) =
+        each
+          [ (None, Headers.empty)
+          , ( None
+            , fromList [("Upgrade", "websocket"), ("Connection", "Upgrade")]
+            )
+          , ( Some testKey
+            , fromList
+                [ ("Sec-WebSocket-Key", testKey)
+                , ("Upgrade", "websocket")
+                , ("Connection", "Upgrade")
+                ]
+            )
+          , ( Some testKey
+            , fromList
+                [ ("Sec-WebSocket-Key", testKey)
+                , ("Upgrade", "websocket, turbo")
+                , ("Connection", "keep-alive, Upgrade")
+                ]
+            )
+          ]
+      uri = URI.parse "https://www.unison-lang.org/"
+      method = each [GET, POST]
+      req = HttpRequest method Version.http11 uri headers Body.empty
+      test.ensureEqual expectedKey (webSocketKey req)
+
+server.State.handlers : State g -> [Handler g]
+server.State.handlers = cases State (Routes handlers _ _) _ -> handlers
+
+server.State.notFound : State g -> HttpRequest ->{g} HttpResponse
+server.State.notFound = cases State (Routes _ f _) _ -> f
+
+server.State.semaphore : State g -> Sem
+server.State.semaphore = cases State _ sem -> sem
+
+server.State.semaphore.set : Sem -> State {g} -> State {g}
+server.State.semaphore.set semaphore1 = cases
+  State routes _ -> State routes semaphore1
+
+server.test.integration.all : ['{g, IO, Http, HttpWebSocket, Stream Result} ()]
+server.test.integration.all =
+  [client.get, client.post, client.webSocket, manyRequests]
+
+server.test.integration.baseUri : URI
+server.test.integration.baseUri =
+  URI
+    (Scheme "http")
+    (Some
+      (Authority
+        None (HostName integration.host) (Some (Port integration.port))))
+    (Path [])
+    RawQuery.empty
+    Fragment.empty
+
+server.test.integration.client.get :
+  '{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.get =
+  do
+    go =
+      do
+        use Body toBytes
+        use Bytes toHex
+        use Text ++
+        uri = path.set (Path ["get"]) baseUri
+        let
+          (HttpResponse status _ _ body) = Http.get uri
+          statusResults "get" status
+          if body === expectedGetResponse then emit (Ok "get response matches")
+          else
+            exp = expectedGetResponse |> toBytes |> toHex
+            got = body |> toBytes |> toHex
+            emit
+              (Result.Fail
+                ("get response does not match: expected: "
+                  ++ exp
+                  ++ " got: "
+                  ++ got))
+    handleClientException go
+
+server.test.integration.client.handleClientException :
+  '{IO, Exception, Http, HttpWebSocket, Stream Result} ()
+  ->{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.handleClientException go =
+  handle go()
+  with cases
+    { Exception.raise f@(Failure _ e a) -> _ } ->
+      Debug.trace "client exception" f
+      emit (Result.Fail e)
+    { a }                                      -> ()
+
+server.test.integration.client.handleWSClientException :
+  '{IO, Exception, HttpWebSocket, Stream Result} ()
+  ->{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.handleWSClientException go =
+  handle go()
+  with cases
+    { Exception.raise (Failure _ e a) -> _ } ->
+      Debug.trace "client exception" a
+      emit (Result.Fail e)
+    { a }                                    -> ()
+
+server.test.integration.client.manyRequests :
+  '{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.manyRequests =
+  do
+    go n =
+      use Text ++
+      uri = path.set (Path ["get"]) baseUri
+      let
+        (HttpResponse status _ _ body) = Http.get uri
+        statusResults "get" status
+        if body === expectedGetResponse then emit (Ok "get response matches")
+        else
+          emit
+            (Result.Fail
+              ("get response does not match for request " ++ Nat.toText n))
+    Stream.range 1 21 |> Stream.flatMap go |> handleClientException
+
+server.test.integration.client.post :
+  '{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.post =
+  do
+    go =
+      do
+        uri = path.set (Path ["post"]) baseUri
+        let
+          (HttpResponse status _ _ body) =
+            Http.post uri (Body (Text.toUtf8 "post body"))
+          statusResults "post" status
+          if body === expectedPostResponse then
+            emit (Ok "post response matches")
+          else emit (Result.Fail "post response does not match")
+    handleClientException go
+
+server.test.integration.client.statusResults :
+  Text -> HttpResponse.Status ->{Stream Result} ()
+server.test.integration.client.statusResults which = cases
+  Status 200 text -> emit (Ok (which Text.++ " request succeeded"))
+  Status c t ->
+    emit
+      (Result.Fail
+        (which
+          Text.++ "Request failed ("
+          Text.++ Nat.toText c
+          Text.++ "): "
+          Text.++ t))
+
+server.test.integration.client.webSocket :
+  '{IO, Http, HttpWebSocket, Stream Result} ()
+server.test.integration.client.webSocket =
+  do
+    use Http webSocket
+    use HttpRequest get
+    use Result Fail
+    use WebSocket close receive send
+    use path set
+    basicExchange : '{IO, Exception, Abort, HttpWebSocket, Stream Result} ()
+    basicExchange = do
+      uri = set (Path ["websocket"]) baseUri
+      ws = webSocket (get uri)
+      send ws (TextMessage "Hello")
+      match receive ws with
+        TextMessage "world" -> emit (Ok "successful websocket exchange")
+        _                   -> emit (Fail "unexpected websocket response")
+      close ws
+    serverSendsFirst : '{IO, Exception, Abort, HttpWebSocket, Stream Result} ()
+    serverSendsFirst =
+      do
+        uri = set (Path ["websocket-server-sends-first"]) baseUri
+        ws = webSocket (get uri)
+        match receive ws with
+          TextMessage "What is your name?" ->
+            emit (Ok "Received WebSocket message initiated by server")
+          _ -> emit (Fail "unexpected websocket response")
+        send ws (TextMessage "Grace")
+        match receive ws with
+          TextMessage "Hello, Grace" ->
+            emit (Ok "successful websocket exchange initiated by server")
+          _ -> emit (Fail "unexpected websocket response")
+        close ws
+    quickSends : '{IO, Exception, Abort, HttpWebSocket, Stream Result} ()
+    quickSends =
+      do
+        use Text ++
+        use flipped deprecated
+        uri = set (Path ["websocket-echo"]) baseUri
+        bracket
+          (do webSocket (get uri))
+          close
+          (ws ->
+            let
+              msgs =
+                initialize
+                  40 (i -> TextMessage ("This is message " ++ Nat.toText i))
+              deprecated msgs (send ws)
+              deprecated msgs (msg -> test.ensureEqual msg (receive ws))
+              emit (Ok "Sent many messages and then received them all"))
+    handleAbort : '{g, Abort} a ->{g, Stream Result} ()
+    handleAbort thunk =
+      handle thunk()
+      with cases
+        { abort -> _ } -> emit (Fail "websocket abort")
+        { _ }          -> ()
+    handleClientException do
+      handleAbort do
+        basicExchange()
+        serverSendsFirst()
+        quickSends()
+
+server.test.integration.expectedGetResponse : Body
+server.test.integration.expectedGetResponse = Body (Text.toUtf8 "get response")
+
+server.test.integration.expectedPostResponse : Body
+server.test.integration.expectedPostResponse =
+  Body (Text.toUtf8 "post response")
+
+server.test.integration.host : Text
+server.test.integration.host = "localhost"
+
+server.test.integration.main : '{IO, Exception} [Result]
+server.test.integration.main =
+  do
+    use List ++
+    use Stream toList
+    use flipped deprecated
+    use integration all
+    ignore do
+      {{
+      If we don't wait a little while after we stop the server, then starting a
+      new server fails sometimes. It seems that the old server needs a bit of
+      time to release all of its resources. The weird thing is that when the
+      hang happens we don't see an exception about the port already being in
+      use.
+      }}
+    stopTestServer stop =
+      stop()
+      sleep (milliseconds +2)
+    config =
+      server.Config.Config
+        (Some (HostName integration.host)) (Port integration.port) 10 None
+    res = bracket (do Config.serve integration.server config) stopTestServer do
+      sleep (milliseconds +2)
+      test = do deprecated all (t -> t())
+      handle handle toList test with Http.handler with HttpWebSocket.handler
+    res2 = 
+      bracket (do forkServer config integration.newServer) stopTestServer do
+        sleep (milliseconds +2)
+        test = do deprecated all (t -> t())
+        handle handle toList test with Http.handler with HttpWebSocket.handler
+    res ++ res2
+
+server.test.integration.newServer :
+  HttpRequest -> Either HttpResponse WebSocketHandler
+server.test.integration.newServer = cases
+  HttpRequest GET _ (URI _ _ (Path ["get"]) _ _) _ _ ->
+    Left (HttpResponse.ok expectedGetResponse)
+  HttpRequest POST _ (URI _ _ (Path ["post"]) _ _) _ _ ->
+    Left (HttpResponse.ok expectedPostResponse)
+  HttpRequest GET _ (URI _ _ (Path ["websocket"]) _ _) _ _ ->
+    Right
+      (WebSocketHandler
+        (ws addFinalizer -> let
+          addFinalizer do WebSocket.close ws
+          match WebSocket.receive ws with
+            TextMessage "Hello" -> WebSocket.send ws (TextMessage "world")
+            _                   -> ()))
+  HttpRequest GET _ (URI _ _ (Path ["websocket-server-sends-first"]) _ _) _ _ ->
+    Right
+      (WebSocketHandler
+        (ws addFinalizer -> let
+          use Text ++
+          use WebSocket send
+          addFinalizer do WebSocket.close ws
+          send ws (TextMessage "What is your name?")
+          match WebSocket.receive ws with
+            TextMessage name -> send ws (TextMessage ("Hello, " ++ name))
+            _                -> ()))
+  HttpRequest GET _ (URI _ _ (Path ["websocket-echo"]) _ _) _ _ ->
+    Right
+      (WebSocketHandler
+        (ws addFinalizer -> let
+          addFinalizer do WebSocket.close ws
+          forever do WebSocket.send ws (WebSocket.receive ws)))
+  _ -> Left HttpResponse.notFound
+
+server.test.integration.port : Text
+server.test.integration.port = "18734"
+
+server.test.integration.server : Routes g
+server.test.integration.server =
+  d : Routes g
+  d = Routes.default
+  d <<< webSocketHandler <<< getHandler <<< postHandler
+
+server.test.integration.server.getHandler : Handler g
+server.test.integration.server.getHandler = Handler cases
+  req | Routes.get (Path ["get"]) req -> HttpResponse.ok expectedGetResponse
+  _   -> abort
+
+server.test.integration.server.postHandler : Handler g
+server.test.integration.server.postHandler = Handler cases
+  req | Routes.post (Path ["post"]) req -> HttpResponse.ok expectedPostResponse
+  _   -> abort
+
+server.test.integration.server.routes : Routes g
+server.test.integration.server.routes =
+  d : Routes g
+  d = Routes.default
+  d <<< getHandler <<< postHandler
+
+server.test.integration.server.webSocketHandler : Handler g
+server.test.integration.server.webSocketHandler =
+  use Routes get
+  use WebSocket receive send
+  basicExchange ws rf =
+    match receive ws with
+      TextMessage "Hello" -> send ws (TextMessage "world")
+      _                   -> ()
+    sleepMicroseconds 2000000
+  serverSendsFirst ws rf =
+    use Text ++
+    send ws (TextMessage "What is your name?")
+    match receive ws with
+      TextMessage name -> send ws (TextMessage ("Hello, " ++ name))
+      _                -> ()
+  echo ws addFinalizer =
+    addFinalizer (_ -> WebSocket.close ws)
+    forever do send ws (receive ws)
+  HandlerWebSocket cases
+    req
+      | get (Path ["websocket"]) req                     ->
+        WebSocketHandler basicExchange
+      | get (Path ["websocket-server-sends-first"]) req  ->
+        WebSocketHandler serverSendsFirst
+      | get (Path ["websocket-echo"]) req                ->
+        WebSocketHandler echo
+    _ -> abort
+
+server.up.base.IO.logAndIgnore : '{IO, Exception} a ->{IO} ()
+server.up.base.IO.logAndIgnore x =
+  threadKilled = typeLink ThreadKilledFailure
+  match catchAll x with
+    Left (Failure typ msg _)| typ !== threadKilled  ->
+      unsafeRun! do putText stdErr msg
+    _ -> ()
+
+server.WebSocketHandler.async :
+  (Message ->{IO, Stream Message} ())
+  -> '{IO, Exception, Stream Message} ()
+  ->{IO, Exception} WebSocketHandler
+server.WebSocketHandler.async onMessage effect =
+  fn :
+    WebSocket
+    -> ((Either Failure () ->{IO, Exception} ()) ->{IO, Exception} ())
+    ->{IO, Exception} ()
+  fn ws addFinalizer =
+    addFinalizer handleClose
+    outgoingHandler : Request {Stream Message} () ->{IO, Exception} ()
+    outgoingHandler = cases
+      { emit msg -> k } ->
+        WebSocket.send ws msg
+        handle k() with outgoingHandler
+      { u }             -> u
+    incomingMessageThread = 
+      fork do
+        unsafeRun! do
+          toDefault! (do ()) do
+            forever do
+              handle onMessage (WebSocket.receive ws) with outgoingHandler
+    handle effect() with outgoingHandler
+    concurrent.kill incomingMessageThread
+  handleClose : Either Failure () ->{IO} ()
+  handleClose = cases
+    Left failure -> Debug.trace "WebSocket.failure: " failure
+    Right _      -> ()
+  WebSocketHandler fn
+
+server.WebSocketHandler.async.doc : Doc
+server.WebSocketHandler.async.doc =
+  {{
+  Creates a {type WebSocketHandler} that forks a thread that continously reads
+  incoming web socket messages calls the provided `onMessage` on them. This is
+  useful when you want to receive messages asynchronously and not block sending
+  when you are waiting for a message.
+  
+  Example:
+  
+  * Receives messages and responds to them, all on a forked thread
+  * Send a message every 4 seconds
+  
+  {{ docSource [docSourceElement (docEmbedTermLink do async.doc.example1) []]
+  }}
+  }}
+
+server.WebSocketHandler.async.doc.example1 : '{IO, Exception} ()
+server.WebSocketHandler.async.doc.example1 = do
+  use Path /
+  use Text ++
+  config = server.Config.Config None (Port "8081") 1000 None
+  socketHandler = async (cases
+    TextMessage msg -> emit (TextMessage ("You said: " ++ msg))
+    _               -> ()) do
+    abilities.repeat 100 do
+      sleepMicroseconds 4000000
+      emit (TextMessage "Regularly scheduled message for you")
+  socketRouteHandler : Handler IO
+  socketRouteHandler = HandlerWebSocket cases
+    req | Routes.get (root / "socket") req -> socketHandler
+    _   -> abort
+  routes : Routes IO
+  routes = Routes.default <<< socketRouteHandler
+  stopServer = Config.serve routes config
+  printLine "started server on port 8081. Press <enter> to stop."
+  _ = readLine()
+  stopServer()
+
+server.WebSocketHandler.doc : Doc
+server.WebSocketHandler.doc =
+  {{
+  A {type WebSocketHandler} is a pair of functions to handle a {type WebSocket}
+  connection.
+  
+  The first function is called when the WebSocket connection is closed.
+  
+  The second function is called after a {type WebSocket} connection has been
+  successfully negotiated. It takes, as input, a {type WebSocket}. It can use
+  {{ docLink (docEmbedTermLink do WebSocket.send) }},
+  {{ docLink (docEmbedTermLink do WebSocket.receive) }}, {{
+  docLink (docEmbedTermLink do WebSocket.close) }} to interact with the
+  websocket.
+  
+  Note: When the handler function returns, the underlying {type Connection}
+  will be closed.
+  
+  There are are a couple of helpers for creating a {type WebSocketHandler};
+  {{ docLink (docEmbedTermLink do sync) }}, {{
+  docLink (docEmbedTermLink do async) }}
+  
+  {{ docLink (docEmbedTermLink do sync) }} : {{ sync.doc }}
+  
+  {{ docLink (docEmbedTermLink do async) }} : {{ async.doc }}
+  }}
+
+server.WebSocketHandler.sync :
+  '{IO, Exception, Ask Message, Stream Message} () ->{IO} WebSocketHandler
+server.WebSocketHandler.sync effect =
+  handleClose : Either Failure () ->{IO} ()
+  handleClose = cases
+    Left failure -> Debug.trace "WebSocket.failure: " failure
+    Right _      -> ()
+  newEffect :
+    WebSocket
+    -> ((Either Failure () ->{IO, Exception} ()) ->{IO, Exception} ())
+    ->{IO, Exception} ()
+  newEffect ws addFinalizer =
+    addFinalizer handleClose
+    handler : Request {Ask Message, Stream Message} () ->{IO, Exception} ()
+    handler = cases
+      { ask -> k }      ->
+        msg = WebSocket.receive ws
+        handle k msg with handler
+      { emit msg -> k } ->
+        WebSocket.send ws msg
+        handle k() with handler
+      { u }             -> u
+    handle effect() with handler
+  WebSocketHandler newEffect
+
+server.WebSocketHandler.sync.doc : Doc
+server.WebSocketHandler.sync.doc =
+  {{
+  Creates a {type WebSocketHandler} that reads and writes messages
+  synchronously. This is useful when you want to receive messages synchronously
+  and block sending when you are waiting for a message.
+  
+  Example:
+  
+  * Receives 10 messages
+  * Sends a single response acknowledging the 10 messages
+  * Sends a response to each of the 10 messages
+  
+  {{ docSource [docSourceElement (docEmbedTermLink do sync.doc.example1) []] }}
+  }}
+
+server.WebSocketHandler.sync.doc.example1 : '{IO, Exception} ()
+server.WebSocketHandler.sync.doc.example1 = do
+  use Path /
+  use Text ++
+  config = server.Config.Config None (Port "8081") 1000 None
+  socketHandler = sync do
+    messages = fill' 10 do ask
+    emit (TextMessage ("You sent me 10 messages: " ++ toDebugText messages))
+    flipped.deprecated messages cases
+      TextMessage msg -> emit (TextMessage ("You said: " ++ msg))
+      _               -> ()
+  socketRouteHandler : Handler IO
+  socketRouteHandler = HandlerWebSocket cases
+    req | Routes.get (root / "socket") req -> socketHandler
+    _   -> abort
+  routes : Routes IO
+  routes = Routes.default <<< socketRouteHandler
+  stopServer = Config.serve routes config
+  printLine "started server on port 8081. Press <enter> to stop."
+  _ = readLine()
+  stopServer()
+
+tests.checkHttpRequestRoundTrip : HttpRequest ->{Exception, Each} ()
+tests.checkHttpRequestRoundTrip req =
+  bs = HttpRequest.encode client.proxy.ProxyPresence.NoProxy req
+  decodedReq = HttpRequest.fromBytes bs
+  normalizedReq =
+    (HttpRequest method version (URI scheme _ path query fragment) headers body)
+      =
+      req
+    normalizedUri = URI Scheme.empty None path query fragment
+    HttpRequest method version normalizedUri headers body
+  normalizedDecodedReq =
+    headers.modify (Headers.delete "Content-Length") decodedReq
+  HttpRequest.ensureEqual normalizedDecodedReq normalizedReq
+
+tests.checkHttpRequestRoundTrip.doc : Doc
+tests.checkHttpRequestRoundTrip.doc =
+  {{
+  Checks that when the provided {type HttpRequest} is encoded and then decoded,
+  the result is roughly the same as the original request.
+  
+  There is some leniency in the equivalence of the decoded request. For
+  example, the decoded request will not have host/port information as that is
+  not part of the encoded HTTP request. Likewise, the encoder may add a
+  `Content-Length` header that is not present on the original request.
+  }}
+
+test> tests.chunkedWithoutTrailers = 
+  verifyAndIgnore do
+    use HttpResponse ==
+    use Text toUtf8
+    head = ["HTTP/1.1 200 OK", "Transfer-Encoding:chunked"]
+    headText =
+      List.foldLeft (Text.++) Text.empty (List.intersperse "\r\n" head)
+    chunkToText = cases
+      (length, value) -> length Text.++ "\r\n" Text.++ value Text.++ "\r\n"
+    body =
+      List.map
+        chunkToText
+        [ ("3", "123")
+        , ("A", "1234\n67890")
+        , ("1A", "12345678901\n\n4567\n90123456")
+        , ("0", "")
+        ]
+    responseStream : '{Stream Bytes} ()
+    responseStream =
+      Stream.map
+        toUtf8
+        ((do emit (headText Text.++ "\r\n\r\n"))
+          Stream.++ Stream.fromList body)
+    parsed = HttpResponse.fromStream false responseStream
+    expected =
+      headers = Headers.singleton "Transfer-Encoding" "chunked"
+      body = Body (toUtf8 "1231234\n6789012345678901\n\n4567\n90123456")
+      HttpResponse (Status 200 "OK") Version.http11 headers body
+    ensuring do expected == parsed
+
+test> tests.chunkedWithTrailers = 
+  verifyAndIgnore do
+    use HttpResponse ==
+    use Text toUtf8
+    head =
+      [ "HTTP/1.1 200 OK"
+      , "Transfer-Encoding:chunked"
+      , "Trailer:Server-Timing,Expires"
+      ]
+    headText =
+      List.foldLeft (Text.++) Text.empty (List.intersperse "\r\n" head)
+    chunkToText = cases
+      (length, value) -> length Text.++ "\r\n" Text.++ value Text.++ "\r\n"
+    body =
+      List.map
+        chunkToText
+        [ ("3", "123")
+        , ("A", "1234\n67890")
+        , ("1A", "12345678901\n\n4567\n90123456")
+        , ( "0"
+          , "Server-Timing:cache;desc=\"Cache Read\";dur=23.2\r\nExpires: Wed, 21 Oct 2015 07:28:00 GMT"
+          )
+        ]
+    responseStream : '{Stream Bytes} ()
+    responseStream =
+      Stream.map
+        toUtf8
+        ((do emit (headText Text.++ "\r\n\r\n"))
+          Stream.++ Stream.fromList body
+          Stream.++ (do emit "\r\n"))
+    parsed = HttpResponse.fromStream false responseStream
+    expected =
+      headers =
+        Headers.fromList
+          [ ("Transfer-Encoding", "chunked")
+          , ("Trailer", "Server-Timing,Expires")
+          , ("Server-Timing", "cache;desc=\"Cache Read\";dur=23.2")
+          , ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+          ]
+      body = Body (toUtf8 "1231234\n6789012345678901\n\n4567\n90123456")
+      HttpResponse (Status 200 "OK") Version.http11 headers body
+    ensuring do expected == parsed
+
+test> tests.chunkedWithTrailersAreActuallyOptional = 
+  verifyAndIgnore do
+    use Text toUtf8
+    head =
+      ["HTTP/1.1 200 OK", "Transfer-Encoding:chunked", "Trailer:Server-Timing"]
+    headText =
+      List.foldLeft (Text.++) Text.empty (List.intersperse "\r\n" head)
+    chunkToText = cases
+      (length, value) -> length Text.++ "\r\n" Text.++ value Text.++ "\r\n"
+    body =
+      List.map
+        chunkToText
+        [ ("3", "123")
+        , ("A", "1234\n67890")
+        , ("1A", "12345678901\n\n4567\n90123456")
+        , ("0", "")
+        ]
+    responseStream : '{Stream Bytes} ()
+    responseStream =
+      Stream.map
+        toUtf8
+        ((do emit (headText Text.++ "\r\n\r\n"))
+          Stream.++ Stream.fromList body)
+    parsed = catch do HttpResponse.fromStream false responseStream
+    expected =
+      headers =
+        Headers.fromList
+          [("Transfer-Encoding", "chunked"), ("Trailer", "Server-Timing")]
+      body = Body (toUtf8 "1231234\n6789012345678901\n\n4567\n90123456")
+      HttpResponse (Status 200 "OK") Version.http11 headers body
+    test.ensureEqual (Right expected) parsed
+
+tests.exampleRequest : Bytes
+tests.exampleRequest =
+  use Bytes ++
+  Text.toUtf8 "POST /foo HTTP/1.1\r\n" ++ Bytes.drop 17 exampleResponse
+
+tests.exampleResponse : Bytes
+tests.exampleResponse =
+  0xs485454502f312e3120323030204f4b0d0a436f6e6e656374696f6e3a204b6565702d416c6976650d0a436f6e74656e742d4c616e67756167653a20656e5f55530d0a436f6e74656e742d4c656e6774683a20323236320d0a436f6e74656e742d547970653a20746578742f68746d6c3b20636861727365743d7574662d380d0a446174653a205468752c203135204a756e20323032332030323a33373a313920474d540d0a4b6565702d416c6976653a2074696d656f75743d31300d0a4c6173742d4d6f6469666965643a2053756e2c203236204d617220323032332030383a35343a303520474d540d0a4163636570742d456e636f64696e673a20677a69702c206465666c6174652c206964656e746974790d0a5365727665723a20435550532f322e34204950502f322e310d0a582d4672616d652d4f7074696f6e733a2044454e590d0a436f6e74656e742d53656375726974792d506f6c6963793a206672616d652d616e636573746f727320276e6f6e65270d0a0d0a3c21444f43545950452048544d4c3e0a3c68746d6c3e0a20203c686561643e0a202020203c6c696e6b2072656c3d227374796c6573686565742220687265663d222f637570732e6373732220747970653d22746578742f637373223e0a202020203c6c696e6b2072656c3d2273686f72746375742069636f6e2220687265663d222f6170706c652d746f7563682d69636f6e2e706e672220747970653d22696d6167652f706e67223e0a202020203c6d65746120636861727365743d227574662d38223e0a202020203c6d65746120687474702d65717569763d22436f6e74656e742d547970652220636f6e74656e743d22746578742f68746d6c3b20636861727365743d7574662d38223e0a202020203c6d65746120687474702d65717569763d22582d55412d436f6d70617469626c652220636f6e74656e743d2249453d39223e0a202020203c6d657461206e616d653d2276696577706f72742220636f6e74656e743d2277696474683d6465766963652d7769647468223e0a202020203c7469746c653e486f6d65202d204355505320322e342e323c2f7469746c653e0a20203c2f686561643e0a20203c626f64793e0a202020203c64697620636c6173733d22637570732d686561646572223e0a2020202020203c756c3e0a093c6c693e3c6120687265663d2268747470733a2f2f6f70656e7072696e74696e672e6769746875622e696f2f637570732f22207461726765743d225f626c616e6b223e4f70656e5072696e74696e6720435550533c2f613e3c2f6c693e0a093c6c693e3c6120636c6173733d226163746976652220687265663d222f223e486f6d653c2f613e3c2f6c693e0a093c6c693e3c6120687265663d222f61646d696e223e41646d696e697374726174696f6e3c2f613e3c2f6c693e0a093c6c693e3c6120687265663d222f636c61737365732f223e436c61737365733c2f613e3c2f6c693e0a093c6c693e3c6120687265663d222f68656c702f223e48656c703c2f613e3c2f6c693e0a093c6c693e3c6120687265663d222f6a6f62732f223e4a6f62733c2f613e3c2f6c693e0a093c6c693e3c6120687265663d222f7072696e746572732f223e5072696e746572733c2f613e3c2f6c693e0a2020202020203c2f756c3e0a202020203c2f6469763e0a202020203c64697620636c6173733d22637570732d626f6479223e0a2020202020203c64697620636c6173733d22726f77223e0a093c68313e4f70656e5072696e74696e67204355505320322e342e323c2f68313e0a093c703e546865207374616e64617264732d62617365642c206f70656e20736f75726365207072696e74696e672073797374656d20646576656c6f706564206279203c6120636c6173733d226a756d626f6c696e6b2220687265663d2268747470733a2f2f6f70656e7072696e74696e672e6769746875622e696f2f22207461726765743d225f626c616e6b223e4f70656e5072696e74696e673c2f613e20666f72204c696e7578c2ae20616e64206f7468657220556e6978c2ae2d6c696b65206f7065726174696e672073797374656d732e20435550532075736573203c6120687265663d2268747470733a2f2f7777772e7077672e6f72672f6970702f657665727977686572652e68746d6c22207461726765743d225f626c616e6b223e4950502045766572797768657265e284a23c2f613e20746f20737570706f7274207072696e74696e6720746f206c6f63616c20616e64206e6574776f726b207072696e746572732e3c2f703e0a2020202020203c2f6469763e0a2020202020203c64697620636c6173733d22726f77223e0a093c64697620636c6173733d22746869726473223e0a0920203c68323e4355505320666f722055736572733c2f68323e0a0920203c703e3c6120687265663d2268656c702f6f766572766965772e68746d6c223e4f76657276696577206f6620435550533c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f6f7074696f6e732e68746d6c223e436f6d6d616e642d4c696e65205072696e74696e6720616e64204f7074696f6e733c2f613e3c2f703e0a093c2f6469763e0a093c64697620636c6173733d22746869726473223e0a0920203c68323e4355505320666f722041646d696e6973747261746f72733c2f68323e0a0920203c703e3c6120687265663d2268656c702f61646d696e2e68746d6c223e416464696e67205072696e7465727320616e6420436c61737365733c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f706f6c69636965732e68746d6c223e4d616e6167696e67204f7065726174696f6e20506f6c69636965733c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f6e6574776f726b2e68746d6c223e5573696e67204e6574776f726b205072696e746572733c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f6669726577616c6c732e68746d6c223e4669726577616c6c733c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f6d616e2d63757073642e636f6e662e68746d6c223e63757073642e636f6e66205265666572656e63653c2f613e3c2f703e0a093c2f6469763e0a093c64697620636c6173733d22746869726473223e0a0920203c68323e4355505320666f7220446576656c6f706572733c2f68323e0a0920203c703e3c6120687265663d2268656c702f63757073706d2e68746d6c223e435550532050726f6772616d6d696e67204d616e75616c3c2f613e3c2f703e0a0920203c703e3c6120687265663d2268656c702f6170692d66696c7465722e68746d6c223e46696c74657220616e64204261636b656e642050726f6772616d6d696e673c2f613e3c2f703e0a093c2f6469763e0a2020202020203c2f6469763e0a202020203c2f6469763e0a202020203c64697620636c6173733d22637570732d666f6f746572223e436f707972696768742026636f70793b20323032312d32303232204f70656e5072696e74696e672e20416c6c207269676874732072657365727665642e3c2f6469763e0a20203c2f626f64793e0a3c2f68746d6c3e0a
+
+test> tests.testChunkedRequestRoundTrip = 
+  verifyAndIgnore do
+    use Text toUtf8
+    req = HttpRequest.get (parseOrBug "http://google.com")
+    req' = HttpRequest.body.set (Body (toUtf8 "hello, world!")) req
+    trailer = do
+      emit (toUtf8 "blah blah")
+      Headers.empty
+    stream =
+      do
+        HttpRequest.encodeChunked
+          client.proxy.ProxyPresence.NoProxy req' trailer
+    ignore (HttpRequest.fromStream stream)
+
+test> tests.testChunkedRequestRoundTripNoTrailers = 
+  verifyAndIgnore do
+    req = HttpRequest.get (parseOrBug "http://google.com")
+    trailer = do
+      emit (Text.toUtf8 "blah blah")
+      Headers.empty
+    stream =
+      do
+        HttpRequest.encodeChunked
+          client.proxy.ProxyPresence.NoProxy req trailer
+    ignore (HttpRequest.fromStream stream)
+
+test> tests.testChunkedRequestRoundTripWithTrailers = 
+  verifyAndIgnore do
+    use HttpRequest addHeader
+    req =
+      HttpRequest.get (parseOrBug "http://google.com")
+        |> addHeader "Trailer" "Expires"
+        |> addHeader "Trailer" "Client-Timing"
+    trailer =
+      do
+        emit (Text.toUtf8 "blah blah")
+        Headers.fromList
+          [ ("Expires", "Wed, 21 Oct 2015 07:28:00 GMT")
+          , ("Client-Timing", "cache;desc=\"Cache Read\";dur=23.2")
+          ]
+    stream =
+      do
+        HttpRequest.encodeChunked
+          client.proxy.ProxyPresence.NoProxy req trailer
+    ignore (HttpRequest.fromStream stream)
+
+test> tests.testChunkedResponseRoundTrip = verifyAndIgnore do
+  use Text toUtf8
+  res = HttpResponse.ok (Body (toUtf8 "hello, world"))
+  trailer = do
+    emit (toUtf8 "blah blah")
+    Headers.empty
+  stream = do HttpResponse.encodeChunked res trailer
+  ignore (HttpResponse.fromStream false stream)
+
+test> tests.testFromStream = 
+  verifyAndIgnore do
+    use Path /
+    use Text toUtf8
+    request =
+      """
+      GET /docs?%25wei?rd=%26he+llo/&%25wei?rd=+th%23er%3de%25&simple=foo HTTP/1.0
+      Content-Type: text/plain
+      Content-Length: 12
+      
+      Hello World!
+      """
+    stream = do emit (toUtf8 request)
+    actual = HttpRequest.fromStream stream
+    headers =
+      Headers.fromList
+        [("Content-Type", "text/plain"), ("Content-Length", "12")]
+    expected =
+      HttpRequest
+        GET
+        Version.http10
+        (URI
+          (Scheme "")
+          None
+          (root / "docs")
+          (RawQuery "%25wei?rd=%26he+llo/&%25wei?rd=+th%23er%3de%25&simple=foo")
+          Fragment.empty)
+        headers
+        (Body (toUtf8 "Hello World!"))
+    test.ensureEqual expected actual
+
+test> tests.testHttpRequestRoundTrip = verifyAndIgnore do
+  use HttpRequest addHeader
+  body = Body (Text.toUtf8 "hello, world!")
+  req = HttpRequest.post (parseOrBug "http://google.com") body
+  req1 = req |> addHeader "Accept" "application/json"
+  req2 = req1 |> addHeader "User-agent" "ucm"
+  checkHttpRequestRoundTrip req
+  checkHttpRequestRoundTrip req1
+  checkHttpRequestRoundTrip req2
+
+test> tests.testHttpResponseRoundTrip = verifyAndIgnore do
+  use HttpResponse addHeader encode ensureEqual fromBytes
+  res = HttpResponse.ok (Body (Text.toUtf8 "hello, world"))
+  res1 = res |> addHeader "Accept" "application/json"
+  res2 = res1 |> addHeader "User-agent" "ucm"
+  nc = noContent
+  bs = encode res
+  bs1 = encode res1
+  bs2 = encode res2
+  bs3 = encode nc
+  ensureEqual res (fromBytes false bs)
+  ensureEqual res1 (fromBytes false bs1)
+  ensureEqual res2 (fromBytes false bs2)
+  ensureEqual nc (fromBytes false bs3)
+
+test> tests.testParseRequest = verifyAndIgnore do
+  (HttpRequest m v u h b) = HttpRequest.fromStream do emit exampleRequest
+  use test ensureEqual
+  ensureEqual 2262 (Bytes.size (Body.toBytes b))
+  ensureEqual 11 (data.Map.size (Headers.toMap h))
+
+test> tests.testParseResponse = 
+  verifyAndIgnore do
+    (HttpResponse s v h b) =
+      HttpResponse.fromStream false do emit exampleResponse
+    use test ensureEqual
+    ensureEqual 2262 (Bytes.size (Body.toBytes b))
+    ensureEqual 11 (data.Map.size (Headers.toMap h))
+
+test> tests.testRequestLine = 
+  verifyAndIgnore do
+    use Text ++
+    validate rl =
+      match IPattern.run pattern.requestLine rl with
+        Some (requestLine, "") -> ()
+        _ -> test.raiseFailure ("failed to parse requestLine: " ++ rl) (Any ())
+    validate "GET / HTTP/1.1"
+    validate "POST /docs HTTP/1.0"
+    validate "PUT / HTTP/1.1"
+    validate "PUT /docs/ HTTP/1.1"
+    validate
+      "GET /docs?%25wei?rd=%26he+llo/&%25wei?rd=+th%23er%3de%25&simple=foo HTTP/1.0"
+
+test> tests.testStatusLine = 
+  verifyAndIgnore do IPattern.run statusLine "HTTP/1.1 200 OK"
+
+up.base.Bytes.encodeNat8 : Nat -> Bytes
+up.base.Bytes.encodeNat8 n = fromList.impl [Nat.and 255 n]
+
+up.base.data.Map.filterKeys :
+  (k ->{g2} Boolean) -> data.Map k v ->{g2} data.Map k v
+up.base.data.Map.filterKeys f =
+  Map.foldLeftWithKey
+    (acc k v -> (if f k then Map.insert k v acc else acc)) data.Map.empty
+
+up.base.test.ensureEqualBy : (a -> a -> Boolean) -> a -> a ->{Exception} ()
+up.base.test.ensureEqualBy eq a1 a2 =
+  if eq a1 a2 then () else test.raiseFailure "elements not equal" (a1, a2)
+
+util.slurpByteStream : '{Stream Bytes} r -> Bytes
+util.slurpByteStream stream =
+  use Bytes ++
+  handler : Bytes -> Request {Stream Bytes} r -> Bytes
+  handler acc = cases
+    { emit bs -> tail } -> handle tail() with handler (acc ++ bs)
+    { done }            -> acc
+  handle stream() with handler 0xs
+
+Version.fromText : Text -> Either Text Version
+Version.fromText = cases
+  "HTTP/1.1" -> Right Version.http11
+  "HTTP/1.0" -> Right Version.http10
+  x          -> Left ("invalid http version: " Text.++ x)
+
+Version.http10 : Version
+Version.http10 = Version 1 0
+
+Version.http11 : Version
+Version.http11 = Version 1 1
+
+Version.http20 : Version
+Version.http20 = Version 2 0
+
+Version.major : Version -> Nat
+Version.major = cases Version major _ -> major
+
+Version.major.modify : (Nat ->{g} Nat) -> Version ->{g} Version
+Version.major.modify f = cases Version major minor -> Version (f major) minor
+
+Version.major.set : Nat -> Version -> Version
+Version.major.set major1 = cases Version _ minor -> Version major1 minor
+
+Version.minor : Version -> Nat
+Version.minor = cases Version _ minor -> minor
+
+Version.minor.modify : (Nat ->{g} Nat) -> Version ->{g} Version
+Version.minor.modify f = cases Version major minor -> Version major (f minor)
+
+Version.minor.set : Nat -> Version -> Version
+Version.minor.set minor1 = cases Version major _ -> Version major minor1
+
+Version.toText : Version -> Text
+Version.toText = cases
+  Version major minor ->
+    "HTTP/" Text.++ Nat.toText major Text.++ "." Text.++ Nat.toText minor
+
+websockets.Endpoint.isClient : Endpoint -> Boolean
+websockets.Endpoint.isClient = cases
+  Client -> true
+  Server -> false
+
+websockets.example : '{IO, Exception} ()
+websockets.example =
+  do
+    use Message text
+    use Nat *
+    use WebSocket send
+    handleConnection connection = withConnection connection do
+      request = HttpRequest.decode()
+      emit (HttpResponse.encode (upgradeResponse request))
+      ws = threadSafeWebSocket connection Server (1024 * 1024) Bytes.empty
+      message = WebSocket.receive ws
+      Debug.trace "Received" message
+      send ws (text "From SERVER")
+      send ws (text "From SERVER 2")
+    bracket
+      (do Socket.server None (Port "9011"))
+      (cases BoundServerSocket socket -> Socket.close socket)
+      (boundSocket ->
+        let
+          listeningSocket = boundSocket |> Socket.listen
+          bracket
+            (do Socket.accept listeningSocket |> Connection.socket)
+            Connection.close
+            handleConnection)
+
+websockets.Frame.decoder : '{Decode, DecodeBits, Throw DecodeError} Frame
+websockets.Frame.decoder =
+  do
+    Decode.label "WebSocket frame" do
+      use Decode failWith label
+      use DecodeBits bit
+      use Text ++
+      label "WebSocket frame header" do bitsFromBytes 1
+      isFin = bit()
+      match (bit(), bit(), bit()) with
+        (false, false, false) -> ()
+        _                     -> failWith "Non zero RSV bits!"
+      opcode = label "WebSocket opcode" do wordN 4
+      bitsFromBytes 1
+      isMasked = label "WebSocket isMasked" do bit()
+      payloadLength = label "WebSocket payload length" do match wordN 7 with
+        126 -> Decode.nat16be()
+        127 -> Decode.nat64be()
+        n   -> n
+      maskingKey =
+        if isMasked then Some (label "WebSocket masking key" do nextBytes 4)
+        else None
+      payloadBytes = label "WebSocket payload" do nextBytes payloadLength
+      payload = match maskingKey with
+        None     -> payloadBytes
+        Some key ->
+          match catch do maskOrUnmask key payloadBytes with
+            Left e  -> failWith "Error unmasking"
+            Right v -> v
+      match opcode with
+        0  -> Continuation isFin payload
+        1  -> Text isFin (runDecode Decode.utf8 payload)
+        2  -> Binary isFin payload
+        8  -> Close (decodeCloseReason payload)
+        9  -> Ping payload
+        10 -> Pong payload
+        _  -> failWith ("Unsupported opcode: " ++ Nat.toText opcode)
+
+websockets.Frame.decoder.decodeCloseReason :
+  Bytes ->{Throw DecodeError} Optional (Nat, Text)
+websockets.Frame.decoder.decodeCloseReason payload =
+  use Nat ==
+  if Bytes.size payload == 0 then None
+  else payload |> (runDecode do Some (Decode.nat16be(), Decode.utf8()))
+
+websockets.Frame.decoder.maskOrUnmask : Bytes -> Bytes -> Bytes
+websockets.Frame.decoder.maskOrUnmask key payload =
+  use Bytes toList
+  keyAsList = key |> toList
+  payloadAsList = payload |> toList
+  payloadAsList
+    |> mapIndexed
+         (idx v -> Nat.xor v (keyAsList |> List.unsafeAt (Nat.mod idx 4)))
+    |> (bs -> unsafeRun! do Bytes.fromList bs)
+
+test> websockets.Frame.decoder.tests.fragmentedContinuation =
+  use fromList impl
+  check
+    ((toEither do runDecode decoder 0xs80026c6f)
+      === Right (Continuation true 0xs6c6f))
+
+test> websockets.Frame.decoder.tests.fragmentedTextUnmasked =
+  check
+    ((toEither do runDecode decoder 0xs010348656c)
+      === Right (Text false "Hel"))
+
+test> websockets.Frame.decoder.tests.ping =
+  use fromList impl
+  check
+    ((toEither do runDecode decoder 0xs890548656c6c6f)
+      === Right (Ping 0xs48656c6c6f))
+
+test> websockets.Frame.decoder.tests.pong =
+  use fromList impl
+  check
+    ((toEither do runDecode decoder 0xs8a0548656c6c6f)
+      === Right (Pong 0xs48656c6c6f))
+
+test> websockets.Frame.decoder.tests.singleTextMasked =
+  check
+    ((toEither do runDecode decoder 0xs818537fa213d7f9f4d5158)
+      === Right (Text true "Hello"))
+
+test> websockets.Frame.decoder.tests.singleTextUnmasked =
+  check
+    ((toEither do runDecode decoder 0xs810548656c6c6f)
+      === Right (Text true "Hello"))
+
+websockets.Frame.encoder : Optional Bytes -> Frame -> Bytes
+websockets.Frame.encoder maskingKey frame =
+  use Bytes ++
+  use Nat <
+  use Text toUtf8
+  (isFin, opcode, payload) =
+    match frame with
+      Continuation fin payload -> (fin, 0, payload)
+      Text fin payload -> (fin, 1, toUtf8 payload)
+      Binary fin payload -> (fin, 2, payload)
+      Close (Some (reasonCode, reason)) ->
+        (true, 8, encodeNat16be reasonCode ++ toUtf8 reason)
+      Close None -> (true, 8, 0xs00)
+      Ping payload -> (true, 9, payload)
+      Pong payload -> (true, 10, payload)
+  bs1 = EncodeBits.toBytes do
+    putBit isFin
+    putBit false
+    putBit false
+    putBit false
+    putWordN 4 opcode
+    putBit (maskingKey |> isSome)
+    match Bytes.size payload with
+      n 
+        | n < 126   -> putWordN 7 n
+        | n < 65536 ->
+          putWordN 7 126
+          putWordN 16 n
+        | otherwise ->
+          putWordN 7 127
+          putWordN 64 n
+  bs2 = match maskingKey with
+    None     -> payload
+    Some key -> key ++ maskOrUnmask key payload
+  bs1 ++ bs2
+
+test> websockets.Frame.encoder.tests.fragmentedContinuation =
+  check (encoder None (Continuation true (Text.toUtf8 "lo")) === 0xs80026c6f)
+
+test> websockets.Frame.encoder.tests.fragmentedTextUnasked =
+  check (encoder None (Text false "Hel") === 0xs010348656c)
+
+test> websockets.Frame.encoder.tests.ping =
+  check (encoder None (Ping (Text.toUtf8 "Hello")) === 0xs890548656c6c6f)
+
+test> websockets.Frame.encoder.tests.pong =
+  check (encoder None (Pong (Text.toUtf8 "Hello")) === 0xs8a0548656c6c6f)
+
+test> websockets.Frame.encoder.tests.singleTextMasked =
+  use fromList impl
+  check
+    (encoder (Some 0xs37fa213d) (Text true "Hello")
+      === 0xs818537fa213d7f9f4d5158)
+
+test> websockets.Frame.encoder.tests.singleTextUnmasked =
+  check (encoder None (Text true "Hello") === 0xs810548656c6c6f)
+
+websockets.handshake : HttpRequest -> Connection ->{IO, Exception} ()
+websockets.handshake request connection =
+  response = upgradeResponse request
+  Connection.send connection (HttpResponse.encodeNoBody response)
+
+websockets.handshake.doc : Doc
+websockets.handshake.doc = {{ Performs a WebSocket handshake on a connection }}
+
+websockets.internal.readFrame : Connection ->{IO, Exception} Frame
+websockets.internal.readFrame conn = 
+  Throw.toException (e -> Generic.failure "Error decoding websocket frame" e) do
+    fromConnection conn decoder
+
+websockets.Message.binary : Bytes -> Message
+websockets.Message.binary = BinaryMessage
+
+websockets.Message.binary.doc : Doc
+websockets.Message.binary.doc =
+  {{ Create a binary websocket message from a {type Bytes} value. }}
+
+websockets.Message.doc : Doc
+websockets.Message.doc =
+  {{
+  Represents a WebSocket message. It can be either a text message or a binary
+  message.
+  
+  ```
+  Message.text "hello"
+  ```
+  
+  ```
+  binary 0xsdeadbeef
+  ```
+  }}
+
+websockets.Message.text : Text -> Message
+websockets.Message.text = TextMessage
+
+websockets.Message.text.doc : Doc
+websockets.Message.text.doc =
+  {{ Create a websocket message using text. It will be encoded as UTF-8. }}
+
+websockets.Message.toFrames : Nat -> Message ->{Stream Frame} ()
+websockets.Message.toFrames maxFrameSize message =
+  use Bytes isEmpty
+  continue : Bytes -> ()
+  continue bytes = match Bytes.splitAt maxFrameSize bytes with
+    (part, rest) 
+      | isEmpty rest -> emit (Continuation true part)
+      | otherwise    ->
+        emit (Continuation false part)
+        continue rest
+  match message with
+    TextMessage value   ->
+      go : Text -> ()
+      go v = match Text.splitAt maxFrameSize v with
+        (part, "")   -> emit (Text true part)
+        (part, rest) ->
+          emit (Text false part)
+          continue (Text.toUtf8 rest)
+      go value
+    BinaryMessage value ->
+      go : Bytes -> ()
+      go v = match Bytes.splitAt maxFrameSize v with
+        (part, rest) 
+          | isEmpty rest -> emit (Binary true part)
+          | otherwise    ->
+            emit (Binary false part)
+            continue rest
+      go value
+
+websockets.metadata.authors.alvaroc1 : Author
+websockets.metadata.authors.alvaroc1 = Author alvaroc1.guid "Alvaro Carrasco"
+
+websockets.metadata.authors.alvaroc1.guid : GUID
+websockets.metadata.authors.alvaroc1.guid =
+  GUID 0xs443b5bb24a76958a6bd79437bd3ad1cb023c39dd2e44d2311e42b2c0ce53f394
+
+websockets.metadata.copyrightHolders.alvaroc1 : CopyrightHolder
+websockets.metadata.copyrightHolders.alvaroc1 =
+  CopyrightHolder alvaroc1.guid "Alvaro Carrasco"
+
+websockets.metadata.licenses.alvaroc12023 : License
+websockets.metadata.licenses.alvaroc12023 =
+  License [copyrightHolders.alvaroc1] [Year 2023] mit
+
+websockets.protocol.receive :
+  '{Abort, Decode, DecodeBits, Throw DecodeError, Stream Bytes} Message
+websockets.protocol.receive =
+  do
+    use Decode failWith
+    continueMaybe :
+      Boolean
+      -> Message
+      ->{Abort, Decode, DecodeBits, Throw DecodeError, Stream Bytes} Message
+    continueMaybe isFin msg = if isFin then msg else continue msg
+    sendPong : Bytes -> ()
+    sendPong payload = emit (encoder None (Pong payload))
+    continue :
+      Message
+      ->{Abort, Decode, DecodeBits, Throw DecodeError, Stream Bytes} Message
+    continue accum =
+      match decoder() with
+        Close _ -> abort
+        Ping payload ->
+          sendPong payload
+          continue accum
+        Pong payload -> continue accum
+        Text _ _ ->
+          failWith "Received WebSocket text frame while expecting continuation"
+        Binary _ _ ->
+          failWith
+            "Received WebSocket binary frame while expecting continuation"
+        Continuation isFin payload ->
+          msg = match accum with
+            TextMessage init   ->
+              use Text ++
+              payloadText = runDecode Decode.utf8 payload
+              TextMessage (init ++ payloadText)
+            BinaryMessage init -> BinaryMessage (init Bytes.++ payload)
+          continueMaybe isFin msg
+    go : '{Abort, Decode, DecodeBits, Throw DecodeError, Stream Bytes} Message
+    go =
+      do
+        match decoder() with
+          Close _ -> abort
+          Ping payload ->
+            sendPong payload
+            go()
+          Pong _ -> go()
+          Text isFin payload -> continueMaybe isFin (TextMessage payload)
+          Binary isFin payload -> continueMaybe isFin (BinaryMessage payload)
+          Continuation _ _ ->
+            failWith
+              "Received WebSocket continuation frame with no previous value"
+    go()
+
+websockets.README : Doc
+websockets.README =
+  {{
+  Client and server-side WebSockets are supported.
+  
+  On the client side, you will typically use {{
+  docLink (docEmbedTermLink do Http.webSocket) }} and {{
+  docLink (docEmbedTermLink do HttpWebSocket.handler) }} to create a
+  {type WebSocket} connection.
+  
+  On the server side you will typically create a {type WebSocketHandler} to
+  handle a {type WebSocket} connection.
+  
+  However, some lower-level WebSocket functionality is provided for advanced
+  use cases. Here is an example that uses some of the lower-level
+  functionality:
+  
+  {{ docSource [docSourceElement (docEmbedTermLink do websockets.example) []]
+  }}
+  }}
+
+websockets.upgradeResponse : HttpRequest ->{Exception} HttpResponse
+websockets.upgradeResponse request =
+  use Headers add
+  key =
+    match webSocketKey request with
+      Some key -> key
+      None ->
+        Exception.raise
+          (Generic.failure
+            "Not a valid websocket request" (HttpRequest.headers request))
+  acceptString = createAcceptString key
+  responseHeaders =
+    Headers.empty
+      |> add "Upgrade" "websocket"
+      |> add "Connection" "Upgrade"
+      |> add "Sec-WebSocket-Accept" acceptString
+  HttpResponse
+    (Status 101 "Switching Protocols")
+    Version.http11
+    responseHeaders
+    Body.empty
+
+websockets.util.createAcceptString : Text ->{Exception} Text
+websockets.util.createAcceptString key =
+  use Text ++
+  key ++ magicKeyString
+    |> Text.toUtf8
+    |> hashBytes Sha1
+    |> toBase64
+    |> fromUtf8
+
+test> websockets.util.createAcceptString.tests.ex1 =
+  check
+    ((catch do createAcceptString "dGhlIHNhbXBsZSBub25jZQ==")
+      === Right "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+websockets.util.handshakeRequestDecoder : '{Exception, Decode} HttpRequest
+websockets.util.handshakeRequestDecoder = do
+  use Bytes ++
+  delimiter = 0xs0d0a0d0a
+  bytes = consumeUntil delimiter
+  HttpRequest.fromStream do emit (bytes ++ delimiter)
+
+websockets.util.magicKeyString : Text
+websockets.util.magicKeyString = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+websockets.WebSocket.close : WebSocket ->{IO, Exception} ()
+websockets.WebSocket.close = WebSocket.closer >> force
+
+websockets.WebSocket.closer : WebSocket -> '{IO, Exception} ()
+websockets.WebSocket.closer = cases WebSocket _ _ closer -> closer
+
+websockets.WebSocket.closer.modify :
+  ('{IO, Exception} () ->{g} '{IO, Exception} ()) -> WebSocket ->{g} WebSocket
+websockets.WebSocket.closer.modify f = cases
+  WebSocket send receiver closer -> WebSocket send receiver (f closer)
+
+websockets.WebSocket.closer.set : '{IO, Exception} () -> WebSocket -> WebSocket
+websockets.WebSocket.closer.set closer1 = cases
+  WebSocket send receiver _ -> WebSocket send receiver closer1
+
+websockets.WebSocket.doc : Doc
+websockets.WebSocket.doc =
+  {{
+  A WebSocket connection. The primary operations on a WebSocket are:
+  
+  * {{ docLink (docEmbedTermLink do WebSocket.send) }} to send a message.
+  * {{ docLink (docEmbedTermLink do WebSocket.receive) }} to receive a message
+    (blocking until one arrives).
+  * {{ docLink (docEmbedTermLink do WebSocket.close) }} to signal to the other
+    end of the connection that the connection should be closed.
+  }}
+
+websockets.WebSocket.receive : WebSocket ->{IO, Exception} Message
+websockets.WebSocket.receive = WebSocket.receiver >> force
+
+websockets.WebSocket.receiver : WebSocket -> '{IO, Exception} Message
+websockets.WebSocket.receiver = cases WebSocket _ receiver _ -> receiver
+
+websockets.WebSocket.receiver.modify :
+  ('{IO, Exception} Message ->{g} '{IO, Exception} Message)
+  -> WebSocket
+  ->{g} WebSocket
+websockets.WebSocket.receiver.modify f = cases
+  WebSocket send receiver closer -> WebSocket send (f receiver) closer
+
+websockets.WebSocket.receiver.set :
+  '{IO, Exception} Message -> WebSocket -> WebSocket
+websockets.WebSocket.receiver.set receiver1 = cases
+  WebSocket send _ closer -> WebSocket send receiver1 closer
+
+websockets.WebSocket.send : WebSocket -> Message ->{IO, Exception} ()
+websockets.WebSocket.send = cases WebSocket send _ _ -> send
+
+websockets.WebSocket.send.modify :
+  ((Message ->{IO, Exception} ()) ->{g} Message ->{IO, Exception} ())
+  -> WebSocket
+  ->{g} WebSocket
+websockets.WebSocket.send.modify f = cases
+  WebSocket send receiver closer -> WebSocket (f send) receiver closer
+
+websockets.WebSocket.send.set :
+  (Message ->{IO, Exception} ()) -> WebSocket -> WebSocket
+websockets.WebSocket.send.set send1 = cases
+  WebSocket _ receiver closer -> WebSocket send1 receiver closer
+
+websockets.WebSocket.threadSafeWebSocket :
+  Connection -> Endpoint -> Nat -> Bytes ->{IO} WebSocket
+websockets.WebSocket.threadSafeWebSocket
+  connection endpoint maxSendFrameSize initialReceiveBuffer =
+  receive : '{IO, Exception} Message
+  receive =
+    receiveMutex = Signal.new (Some initialReceiveBuffer)
+    do
+      use Changes write
+      use Exception raise
+      previousLeftovers = change receiveMutex do match Changes.read with
+        Some leftovers ->
+          write None
+          leftovers
+        None           -> Changes.retry
+      go =
+        do
+          withConnection connection do
+            decodePartial
+              (Abort.toOptional do
+                if Bytes.isEmpty previousLeftovers then ()
+                else remit previousLeftovers
+                protocol.receive())
+      handle tryEval do Throw.toException toFailure go
+      with cases
+        { (message, leftovers) } ->
+          change receiveMutex do write (Some leftovers)
+          getOrElse'
+            (do
+              raise
+                (Failure (typeLink WebSocketClosed) "WebSocket closed" (Any ())))
+            message
+        { raise f -> _ } ->
+          change receiveMutex do write (Some Bytes.empty)
+          raise f
+  send =
+    frameBytes : Frame ->{IO} Bytes
+    frameBytes frame =
+      maskingKey = if isClient endpoint then Some (randomBytes 4) else None
+      encoder maskingKey frame
+    sendMutex = Mutex.new()
+    message ->
+      withMutex sendMutex do
+        toConnection
+          connection
+          (Stream.map frameBytes do toFrames maxSendFrameSize message)
+  close = do Connection.send connection (encoder None (Close None))
+  WebSocket send receive close
+
+websockets.WebSocket.threadSafeWebSocket.doc : Doc
+websockets.WebSocket.threadSafeWebSocket.doc =
+  use WebSocket send
+  {{
+  {{
+  docExample 4 do
+    connection endpoint maxSendFrameSize initialReceiveBuffer ->
+      threadSafeWebSocket
+        connection endpoint maxSendFrameSize initialReceiveBuffer }} creates a
+  {type WebSocket} wrapper for the underlying connection.
+  
+  `connection` is the network connection for the WebSocket. The WebSocket
+  handshake should occur __before__ calling
+  {{ docLink (docEmbedTermLink do threadSafeWebSocket) }}, which is handled by
+  the relevant HTTP client and HTTP server logic.
+  
+  `endpoint` denotes whether this is the client or server end of the
+  connection. If it is {Client} then all {{ docLink (docEmbedTermLink do send)
+  }} operations will be masked.
+  
+  `maxSendFrameSize` is the maximum number of bytes that should be sent in a
+  single WebSocket frame. Messages beyond this size will be split into multiple
+  frames.
+  
+  `initialReceiveBuffer` is a (possibly empty) sequence of bytes that should be
+  read as part of the initial {{
+  docLink (docEmbedTermLink do WebSocket.receive) }} call. This is used to work
+  around a potential race condition in which the server sends an upgrade HTTP
+  response immediately followed by a WebSocket message and the client receives
+  both with a single {Socket.receive} call.
+  
+  It is safe to use the {{ docLink (docEmbedTermLink do send) }} and {{
+  docLink (docEmbedTermLink do WebSocket.receive) }} functions on the returned
+  {type WebSocket} from multiple threads. The implementation ensures that
+  bytes/frames from separate messages are not interwoven.
+  }}
+````
+
+## Code style conventions
