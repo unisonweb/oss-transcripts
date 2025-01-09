@@ -1,6 +1,6 @@
 # Auth
 
-This project contains sample Unison Cloud applications and stubs for practicing writing Unison Cloud services.
+This project provides an ability and interpreter for easily adding OAuth2 authentication to your application.
 
 ## Library contents list
 

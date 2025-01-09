@@ -1,0 +1,5127 @@
+type attributes.Defer
+  =
+
+type attributes.Memo
+  =
+
+structural type Binary d a
+  = One a
+  | Two a (d (Binary d a)) (d (Binary d a))
+
+structural type Buffer d a
+  = Empty Nat
+  | Buffer Nat Nat [a] (d (Buffer d (d [a]))) [a]
+
+type Chain d a
+  = Cons Nat (Binary d (a, Hash, Hash)) (Chain d a)
+  | Empty
+
+type Clock
+  = { head : Set Bytes, history : Set Bytes }
+
+type Dataset d a
+  = Union Nat Nat a a (Dataset d a) (Dataset d a)
+  | Empty
+  | Leaf a
+  | D Hash Nat a a (d (Dataset d a))
+
+type DVar a
+  = { lastNonce : Nat, time : TrimClock, values : Set a }
+
+type Ebt a
+  = One (Hashed a) a
+  | Split (Optional a) [Hashed (Ebt a)]
+  | Empty
+
+ability Fold e where
+  foldSequential :
+    r -> (r -> e ->{Remote, Scratch} r) ->{Fold e} distributed_6_0_0.Value r
+  fold :
+    (e ->{Remote, Scratch} r)
+    -> r
+    -> (r -> r ->{Remote, Scratch} r)
+    ->{Fold e} distributed_6_0_0.Value r
+  fork : '{Remote, Scratch, Fold e} r ->{Fold e} distributed_6_0_0.Value r
+
+type Fold.View a b
+  = View (∀ r. '{Fold b} r ->{Fold a} r)
+
+structural type Index k m a
+  = Index (distributed_6_0_0.Value (m, Two Mode a (Index k m a)))
+
+type Journal d a
+  = { buffer : Buffer d a, committed : d (Chain d (Buffer d a)) }
+
+type LwwMap k v
+  = LwwMap (Map k (DVar v))
+
+type Mode
+  = Parallel
+  | Sequential
+
+type Op g s
+  = Op s (s ->{g} s)
+
+type Range k
+  = Range k k
+  | Empty
+
+type Rbt a
+  = One a
+  | Split Nat (Rbt a) [Rbt a]
+  | Empty
+
+type Rope d a
+  = Rope (Chunk a) Nat (Buffer d a)
+
+type Rope.Chunk a
+  = { startsWith : a -> a -> Boolean,
+      take : Nat -> a -> a,
+      drop : Nat -> a -> a,
+      size : a -> Nat }
+
+type Semispace g m k v
+  = Semispace (k -> m ->{g} Optional v) (k -> v -> m ->{g} m) m m m
+
+type SemispaceCache a
+  = SemispaceCache (TVar Nat) (TVar (TMap a)) (TVar (TMap a))
+
+structural type Seq k a
+  = Seq (distributed_6_0_0.Value (Two Mode a (Seq k a)))
+
+type Stamp
+  = Stamp Stamp.Id Event
+
+type Stamp.Event
+  = Branch Nat Stamp.Event Stamp.Event
+  | StampEvent Nat
+
+type Stamp.Id
+  = Branch Stamp.Id Stamp.Id
+  | StampId Boolean
+
+ability Storage d where
+  restore : d a ->{Storage d} a
+  save : a ->{Storage d} d a
+
+type Storage.RAM a
+  = RAM a
+
+type StorageProvider
+  = StorageProvider
+      (∀ k a. k a -> Hashed a)
+      (∀ a. Hashed a ->{Remote} distributed_6_0_0.Value (Optional a))
+      (∀ a. Hashed a ->{Remote} distributed_6_0_0.Value ())
+      (∀ a. Hashed a -> a ->{Remote} distributed_6_0_0.Value (Hashed a))
+
+structural type structures.Id a
+  = Id a
+
+structural type structures.Two m a r
+  = Empty
+  | Two m r r
+  | One a
+
+type TrimClock
+  = { nonce : Nat, head : Set Bytes, seen : Map Bytes (Nat, Expiring) }
+
+type TrimClock.Expiring
+  = Active
+  | Expiring
+
+type VectorClock k
+  = { ticks : Map k (Nat, Expiring) }
+
+Binary.root : Binary d a -> a
+Binary.root = cases
+  Binary.One a     -> a
+  Binary.Two a _ _ -> a
+
+Binary.toView :
+  (∀ x. d x -> distributed_6_0_0.Value x)
+  -> Binary d a
+  -> Binary distributed_6_0_0.Value a
+Binary.toView f = cases
+  Binary.One a -> Binary.One a
+  Binary.Two a dl dr ->
+    Binary.Two
+      a
+      (Value.map (Binary.toView f) (f dl))
+      (Value.map (Binary.toView f) (f dr))
+
+Buffer.arity : Buffer d a -> Nat
+Buffer.arity = cases
+  Buffer.Empty arity   -> arity
+  Buffer arity _ _ _ _ -> arity
+
+Buffer.at! : Nat -> Buffer d a ->{Abort, Storage d} a
+Buffer.at! i = cases
+  Buffer arity n hds mid tls
+    | i Nat.< List.size hds           -> List.at! i hds
+    | i Nat.>= n Nat.- List.size tls  ->
+      List.at! (i Nat.- (n Nat.- List.size tls)) tls
+    | otherwise                       ->
+      use Nat - /
+      i' = i - List.size hds
+      child = i' / arity
+      j = Nat.mod i' arity
+      List.at! j (restore (Buffer.at! child (restore mid)))
+  Buffer.Empty _ -> abort
+
+Buffer.cons : a -> Buffer d a ->{Storage d} Buffer d a
+Buffer.cons a = cases
+  Buffer.Empty arity ->
+    Buffer arity 1 [a] (Storage.save (Buffer.Empty arity)) []
+  Buffer arity n hds mid tls ->
+    if List.size hds Nat.== arity then
+      use Nat +
+      use Storage save
+      hds' = save hds
+      Buffer arity (n + 1) [a] (save (Buffer.cons hds' (restore mid))) tls
+    else Buffer arity (n Nat.+ 1) (a List.+: hds) mid tls
+
+Buffer.empty : Nat -> Buffer d a
+Buffer.empty arity =
+  use Nat <
+  if arity < 2 then bug ("arity must be >= 2", 2) else Buffer.Empty arity
+
+Buffer.findSorted :
+  (a ->{g, Abort, Storage d} Ordering)
+  -> Buffer d a
+  ->{g, Storage d} Optional a
+Buffer.findSorted f b = toOptional! do findSorted! f b
+
+test> Buffer.findSorted.tests = test.verify do
+  ram do
+    use Random natIn
+    Each.repeat 10
+    ns = Nat.range 0 (natIn 0 1000)
+    b = Buffer.fromList (natIn 2 25) ns
+    b2 = List.foldRight Buffer.cons (Buffer.empty (natIn 2 100)) ns
+    ok i =
+      use Universal ordering
+      ensureEqual (findSorted (ordering i) b) (Some i)
+      ensureEqual (findSorted (ordering i) b2) (Some i)
+    up.List.map_ ok ns
+
+Buffer.findSorted! :
+  (a ->{g, Abort, Storage d} Ordering) -> Buffer d a ->{g, Abort, Storage d} a
+Buffer.findSorted! ord = cases
+  Buffer.Empty _ -> abort
+  Buffer _ sz ls mid rs ->
+    use Nat ==
+    ordInner das = match restore das with
+      first +: mid :+ last ->
+        match ord last with
+          Greater -> Greater
+          Less    ->
+            match ord first with
+              Less -> Less
+              _    -> Equal
+          Equal   -> Equal
+      _                    -> Greater
+    goMid mid =
+      match binarySearch ord (restore (Buffer.findSorted! ordInner mid)) with
+        Left _       -> abort
+        Right (a, _) -> a
+    match binarySearch ord ls with
+      Right (a, _) -> a
+      Left n       | n == List.size ls ->
+        match binarySearch ord rs with
+          Right (a, _) -> a
+          Left 0       -> goMid (restore mid)
+          Left _       -> abort
+      Left _       -> abort
+
+Buffer.first : Buffer d a ->{Storage d} Optional a
+Buffer.first = cases
+  Buffer.Empty _        -> None
+  Buffer _ sz ls mid rs ->
+    match ls with
+      a +: _ -> Some a
+      []     ->
+        match Buffer.first (restore mid) with
+          None    -> List.head rs
+          Some as -> List.head (restore as)
+
+Buffer.foldLeft :
+  (b -> a ->{g, Storage d} b) -> b -> Buffer d a ->{g, Storage d} b
+Buffer.foldLeft f z = cases
+  Buffer.Empty _ -> z
+  Buffer _ _ hds mid tls ->
+    z1 = List.foldLeft f z hds
+    z2 =
+      Buffer.foldLeft (z as -> List.foldLeft f z (restore as)) z1 (restore mid)
+    z3 = List.foldLeft f z2 tls
+    z3
+
+Buffer.foldRight :
+  (a -> b ->{g, Storage d} b) -> b -> Buffer d a ->{g, Storage d} b
+Buffer.foldRight f z = cases
+  Buffer.Empty _ -> z
+  Buffer _ _ hds mid tls ->
+    z1 = List.foldRight f z tls
+    z2 =
+      Buffer.foldRight
+        (as z -> List.foldRight f z (restore as)) z1 (restore mid)
+    z3 = List.foldRight f z2 hds
+    z3
+
+Buffer.fromList : Nat -> [a] ->{Storage d} Buffer d a
+Buffer.fromList arity as = snocs as (Buffer.empty arity)
+
+Buffer.last : Buffer d a ->{Storage d} Optional a
+Buffer.last = cases
+  Buffer.Empty _        -> None
+  Buffer _ sz ls mid rs ->
+    match rs with
+      _ :+ a -> Some a
+      []     ->
+        match Buffer.last (restore mid) with
+          None    -> List.last ls
+          Some as -> List.last (restore as)
+
+Buffer.map :
+  (a -> b)
+  -> Buffer distributed_6_0_0.Value a
+  -> Buffer distributed_6_0_0.Value b
+Buffer.map f = cases
+  Buffer.Empty arity -> Buffer.Empty arity
+  Buffer n m l mid r ->
+    Buffer
+      n
+      m
+      (List.map f l)
+      (Value.map (Buffer.map (Value.map (List.map f))) mid)
+      (List.map f r)
+
+Buffer.memoFold :
+  Location {Scratch, g}
+  -> (a ->{Remote, Scratch} b)
+  -> b
+  -> (b -> b ->{Remote, Scratch} b)
+  -> Buffer distributed_6_0_0.Value a
+  ->{Remote} b
+Buffer.memoFold scratch f z op = cases
+  Buffer.Empty _ -> z
+  Buffer _ _ l mid r ->
+    use Remote fork
+    use Value get
+    op' b1 b0 = op b0 b1
+    bl = fork scratch do foldb f op' z l
+    br = fork scratch do foldb f op' z r
+    bmid =
+      Value.memo
+        scratch
+        (Value.map (Buffer.memoFold scratch (get >> foldb f op' z) z op) mid)
+    eval scratch do op (op (await br) (bmid |> get)) (await bl)
+
+Buffer.memoFoldSequential :
+  Location {Scratch, g}
+  -> b
+  -> (b -> a ->{Remote, Scratch} b)
+  -> Buffer distributed_6_0_0.Value a
+  ->{Remote} b
+Buffer.memoFoldSequential scratch z f = cases
+  Buffer.Empty _ -> z
+  Buffer _ _ l mid r ->
+    eval scratch do
+      use List foldRight
+      use Value get map
+      f' a b = f b a
+      z2 = foldRight f' z r
+      foldMid b v = map (as -> eval scratch do foldRight f' b as) v |> get
+      z3 =
+        Value.memo
+          scratch (map (Buffer.memoFoldSequential scratch z2 foldMid) mid)
+      z4 = foldRight f' (get z3) l
+      z4
+
+Buffer.size : Buffer d a -> Nat
+Buffer.size = cases
+  Buffer.Empty _   -> 0
+  Buffer _ n _ _ _ -> n
+
+Buffer.snoc : a -> Buffer d a ->{Storage d} Buffer d a
+Buffer.snoc a = cases
+  Buffer.Empty arity ->
+    Buffer arity 1 [] (Storage.save (Buffer.Empty arity)) [a]
+  Buffer arity n hds mid tls ->
+    if List.size tls Nat.== arity then
+      use Nat +
+      use Storage save
+      tls' = save tls
+      Buffer arity (n + 1) hds (save (Buffer.snoc tls' (restore mid))) [a]
+    else Buffer arity (n Nat.+ 1) hds mid (tls List.:+ a)
+
+Buffer.snocs : [a] -> Buffer d a ->{Storage d} Buffer d a
+Buffer.snocs as b =
+  use Buffer Empty snocs
+  use List drop take
+  use Nat +
+  n' = Buffer.size b + Nat.min (List.size as) (Buffer.arity b)
+  match as with
+    [] -> b
+    _ ->
+      match b with
+        Empty arity ->
+          b' = Buffer arity n' [] (Storage.save (Empty arity)) (take arity as)
+          snocs (drop arity as) b'
+        Buffer arity n hds mid [] ->
+          b' = Buffer arity n' hds mid (take arity as)
+          snocs (drop arity as) b'
+        _ -> List.foldLeft (b a -> Buffer.snoc a b) b as
+
+test> Buffer.tests.test1 = test.verify do
+  ram do
+    use Buffer foldLeft
+    use List +: :+
+    use Nat ==
+    use Random natIn
+    Each.repeat 100
+    arity = natIn 2 100
+    elems = List.replicate (natIn 0 20) do natIn 0 1000
+    b1 = Buffer.fromList arity elems
+    b2 = List.foldRight Buffer.cons (Buffer.empty arity) elems
+    elems1 = foldLeft (:+) [] b1
+    elems2 = Buffer.foldRight (+:) [] b1
+    elems3 = foldLeft (:+) [] b2
+    ensureEqual elems1 elems2
+    ensureEqual (Buffer.size b1) (List.size elems)
+    ensureEqual (Buffer.size b2) (List.size elems)
+    ensureEqual (List.size elems) (List.size elems1)
+    ensureEqual elems3 elems1
+    ensure (Buffer.size b1 == Buffer.size b2)
+    ensure (Buffer.size b1 == List.size elems)
+    ok i =
+      go _ =
+        ensure (Buffer.at! i b1 == List.at! i elems)
+        ensure (Buffer.at! i b2 == List.at! i elems)
+      match toOptional! go with
+        None -> test.raiseFailure "out of bounds" (b1, b2, elems, i)
+        _    -> ()
+    Nat.range 0 (List.size elems) |> up.List.map_ ok
+
+Buffer.toList : Buffer d a ->{Storage d} [a]
+Buffer.toList =
+  use List :+
+  Buffer.foldLeft (:+) []
+
+Buffer.toList.doc : Doc
+Buffer.toList.doc =
+  {{
+  Convert a {type Buffer} to a {type List}.
+
+  ```
+  ram do
+    b = Buffer.fromList 2 (Nat.range 0 8)
+    Buffer.toList b
+  ```
+  }}
+
+test> Buffer.toList.tests = test.verify do
+  use List unfold
+  use Random natIn
+  Each.repeat 25
+  arity = natIn 2 25
+  nums = Nat.range 0 (natIn 0 100)
+  ram do
+    buf = Buffer.fromList arity nums
+    ensureEqual (Buffer.toList buf) nums
+    ensureEqual (unfold buf Buffer.uncons) nums
+    swap = Optional.map cases (a, b) -> (b, a)
+    ensureEqual (unfold buf (Buffer.unsnoc >> swap) |> List.reverse) nums
+
+Buffer.toView :
+  (∀ x. d x -> distributed_6_0_0.Value x)
+  -> Buffer d a
+  -> Buffer distributed_6_0_0.Value a
+Buffer.toView f = cases
+  Buffer.Empty arity -> Buffer.Empty arity
+  Buffer n m l mid r ->
+    Buffer n m l (Value.map (Buffer.toView f >> Buffer.map f) (f mid)) r
+
+Buffer.uncons : Buffer d a ->{Storage d} Optional (a, Buffer d a)
+Buffer.uncons = cases
+  Buffer.Empty _ -> None
+  Buffer arity sz (h +: hds) mids tls ->
+    Some (h, Buffer arity (sz Nat.- 1) hds mids tls)
+  Buffer arity sz [] mids tls@(hd +: tl)| sz Nat.== List.size tls  ->
+    Some (hd, Buffer arity (sz Nat.- 1) [] mids tl)
+  Buffer arity sz [] mids tls ->
+    use Buffer uncons
+    mids' = restore mids
+    match uncons mids' with
+      None -> None
+      Some (das, mids) ->
+        uncons (Buffer arity sz (restore das) (Storage.save mids) tls)
+
+Buffer.uncons.doc : Doc
+Buffer.uncons.doc =
+  use Buffer fromList uncons
+  {{
+  `` uncons b `` returns the first element of `b`, and a {type Buffer} of the
+  remaining elements.
+
+  # Examples
+
+    ```
+    ram do
+      b = fromList 64 [1, 2, 3]
+      f = cases (hd, tl) -> (hd, Buffer.toList tl)
+      Optional.map f (uncons b)
+    ```
+
+    ```
+    ram do
+      b = fromList 64 []
+      uncons b
+    ```
+  }}
+
+Buffer.unsnoc : Buffer d a ->{Storage d} Optional (Buffer d a, a)
+Buffer.unsnoc = cases
+  Buffer.Empty _ -> None
+  Buffer arity sz hds mids (init :+ last) ->
+    Some (Buffer arity (sz Nat.- 1) hds mids init, last)
+  Buffer arity sz hds@(init :+ last) mids []| sz Nat.== List.size hds  ->
+    Some (Buffer arity (sz Nat.- 1) init mids [], last)
+  Buffer arity sz hds mids tls ->
+    use Buffer unsnoc
+    mids' = restore mids
+    match unsnoc mids' with
+      None -> None
+      Some (mids, das) ->
+        unsnoc (Buffer arity sz hds (Storage.save mids) (restore das))
+
+Buffer.unsnoc.doc : Doc
+Buffer.unsnoc.doc =
+  use Buffer fromList unsnoc
+  {{
+  `` unsnoc b `` returns the last element of `b`, and a {type Buffer} of the
+  remaining elements.
+
+  # Examples
+
+    ```
+    ram do
+      b = fromList 64 [1, 2, 3]
+      f = cases (init, last) -> (Buffer.toList init, last)
+      Optional.map f (unsnoc b)
+    ```
+
+    ```
+    ram do
+      b = fromList 64 []
+      unsnoc b
+    ```
+  }}
+
+(Chain.<=) : Chain d a -> Chain d a ->{Storage d} Boolean
+(Chain.<=) = Chain.lteq
+
+Chain.at : Nat -> Chain d a ->{Storage d} Optional a
+Chain.at i j = toOptional! do Chain.at! i j
+
+Chain.at! : Nat -> Chain d a ->{Abort, Storage d} a
+Chain.at! n j = at1 (atHash! n j)
+
+Chain.atHash! : Nat -> Chain d a ->{Abort, Storage d} (a, Hash, Hash)
+Chain.atHash! i = cases
+  Chain.Empty -> abort
+  Chain.Cons n t rest ->
+    use Nat - / <
+    treeAt : Nat -> Nat -> Binary d x ->{Abort, Storage d} x
+    treeAt = cases
+      _, 0, t -> Binary.root t
+      n, i, Binary.Two _ t1 t2 ->
+        i' = i - 1
+        if i' < n / 2 then treeAt (n / 2) i' (restore t1)
+        else treeAt (n / 2) (i' - n / 2) (restore t2)
+      _, _, _ -> abort
+    if i < n then treeAt n i t else Chain.atHash! (i - n) rest
+
+Chain.cons : a -> Chain d a ->{Storage d} Chain d a
+Chain.cons a j = cons' defaultHash (a, Chain.hash j) j
+
+Chain.cons' :
+  (∀ x. x -> Hash) -> (a, Hash) -> Chain d a ->{Storage d} Chain d a
+Chain.cons' hashFn tup j =
+  use Binary One
+  use Chain Cons
+  use Nat + ==
+  use Storage save
+  (a, h1) = tup
+  hj = Chain.hash j
+  h = hashFn (a, hj)
+  hd = (a, h, h1)
+  match j with
+    Cons size1 t1 (Cons size2 t2 tail) ->
+      if size1 == size2 then
+        size = 1 + size1 + size2
+        t12 = Binary.Two hd (save t1) (save t2)
+        Cons size t12 tail
+      else Cons 1 (One hd) j
+    _                                  -> Cons 1 (One hd) j
+
+Chain.consMany : [a] -> Chain d a ->{Storage d} Chain d a
+Chain.consMany as j = match as with
+  []      -> j
+  as :+ a -> Chain.consMany as (Chain.cons a j)
+
+Chain.defaultHash : a -> Hash
+Chain.defaultHash a = Hash (up.crypto.blake2b_256 a)
+
+Chain.drop : Nat -> Chain d a ->{Storage d} Chain d a
+Chain.drop k j =
+  use Nat -
+  takeEnd (Chain.size j - k) j
+
+Chain.drop1 : Chain d a ->{Storage d} Chain d a
+Chain.drop1 = cases
+  Chain.Empty -> Chain.Empty
+  Chain.Cons 1 _ tl -> tl
+  Chain.Cons n (Binary.Two x t1 t2) tl ->
+    Chain.Cons
+      (n Nat./ 2) (restore t1) (Chain.Cons (n Nat./ 2) (restore t2) tl)
+  j -> bug ("invalid journal", j)
+
+Chain.empty : Chain d a
+Chain.empty = Chain.Empty
+
+Chain.equal : Chain d1 a1 -> Chain d a -> Boolean
+Chain.equal j1 j2 =
+  use Chain hash
+  hash j1 === hash j2
+
+Chain.foldSequential :
+  b -> (a -> b ->{Remote} b) -> Chain distributed_6_0_0.Value a ->{Remote} b
+Chain.foldSequential z f = cases
+  Chain.Empty        -> z
+  Chain.Cons _ bt tl ->
+    use Value get map
+    foldBt : b -> Binary distributed_6_0_0.Value (a, Hash, Hash) ->{Remote} b
+    foldBt z1 = cases
+      Binary.One (a, _, _)       -> f a z1
+      Binary.Two (a, _, _) dl dr ->
+        z2 = map (foldBt z1) dr |> get
+        z3 = map (foldBt z2) dl |> get
+        f a z3
+    z2 = Chain.foldSequential z f tl
+    foldBt z2 bt
+
+Chain.fromList : [a] ->{Storage d} Chain d a
+Chain.fromList = List.foldRight Chain.cons Chain.empty
+
+Chain.hash : Chain d a -> Hash
+Chain.hash = cases
+  Chain.Empty      -> Hash 0xs
+  Chain.Cons _ b _ -> at2 (Binary.root b)
+
+Chain.hash.parent : Chain d a -> Hash
+Chain.hash.parent = cases
+  Chain.Empty      -> Hash 0xs
+  Chain.Cons _ b _ -> at3 (Binary.root b)
+
+Chain.head : Chain d a -> Optional a
+Chain.head = cases
+  Chain.Empty      -> None
+  Chain.Cons _ t _ -> Some (at1 (Binary.root t))
+
+Chain.head! : Chain d a ->{Abort} a
+Chain.head! = cases
+  Chain.Empty      -> abort
+  Chain.Cons _ t _ -> at1 (Binary.root t)
+
+Chain.head' : Chain d a -> Optional (a, Hash, Hash)
+Chain.head' = cases
+  Chain.Empty      -> None
+  Chain.Cons _ t _ -> Some (Binary.root t)
+
+Chain.join : Chain d a -> Chain d a ->{Storage d} Chain d a
+Chain.join j1 j2 =
+  use Chain equal size
+  use Nat -
+  j0 = lca j1 j2
+  if equal j0 j1 then j2
+  else
+    if equal j0 j2 then j1
+    else
+      s0 = size j0
+      unchain j chain =
+        go prevHash j chain =
+          match chain with
+            [] -> ([], j)
+            tl :+ (a, h, hp) ->
+              if hp === prevHash then
+                go (defaultHash (a, hp)) (cons' defaultHash (a, hp) j) tl
+              else (chain, j)
+        match chain with
+          [] -> ([], j)
+          tl :+ (a, h, hp) ->
+            go (defaultHash (a, hp)) (cons' defaultHash (a, hp) j) tl
+      hj = Chain.hash j0
+      pickLeft = cases
+        [], a                                    -> true
+        a, []                                    -> false
+        t1 :+ (a1, h1, hp1), t2 :+ (a2, h2, hp2) ->
+          h1' = defaultHash (a1, hj)
+          h2' = defaultHash (a2, hj)
+          match Universal.ordering h1' h2' with
+            Less    -> true
+            Greater -> false
+            Equal   -> pickLeft t1 t2
+      go = cases
+        [], [], j               -> j
+        [], ys :+ (a, _, hp), j -> go [] ys (cons' defaultHash (a, hp) j)
+        xs :+ (a, _, hp), [], j -> go xs [] (cons' defaultHash (a, hp) j)
+        x, y, j                 ->
+          if pickLeft x y then
+            (x', j') = unchain j x
+            go x' y j'
+          else
+            (y', j') = unchain j y
+            go x y' j'
+      go (takeList (size j2 - s0) j2) (takeList (size j1 - s0) j1) j0
+
+Chain.join.doc.implementationNotes : Doc
+Chain.join.doc.implementationNotes =
+  {{
+  {Chain.join} uses an efficient logarithmic lookup to find the lowest common
+  ancestor (LCA), adapted from
+  [this article by Ed Kmett](https://www.schoolofhaskell.com/user/edwardk/online-lca)
+  and also [this Haskell package](https://hackage.haskell.org/package/lca).
+
+  The general idea: alongside each element of the {type Chain}, we keep a hash
+  of all the previous elements. To find the lowest common ancestor, we start
+  from the beginning of both chains and do a
+  [galloping search](https://en.wikipedia.org/wiki/Exponential_search) to find
+  the first position where the hashes differ. This is the LCA and takes
+  logarithmic time.
+
+  After finding the LCA, the two segments of the {type Chain} past the LCA are
+  arbitrarily but deterministically ordered (using the hash of each segment) to
+  form a new {type Chain}.
+  }}
+
+Chain.joins : [Chain d a] ->{Storage d} Chain d a
+Chain.joins = foldb Function.id Chain.join Chain.empty
+
+Chain.lca : Chain d a -> Chain d a ->{Storage d} Chain d a
+Chain.lca xs0 ys0 =
+  use Binary Two root
+  use Chain Cons size
+  use Nat /
+  nxs = size xs0
+  nys = size ys0
+  sameT t1 t2 = ((at2 (root t1)) : Hash) === at2 (root t2)
+  goT = cases
+    w, Two _ la0 ra0, Two _ lb0 rb0, ts ->
+      w2 = w / 2
+      let
+        (la, lb) = (restore la0, restore lb0)
+        if sameT la lb then Cons w2 la (Cons w2 (restore ra0) ts)
+        else
+          (ra, rb) = (restore ra0, restore rb0)
+          if sameT ra rb then goT w2 la lb (Cons w2 ra ts) else goT w2 ra rb ts
+    _, _, _, ts                         -> ts
+  go = cases
+    h@(Cons w x xs), Cons _ y ys ->
+      if sameT x y then h
+      else if Chain.equal xs ys then goT w x y xs else go xs ys
+    _, _ -> Chain.Empty
+  match Universal.ordering nxs nys with
+    Less    -> go xs0 (takeEnd nxs ys0)
+    Equal   -> go xs0 ys0
+    Greater -> go (takeEnd nys xs0) ys0
+
+Chain.lteq : Chain d a -> Chain d a ->{Storage d} Boolean
+Chain.lteq j1 j2 = Chain.equal (lca j1 j2) j1
+
+Chain.map :
+  (i -> o)
+  -> Chain distributed_6_0_0.Value i
+  -> Chain distributed_6_0_0.Value o
+Chain.map f = cases
+  Chain.Empty -> Chain.Empty
+  Chain.Cons n bt tl ->
+    use Binary One Two
+    mapBt = cases
+      One (a, h, h2) -> One (f a, h, h2)
+      Two (a, h, h2) l r ->
+        Two (f a, h, h2) (Value.map mapBt l) (Value.map mapBt r)
+    Chain.Cons n (mapBt bt) (Chain.map f tl)
+
+Chain.memoFold :
+  Location {Scratch, g}
+  -> (a ->{Remote, Scratch} b)
+  -> b
+  -> (b -> b ->{Remote, Scratch} b)
+  -> Chain distributed_6_0_0.Value a
+  ->{Remote} b
+Chain.memoFold scratch f z op = cases
+  Chain.Empty        -> z
+  Chain.Cons _ bt tl ->
+    use Remote fork
+    use Value delay flatMap get memo
+    use distributed_6_0_0 Value
+    foldBt : Binary Value (a, x, y) ->{Remote} b
+    foldBt = cases
+      Binary.One (a, _, _)       -> eval scratch do f a
+      Binary.Two (a, _, _) dl dr ->
+        b1 = fork here! do flatMap memoFoldBt dr |> get
+        b2 = fork here! do flatMap memoFoldBt dl |> get
+        eval scratch do op (op (await b1) (await b2)) (f a)
+    memoFoldBt : Binary Value (a, x, y) ->{Remote} Value b
+    memoFoldBt bt = memo scratch (delay do foldBt bt)
+    v = delay do
+      bhd = fork here! do memoFoldBt bt |> get
+      btl = fork here! do Chain.memoFold scratch f z op tl
+      eval scratch do op (await btl) (await bhd)
+    memo scratch v |> get
+
+Chain.memoFoldSequential :
+  Location {Scratch, g}
+  -> b
+  -> (b -> a ->{Remote, Scratch} b)
+  -> Chain distributed_6_0_0.Value a
+  ->{Remote} b
+Chain.memoFoldSequential scratch z f = cases
+  Chain.Empty        -> z
+  Chain.Cons _ bt tl ->
+    use Value delay flatMap get memo
+    use distributed_6_0_0 Value
+    foldBt : b -> Binary Value (a, x, y) ->{Remote} b
+    foldBt z1 = cases
+      Binary.One (a, _, _)       -> eval scratch do f z1 a
+      Binary.Two (a, _, _) dl dr ->
+        z2 = flatMap (memoFoldBt z1) dr |> get
+        z3 = flatMap (memoFoldBt z2) dl |> get
+        eval scratch do f z3 a
+    memoFoldBt : b -> Binary Value (a, x, y) ->{Remote} Value b
+    memoFoldBt z bt = memo scratch (delay do foldBt z bt)
+    z2 = memo scratch (delay do Chain.memoFoldSequential scratch z f tl)
+    z2 |> flatMap (z2 -> memoFoldBt z2 bt) |> get
+
+Chain.one : a ->{Storage d} Chain d a
+Chain.one a = Chain.cons a Chain.empty
+
+Chain.size : Chain d a -> Nat
+Chain.size = cases
+  Chain.Empty       -> 0
+  Chain.Cons n _ tl -> n Nat.+ Chain.size tl
+
+Chain.takeEnd : Nat -> Chain d a ->{Storage d} Chain d a
+Chain.takeEnd k j =
+  use Chain Cons Empty
+  use Nat + - >=
+  use Universal ordering
+  goT n w t ts =
+    use Nat / ==
+    w2 = w / 2
+    match (t, ts) with
+      (Binary.Two _ l r, ts) ->
+        match ordering n w2 with
+          Less -> goT n w2 (restore r) ts
+          Equal -> Cons w2 (restore r) ts
+          Greater ->
+            if n == w - 1 then Cons w2 (restore l) (Cons w2 (restore r) ts)
+            else goT (n - w2) w2 (restore l) (Cons w2 (restore r) ts)
+      _ -> ts
+  go n = cases
+    _, Empty            -> Empty
+    k, xs@(Cons w t ts) ->
+      if k >= n then xs
+      else
+        match ordering k (n - w) with
+          Greater -> goT (k + w - n) w t ts
+          Equal   -> ts
+          Less    -> go (n - w) k ts
+  go (Chain.size j) k j
+
+Chain.takeList : Nat -> Chain d a ->{Storage d} [(a, Hash, Hash)]
+Chain.takeList n j =
+  use List :+
+  use Nat - ==
+  go acc n j =
+    if n == 0 then acc
+    else
+      match head' j with
+        None   -> acc
+        Some a -> go (acc :+ a) (n - 1) (drop1 j)
+  go [] n j
+
+Chain.toList : Chain d a ->{Storage d} [a]
+Chain.toList j = List.unfold j Chain.uncons
+
+Chain.toSeq : Nat -> Chain distributed_6_0_0.Value a -> Seq k a
+Chain.toSeq chunkSize j =
+  use Nat / >=
+  use Value delay flatMap pure
+  use distributed_6_0_0 Value
+  go : Chain Value a -> Seq k a
+  go = cases
+    Chain.Empty -> Seq (pure Two.Empty)
+    Chain.Cons n t tl ->
+      mode n = if n >= chunkSize then Parallel else Sequential
+      goT n = cases
+        Binary.One (a, _, _) -> pure (Two.One a)
+        Binary.Two (a, _, _) l r ->
+          use Two Two
+          m = mode n
+          lr =
+            delay do
+              Two
+                m
+                (Seq (flatMap (goT (n / 2)) l))
+                (Seq (flatMap (goT (n / 2)) r))
+          pure (Two m (Seq.one a) (Seq lr))
+      goTs : Nat -> Binary Value (a, Hash, Hash) -> Seq k a
+      goTs n bt = Seq (goT n bt)
+      Seq (delay do Two.Two (mode n) (goTs n t) (go tl))
+  go j
+
+Chain.toView :
+  (∀ x. d x -> distributed_6_0_0.Value x)
+  -> Chain d a
+  -> Chain distributed_6_0_0.Value a
+Chain.toView f = cases
+  Chain.Empty        -> Chain.Empty
+  Chain.Cons n bt tl -> Chain.Cons n (Binary.toView f bt) (Chain.toView f tl)
+
+Chain.trees : Chain d a -> [(Nat, Binary d (a, Hash, Hash))]
+Chain.trees = cases
+  Chain.Empty       -> []
+  Chain.Cons n t tl -> (n, t) List.+: Chain.trees tl
+
+Chain.uncons : Chain d a ->{Storage d} Optional (a, Chain d a)
+Chain.uncons = cases
+  Chain.Empty -> None
+  j           -> Optional.map (a -> (a, drop1 j)) (Chain.head j)
+
+Clock.head : Clock -> Set Bytes
+Clock.head = cases Clock head _ -> head
+
+Clock.head.modify : (Set Bytes ->{g} Set Bytes) -> Clock ->{g} Clock
+Clock.head.modify f = cases Clock head history -> Clock (f head) history
+
+Clock.head.normalized : Clock -> Set Bytes
+Clock.head.normalized c = Set.normalize (Clock.head c)
+
+Clock.head.set : Set Bytes -> Clock -> Clock
+Clock.head.set head1 = cases Clock _ history -> Clock head1 history
+
+Clock.history : Clock -> Set Bytes
+Clock.history = cases Clock _ history -> history
+
+Clock.history.modify : (Set Bytes ->{g} Set Bytes) -> Clock ->{g} Clock
+Clock.history.modify f = cases Clock head history -> Clock head (f history)
+
+Clock.history.set : Set Bytes -> Clock -> Clock
+Clock.history.set history1 = cases Clock head _ -> Clock head history1
+
+Clock.join : Clock -> Clock -> Clock
+Clock.join c1 c2 =
+  use Clock head
+  use Set union
+  use Universal lteq
+  if lteq c1 c2 then c2
+  else
+    if lteq c2 c1 then c1
+    else Clock (union (head c1) (head c2)) (union (history c1) (history c2))
+
+Clock.lteq : Clock -> Clock -> Boolean
+Clock.lteq c1 c2 = Set.subset (Clock.head c1) (history c2)
+
+Clock.tick : a -> Clock -> Clock
+Clock.tick = Clock.tick' up.crypto.blake2b_256
+
+Clock.tick' : ((a, Set Bytes) ->{g1} Bytes) -> a -> Clock ->{g1} Clock
+Clock.tick' algo a c =
+  hd' = algo (a, Clock.head.normalized c)
+  Clock (Set.singleton hd') (Set.insert hd' (history c))
+
+Dataset.contains : a -> Dataset d a ->{Storage d} Boolean
+Dataset.contains a d = isSome (findBy (Universal.ordering a) d)
+
+Dataset.empty : Dataset d a
+Dataset.empty = Dataset.Empty
+
+Dataset.findBy : (a ->{g} Ordering) -> Dataset d a ->{g, Storage d} Optional a
+Dataset.findBy ord = cases
+  Dataset.Empty         -> None
+  Leaf a                -> if ord a === Equal then Some a else None
+  Union _ _ min max l r ->
+    match ord min with
+      Less    -> None
+      Equal   -> Some min
+      Greater ->
+        match ord max with
+          Equal   -> Some max
+          Greater -> None
+          Less    ->
+            match Dataset.findBy ord l with
+              None -> Dataset.findBy ord r
+              o    -> o
+  D _ _ _ _ d           -> Dataset.findBy ord (restore d)
+
+Dataset.fromList : [a] ->{Storage d} Dataset d a
+Dataset.fromList = List.foldLeft (d a -> Dataset.insert a d) Dataset.empty
+
+Dataset.halve : Dataset d a ->{Storage d} (Dataset d a, Dataset d a)
+Dataset.halve = cases
+  Dataset.Empty     -> (Dataset.Empty, Dataset.Empty)
+  d@(Leaf _)        -> (d, Dataset.Empty)
+  Union _ _ _ _ l r -> (l, r)
+  D _ _ _ _ d       -> Dataset.halve (restore d)
+
+Dataset.hash : Dataset d a -> Hash
+Dataset.hash = cases
+  D hash _ _ _ _ -> hash
+  d              -> Hash (up.crypto.blake2b_256 d)
+
+Dataset.impl.minmaxBy :
+  (a ->{g} a ->{g1} Ordering)
+  -> Dataset d a
+  -> Dataset d a
+  ->{g, g1, Abort} (a, Dataset d a, a, a, Dataset d a, a)
+Dataset.impl.minmaxBy ord d1 d2 =
+  use Dataset range
+  (min1, max1) = range d1
+  (min2, max2) = range d2
+  if lteqBy ord min1 min2 then (min1, d1, max1, min2, d2, max2)
+  else (min2, d2, max2, min1, d1, max1)
+
+Dataset.impl.saveIfDeep : Dataset d a ->{Storage d} Dataset d a
+Dataset.impl.saveIfDeep d =
+  match d with
+    D _ _ _ _ _ -> d
+    Dataset.Empty -> d
+    Leaf _ -> d
+    Union sz depthToD min max l r ->
+      if depthToD Nat.> 6 then
+        D (Hash (up.crypto.blake2b_256 d)) sz min max (Storage.save d)
+      else d
+
+Dataset.insert : a -> Dataset d a ->{Storage d} Dataset d a
+Dataset.insert a d = insertBy Universal.ordering a d
+
+Dataset.insertBy :
+  (a -> a ->{g} Ordering) -> a -> Dataset d a ->{g, Storage d} Dataset d a
+Dataset.insertBy ord a d = match findBy (ord a) d with
+  Some _ -> d
+  None   -> unionBy ord (Leaf a) d
+
+Dataset.isEmpty : Dataset d a -> Boolean
+Dataset.isEmpty d =
+  use Nat ==
+  Dataset.size d == 0
+
+Dataset.range : Dataset d a ->{Abort} (a, a)
+Dataset.range = cases
+  Dataset.Empty         -> abort
+  Leaf a                -> (a, a)
+  Union _ _ min max _ _ -> (min, max)
+  D _ _ min max _       -> (min, max)
+
+Dataset.save : Dataset d a ->{Storage d} Dataset d a
+Dataset.save d =
+  match d with
+    Union sz depth min max l r ->
+      D (Hash (up.crypto.blake2b_256 d)) sz min max (Storage.save d)
+    _ -> d
+
+Dataset.size : Dataset d a -> Nat
+Dataset.size = cases
+  Dataset.Empty      -> 0
+  Leaf _             -> 1
+  Union sz _ _ _ _ _ -> sz
+  D _ sz _ _ _       -> sz
+
+test> Dataset.tests.consistencyWithSet = test.verify do
+  ram do
+    use Random natIn
+    Each.repeat 25
+    ns = List.replicate (natIn 0 100) do natIn 0 100
+    s = Set.fromList ns
+    ds = Dataset.fromList ns
+    let
+      (ds1, ds2) = Dataset.halve ds
+      use Dataset fromList
+      ds3 = Dataset.union ds1 ds2
+      sorted = Set.toList s
+      ds4 = fromList sorted
+      ds5 = fromList (List.reverse sorted)
+      ensureEqual sorted (Dataset.toList ds)
+      ensureEqual sorted (Dataset.toList ds4)
+      ensureEqual sorted (Dataset.toList ds5)
+      ensureEqual sorted (Dataset.toList ds3)
+
+Dataset.toList : Dataset d a ->{Storage d} [a]
+Dataset.toList = cases
+  Dataset.Empty     -> []
+  Leaf a            -> [a]
+  Union _ _ _ _ l r -> Dataset.toList l List.++ Dataset.toList r
+  D _ _ _ _ d       -> Dataset.toList (restore d)
+
+Dataset.union : Dataset d a -> Dataset d a ->{Storage d} Dataset d a
+Dataset.union = unionBy Universal.ordering
+
+Dataset.unionBy :
+  (a -> a ->{g} Ordering)
+  -> Dataset d a
+  -> Dataset d a
+  ->{g, Storage d} Dataset d a
+Dataset.unionBy ord = cases
+  Dataset.Empty, d2 -> d2
+  d1, Dataset.Empty -> d1
+  d1@(Leaf a1), d2@(Leaf a2) ->
+    match ord a1 a2 with
+      Equal   -> d1
+      Less    -> Union 2 2 a1 a2 d1 d2
+      Greater -> Union 2 2 a2 a1 d2 d1
+  d1@(Leaf a1), d2@(Union 2 _ a2 a3 l r) ->
+    match ord a1 a2 with
+      Equal   -> d2
+      Less    -> Union 3 3 a1 a3 d1 d2
+      Greater ->
+        match ord a1 a3 with
+          Equal   -> d2
+          Less    -> Union 3 3 a2 a3 (Union 2 2 a2 a1 l d1) r
+          Greater -> Union 3 3 a2 a1 d2 d1
+  d1@(Union 2 _ _ _ _ _), d2@(Leaf _) -> Dataset.unionBy ord d2 d1
+  d1@(D hash _ _ _ _), D hash2 _ _ _ _| hash === hash2  -> d1
+  d1, d2 ->
+    (min, smaller, mid1, mid2, bigger, max) =
+      (toOptional! do minmaxBy ord d1 d2)
+        |> getOrBug "impossible - both are nonempty here"
+    use Dataset halve size unionBy
+    use Nat * + > >=
+    s1 = size smaller
+    s2 = size bigger
+    if gtBy ord mid2 mid1 then
+      similarInSize = Nat.min s1 s2 * 2 >= Nat.max s1 s2
+      nobreak _ =
+        udepth = Nat.max (unsavedDepth smaller) (unsavedDepth bigger) + 1
+        Union (s1 + s2) udepth min max smaller bigger
+      if similarInSize then nobreak()
+      else
+        if s2 > s1 then
+          (bigger1, bigger2) = halve bigger
+          if s1 + size bigger1 >= size bigger2 * 2 then nobreak()
+          else unionBy ord (unionBy ord smaller bigger1) bigger2
+        else
+          (smaller1, smaller2) = halve smaller
+          if s2 + size smaller2 >= size smaller1 * 2 then nobreak()
+          else unionBy ord smaller1 (unionBy ord smaller2 bigger)
+    else
+      if s2 > s1 then
+        (bigger1, bigger2) = halve bigger
+        unionBy ord (unionBy ord smaller bigger1) bigger2
+      else
+        (smaller1, smaller2) = halve smaller
+        unionBy ord smaller1 (unionBy ord smaller2 bigger)
+
+Dataset.unsavedDepth : Dataset d a -> Nat
+Dataset.unsavedDepth = cases
+  Dataset.Empty     -> 0
+  Leaf _            -> 1
+  Union _ d _ _ _ _ -> d
+  D _ _ _ _ _       -> 0
+
+DVar.clear : DVar a -> DVar a
+DVar.clear = cases DVar i t s -> DVar i (TrimClock.tick Set.empty t) Set.empty
+
+DVar.empty : DVar a
+DVar.empty = DVar 0 origin Set.empty
+
+DVar.gc : Nat -> DVar a -> DVar a
+DVar.gc minDiff dv =
+  use Nat -
+  (DVar lastNonce time vs) = dv
+  tn = nonce time
+  if Universal.gteq (tn - lastNonce) minDiff then
+    DVar tn (TrimClock.gc lastNonce time) vs
+  else dv
+
+DVar.join : DVar a -> DVar a -> DVar a
+DVar.join d1 d2 =
+  use DVar time values
+  use TrimClock <=
+  if time d1 <= time d2 then d2
+  else
+    if time d2 <= time d1 then d1
+    else
+      DVar
+        (Universal.max (lastNonce d1) (lastNonce d2))
+        (TrimClock.join (time d1) (time d2))
+        (Set.union (values d1) (values d2))
+
+DVar.lastNonce : DVar a -> Nat
+DVar.lastNonce = cases DVar lastNonce _ _ -> lastNonce
+
+DVar.lastNonce.modify : (Nat ->{g} Nat) -> DVar a ->{g} DVar a
+DVar.lastNonce.modify f = cases
+  DVar lastNonce time values -> DVar (f lastNonce) time values
+
+DVar.lastNonce.set : Nat -> DVar a -> DVar a
+DVar.lastNonce.set lastNonce1 = cases
+  DVar _ time values -> DVar lastNonce1 time values
+
+DVar.meet : DVar a -> DVar a -> DVar a
+DVar.meet d1 d2 =
+  use DVar time values
+  use TrimClock <=
+  if time d1 <= time d2 then d2
+  else
+    if time d2 <= time d1 then d1
+    else
+      DVar
+        (Universal.max (lastNonce d1) (lastNonce d2))
+        (TrimClock.join (time d1) (time d2))
+        (Set.intersect (values d1) (values d2))
+
+DVar.new : a -> DVar a
+DVar.new a = DVar.set a DVar.empty
+
+DVar.set : a -> DVar a -> DVar a
+DVar.set a = cases
+  DVar i t s ->
+    sa = Set.singleton a
+    DVar i (TrimClock.tick sa t) sa
+
+DVar.time : DVar a -> TrimClock
+DVar.time = cases DVar _ time _ -> time
+
+DVar.time.modify : (TrimClock ->{g} TrimClock) -> DVar a ->{g} DVar a
+DVar.time.modify f = cases
+  DVar lastNonce time values -> DVar lastNonce (f time) values
+
+DVar.time.set : TrimClock -> DVar a -> DVar a
+DVar.time.set time1 = cases
+  DVar lastNonce _ values -> DVar lastNonce time1 values
+
+DVar.values : DVar a -> Set a
+DVar.values = cases DVar _ _ values -> values
+
+DVar.values.modify : (Set a1 ->{g} Set a) -> DVar a1 ->{g} DVar a
+DVar.values.modify f = cases
+  DVar lastNonce time values -> DVar lastNonce time (f values)
+
+DVar.values.set : Set a -> DVar a1 -> DVar a
+DVar.values.set values1 = cases
+  DVar lastNonce time _ -> DVar lastNonce time values1
+
+Ebt.debug.depth : Ebt a ->{Scratch} Nat
+Ebt.debug.depth = cases
+  Ebt.Empty      -> 0
+  Ebt.One _ _    -> 0
+  Ebt.Split _ cs ->
+    use Nat +
+    f ebt = Ebt.debug.depth (restoreOr Ebt.Empty ebt)
+    1 + Optional.getOrElse 0 (maximum (List.map f cs))
+
+Ebt.doc : Doc
+Ebt.doc =
+  use Ebt Split empty insert lookup
+  use fromList impl
+  {{
+  An {type Hashed} {type Bytes} [trie](https://en.wikipedia.org/wiki/Trie),
+  mapping {type Bytes} keys to values of type `a`.
+
+      @signatures{empty, lookup, insert}
+
+  A {type Ebt} uses only a small, constant amount of RAM, no matter how large
+  it is, since only the topmost level of the tree exists in memory and the rest
+  is loaded from external storage as needed. See {type Scratch}.
+
+  ```
+  Scratch.RAM do
+    empty
+      |> insert (Hashed (Hash 0xs0000)) "🌹"
+      |> insert (Hashed (Hash 0xs0001)) "🌸"
+      |> lookup (Hashed (Hash 0xs0001))
+  ```
+
+  # Implementation notes
+
+    Keys are inserted at minimal depth needed to distinguish them from other
+    keys in the {type Ebt}. A {Split} is introduced when two distinct keys are
+    inserted which share some common prefix. Each {Split} has 256 children, one
+    for each possible byte value at that position.
+  }}
+
+Ebt.empty : Ebt a
+Ebt.empty = Ebt.Empty
+
+Ebt.empty.doc : Doc
+Ebt.empty.doc =
+  {{
+  The empty {type Ebt}. {{ docExample 1 do k -> Ebt.lookup k Ebt.empty }}
+  returns {None} for all `k`.
+  }}
+
+Ebt.insert : Hashed a -> a -> Ebt a ->{Scratch} Ebt a
+Ebt.insert e a ebt = match toOptional! do insert! e a ebt with
+  None     -> ebt
+  Some ebt -> ebt
+
+Ebt.insert.doc : Doc
+Ebt.insert.doc =
+  use Ebt empty insert lookup
+  use Scratch RAM
+  use fromList impl
+  {{
+  `` insert h a ebt `` returns an {type Ebt} with the entry inserted. If `h`
+  has previously been inserted, this function does nothing. Use {replaceIf} if
+  you wish to allow replacement of the value for existing keys.
+
+  Satisfies: {{ docExample 3 do h a ebt -> lookup h (insert h a ebt) === Some a
+  }}
+
+  # Examples
+
+    ```
+    RAM do
+      empty
+        |> insert (Hashed (Hash 0xs0101)) "🌻"
+        |> lookup (Hashed (Hash 0xs0101))
+    ```
+
+    If the key already exists, it is not overridden. Use {replaceIf} to allow
+    that.
+
+    ```
+    RAM do
+      empty
+        |> insert (Hashed (Hash 0xs0101)) "🌻"
+        |> insert (Hashed (Hash 0xs0101)) "🌵"
+        |> lookup (Hashed (Hash 0xs0101))
+    ```
+  }}
+
+Ebt.insert! : Hashed a -> a -> Ebt a ->{Abort, Scratch} Ebt a
+Ebt.insert! = replaceIf! (a0 a1 -> abort)
+
+Ebt.lookup : Hashed a -> Ebt a ->{Scratch} Optional a
+Ebt.lookup e ebt = toOptional! do lookup! e ebt
+
+Ebt.lookup.doc : Doc
+Ebt.lookup.doc =
+  use Ebt insert lookup
+  use fromList impl
+  {{
+  `` lookup h ebt `` returns {Some} if `h` has been inserted into `ebt`.
+
+  Satisfies: {{ docExample 3 do h a ebt -> lookup h (insert h a ebt) === Some a
+  }}
+
+  ```
+  Scratch.RAM do
+    Ebt.empty
+      |> insert (Hashed (Hash 0xsabcd)) "🌻"
+      |> insert (Hashed (Hash 0xsab8f3994)) "🌵"
+      |> lookup (Hashed (Hash 0xsabcd))
+  ```
+  }}
+
+Ebt.lookup! : Hashed a -> Ebt a ->{Abort, Scratch} a
+Ebt.lookup! e ebt =
+  use Hashed toBytes
+  use Nat +
+  use Optional toAbort
+  key = toBytes e
+  go i = cases
+    Ebt.One e2 a            | toBytes e2 === key -> a
+    Ebt.Split here children ->
+      match Bytes.at i key with
+        None   -> toAbort here
+        Some k -> go (i + 1) (restore! (toAbort (List.at k children)))
+    _                       -> abort
+  go 0 ebt
+
+Ebt.replaceIf :
+  (a -> a ->{g, Abort} Boolean) -> Hashed a -> a -> Ebt a ->{g, Scratch} Ebt a
+Ebt.replaceIf replace e a ebt =
+  toDefault! (do ebt) do replaceIf! replace e a ebt
+
+Ebt.replaceIf.doc : Doc
+Ebt.replaceIf.doc =
+  use Ebt empty insert lookup
+  use Scratch RAM
+  use fromList impl
+  {{
+  `` replaceIf r h a ebt `` will behave like `` insert h a ebt `` if `ebt` does
+  not already contain the key `h` or if {{ docExample 3 do r a0 a -> r a0 a }}
+  returns ``true``.
+
+  Otherwise, if `r` returns ``false``, this function returns `ebt` unchanged.
+
+  # Examples
+
+    ```
+    RAM do
+      k = Hashed (Hash 0xs0000)
+      empty
+        |> insert k "apple"
+        |> replaceIf (_ _ -> true) k "orange"
+        |> lookup k
+    ```
+
+    Here's an example where the "allow replacement" function returns ``false``:
+
+    ```
+    RAM do
+      k = Hashed (Hash 0xs0000)
+      empty
+        |> insert k "apple"
+        |> replaceIf (_ _ -> false) k "orange"
+        |> lookup k
+    ```
+  }}
+
+Ebt.replaceIf! :
+  (a -> a ->{g, Abort} Boolean)
+  -> Hashed a
+  -> a
+  -> Ebt a
+  ->{g, Abort, Scratch} Ebt a
+Ebt.replaceIf! replace e a ebt =
+  use Bytes at
+  use Ebt Empty One Split
+  use Hashed toBytes
+  use Nat + ==
+  use Scratch save
+  key = toBytes e
+  emptyChildren _ =
+    e = save Empty
+    List.fill 256 e
+  go i ebt =
+    match ebt with
+      Empty -> One e a
+      Split here subs ->
+        match at i key with
+          None -> Split (Some a) subs
+          Some k ->
+            subs
+              |> modifyAt k (ebt -> save (go (i + 1) (restoreOr Empty ebt)))
+              |> getOrBug "each level should have 256 children"
+              |> Split here
+      One e0 a0
+        | toBytes e0 === key  -> if replace a0 a then One e0 a else abort
+        | otherwise           ->
+          match (at i key, at i (toBytes e0)) with
+            (None, None) -> if replace a0 a then One e a else abort
+            (Some k, None) ->
+              Split (Some a0) (List.replace k (save (One e a)) emptyChildren())
+            (None, Some k) ->
+              Split
+                (Some a) (List.replace k (save (One e0 a0)) emptyChildren())
+            (Some k1, Some k2)
+              | k1 == k2   ->
+                Split
+                  None
+                  (emptyChildren() |> List.replace k1 (save (go (i + 1) ebt)))
+              | otherwise  ->
+                Split
+                  None
+                  (emptyChildren()
+                    |> List.replace k1 (save (One e a))
+                    |> List.replace k2 (save ebt))
+  go 0 ebt
+
+test> Ebt.tests.ex1 = test.verify do
+  Scratch.RAM do
+    use List replicate
+    use Random natIn
+    Each.repeat 50
+    n = Each.range 0 10
+    keys = replicate n do Random.bytes (natIn 0 n)
+    values = replicate n do natIn 0 500
+    entries = List.zip keys values
+    m = Map.fromList entries
+    go ebt tup =
+      h = Hashed (Hash (at1 tup))
+      a = at2 tup
+      ebt' = replaceIf (_ _ -> true) h a ebt
+      ensure (Ebt.lookup h ebt' === Some a)
+      ebt'
+    ebt = List.foldLeft go Ebt.empty entries
+    ()
+
+Fold.doc : Doc
+Fold.doc =
+  use Float + /
+  use Fold fold foldSequential fork
+  use Value get
+  {{
+  An ability for sequential and parallel folds, abstracted from the underlying
+  sequence being aggregated.
+
+  Folds can be composed from any number of sequential and/or parallel folds,
+  and can use multiple passes over the data, with results of one fold being
+  used to decide on the next fold.
+
+  ```
+  docs.example do
+    j = Journal.fromList [1.0, 2.0, 3.0]
+    journal.run j do
+      sum = fold Function.id 0.0 (+)
+      count = foldSequential 0.0 (n a -> n + 1.0)
+      avg = fork do get sum / get count
+      get avg
+  ```
+
+  Folds also have access to {type Scratch} and {type #r8ebgiiu4v}, so they can
+  be used to build up distributed data structures.
+
+      @signatures{fold, foldSequential, fork, get, view}
+
+  # Handlers
+
+    Handlers of {type Fold} should generally minimize the number of passes over
+    the data, and perform common subexpression elimination so that, for
+    instance, a fold which computes the count will only be done once and shared
+    across the overall computation.
+
+    * {list.run} is a simple handler using a {type List} as the source.
+    * {journal.run} provides hash-memoized folds over a {type Journal}
+
+    that can be efficiently and incrementally recomputed when new events are
+    added to the underlying {type Journal}.
+  }}
+
+Fold.docs.example :
+  '{Remote, Storage distributed_6_0_0.Value} r -> Either Failure r
+Fold.docs.example f = docs.run do ram.value f
+
+Fold.journal.run :
+  Journal distributed_6_0_0.Value e -> '{Remote, Fold e} r ->{Remote} r
+Fold.journal.run j f =
+  scratch = assume region!
+  go : Request {Fold e} x ->{Remote} x
+  go = cases
+    { r } -> r
+    { Fold.fork f -> k } ->
+      v = forkMemoAt (near scratch here!) do handle f() with go
+      handle k v with go
+    { Fold.fold f z op -> k } ->
+      v = forkMemoAt (near scratch here!) do Journal.memoFold scratch f z op j
+      handle k v with go
+    { Fold.foldSequential z f -> k } ->
+      v =
+        forkMemoAt (near scratch here!) do
+          Journal.memoFoldSequential scratch z f j
+      handle k v with go
+  handle f() with go
+
+Fold.list.run : [e] -> '{Remote, Fold e} r ->{Remote} r
+Fold.list.run as f =
+  use Fold fork
+  scratch = assume region!
+  go : Request {Fold e} x ->{Remote} x
+  go = cases
+    { r }                            -> r
+    { fork f -> k }                  ->
+      v = forkMemoAt (near scratch here!) do handle f() with go
+      handle k v with go
+    { Fold.fold f z op -> k }        ->
+      r = do foldb f op z as
+      handle k (fork r) with go
+    { Fold.foldSequential z f -> k } ->
+      r = do List.foldLeft f z as
+      handle k (fork r) with go
+  handle f() with go
+
+Fold.view : '{Fold e} View e e
+Fold.view _ = View force
+
+Fold.View.doc : Doc
+Fold.View.doc =
+  use Nat + ==
+  use View filter map
+  {{
+  {type View} is useful for building up creating subfolds that act on a
+  filtered and/or a projected view of the overall input.
+
+  For instance, in this example, the events being folded are pairs such as
+  ``("🏔", 1) : (Text, Nat)``. We create a {type #1q7blrh2ps} which projects out
+  the second element and filters this, then run a subfold which counts up
+  events passing the filter.
+
+  ```
+  docs.example do
+    j = Journal.fromList [("🏔", 1), ("🌅", 2), ("🌁", 5), ("🌝", 1)]
+    journal.run j do
+      v = view() |> map at2 |> filter ((==) 1)
+      (View.run v do Fold.fold (const 1) 0 (+)) |> Value.get
+  ```
+
+  A typical use of this might be to create views that correspond to events of a
+  particular type, or events for a time period or region or customer, so that
+  aggregations can be performed on just that subset of the data.
+
+  # Commonly used functions
+
+        @signatures{view, View.run, map, filter, View.filterMap}
+  }}
+
+Fold.View.filter : (b ->{Remote} Boolean) -> View a b -> View a b
+Fold.View.filter f = cases
+  View run ->
+    f' b = if f b then Some b else None
+    View (inner -> run (zoom f' inner))
+
+Fold.View.filterMap : (b ->{Remote} Optional c) -> View a b -> View a c
+Fold.View.filterMap f = cases View run -> View (inner -> run (zoom f inner))
+
+Fold.View.map : (b ->{Remote} c) -> View a b -> View a c
+Fold.View.map f = cases
+  View run -> View (inner -> run (zoom (f >> Some) inner))
+
+Fold.View.run : View a b -> '{Fold b} r ->{Fold a} r
+Fold.View.run = cases View f -> f
+
+Fold.zoom : (e0 ->{Remote, Scratch} Optional e) -> '{Fold e} r -> '{Fold e0} r
+Fold.zoom inj f = do
+  use Fold fold foldSequential fork
+  go : Request {Fold e} a ->{Fold e0} a
+  go = cases
+    { r }                       -> r
+    { fold f z op -> k }        ->
+      f2 e0 = match inj e0 with
+        None   -> z
+        Some e -> f e
+      r = fold f2 z op
+      handle k r with go
+    { foldSequential z f -> k } ->
+      f2 z e0 = match inj e0 with
+        None   -> z
+        Some e -> f z e
+      r = foldSequential z f2
+      handle k r with go
+    { fork f -> k }             ->
+      r = fork do handle f() with go
+      handle k r with go
+  handle f() with go
+
+Fold.zoom! : (e0 ->{Abort, Remote, Scratch} e) -> '{Fold e} r -> '{Fold e0} r
+Fold.zoom! inj = zoom (e0 -> toOptional! do inj e0)
+
+Index.empty : m -> Index k m a
+Index.empty m = Index (Value.pure (m, Two.Empty))
+
+Index.map : (a ->{Exception, Remote} b) -> Index k m a -> Index Defer m b
+Index.map f d =
+  use Two Empty One Two
+  go = cases
+    (m, Empty)        -> (m, Empty)
+    (m, One a)        -> (m, One (f a))
+    (m, Two mode l r) -> (m, Two mode (Index.map f l) (Index.map f r))
+  Index (Value.map go (Index.unwrap d))
+
+Index.memo : Location {Scratch, g} -> Index k m a -> Index Memo m a
+Index.memo region s =
+  impl mode s =
+    use Index unwrap
+    use Two Empty One Two
+    use Value map
+    go = cases
+      (m, Empty)        -> (m, Empty)
+      (m, One a)        -> (m, One a)
+      (m, Two mode l r) -> (m, Two mode (impl mode l) (impl mode r))
+    match mode with
+      Sequential -> Index (map go (unwrap s))
+      Parallel   -> Index (Value.memo region (map go (unwrap s)))
+  impl Parallel s
+
+Index.metric : Index Memo m a ->{Remote} m
+Index.metric ix = at1 (Value.get (Index.unwrap ix))
+
+Index.one : m -> a -> Index k m a
+Index.one m a = Index (Value.pure (m, Two.One a))
+
+Index.search : (m ->{Remote} Boolean) -> Index Memo m a -> Seq Memo a
+Index.search has ix =
+  use Index search
+  use Two Empty One Two
+  go = cases
+    (m, e) ->
+      if has m then
+        match e with
+          Empty        -> Empty
+          One a        -> One a
+          Two mode l r -> Two mode (search has l) (search has r)
+      else Empty
+  Seq (Value.map go (Index.unwrap ix))
+
+Index.toSeq : Index k m a -> Seq k a
+Index.toSeq ix =
+  use Index toSeq
+  use Two Empty One Two
+  go = cases
+    (_, e) ->
+      match e with
+        Empty        -> Empty
+        One a        -> One a
+        Two mode l r -> Two mode (toSeq l) (toSeq r)
+  Seq (Value.map go (Index.unwrap ix))
+
+Index.two : Mode -> m -> Index k m a -> Index k m a -> Index k m a
+Index.two mode m ix1 ix2 = Index (Value.pure (m, Two.Two mode ix1 ix2))
+
+Index.unwrap :
+  Index k m a -> distributed_6_0_0.Value (m, Two Mode a (Index k m a))
+Index.unwrap = cases Index f -> f
+
+Index.unwrap! : Index k m a ->{Remote} (m, Two Mode a (Index k m a))
+Index.unwrap! = cases Index f -> Value.get f
+
+Journal.add : a -> Journal d a ->{Storage d} Journal d a
+Journal.add a = cases
+  Journal buf committed -> Journal (Buffer.cons a buf) committed
+
+Journal.add.doc : Doc
+Journal.add.doc =
+  use Journal add
+  {{
+  `` add a j `` adds an element to `j`.
+
+  ```
+  docs.example do
+    j = Journal.empty 32
+    j |> add "🍎" |> add "🍍" |> Journal.toList
+  ```
+  }}
+
+Journal.adds : [a] -> Journal d a ->{Storage d} Journal d a
+Journal.adds as = cases
+  Journal buf committed ->
+    Journal (List.foldLeft (b a -> Buffer.cons a b) buf as) committed
+
+Journal.adds.doc : Doc
+Journal.adds.doc =
+  use Journal adds
+  {{
+  `` adds as j `` adds a multiple elements to `j`.
+
+  ```
+  docs.example do
+    j = Journal.empty 32
+    j |> adds ["🍎", "🍍", "🥑"] |> Journal.toList
+  ```
+  }}
+
+Journal.buffer : Journal d a -> Buffer d a
+Journal.buffer = cases Journal buffer _ -> buffer
+
+Journal.buffer.modify :
+  (Buffer d a ->{g} Buffer d a) -> Journal d a ->{g} Journal d a
+Journal.buffer.modify f = cases
+  Journal buffer committed -> Journal (f buffer) committed
+
+Journal.buffer.set : Buffer d a -> Journal d a -> Journal d a
+Journal.buffer.set buffer1 = cases
+  Journal _ committed -> Journal buffer1 committed
+
+Journal.commit : Journal d a ->{Storage d} Journal d a
+Journal.commit j = commitEvery 1 j
+
+Journal.commit.doc : Doc
+Journal.commit.doc =
+  {{
+  `` commit j `` moves {buffer} to {committed}, as long as the buffer has at
+  least 1 element.
+  }}
+
+Journal.commitEvery : Nat -> Journal d a ->{Storage d} Journal d a
+Journal.commitEvery n j =
+  match j with
+    Journal buf committed
+      | Buffer.size buf Nat.>= n  ->
+        Journal
+          (Buffer.empty (Buffer.arity buf))
+          (Storage.save (Chain.cons buf (restore committed)))
+      | otherwise                 -> j
+
+Journal.commitEvery.doc : Doc
+Journal.commitEvery.doc =
+  {{
+  `` commitEvery n j `` does `` commit j `` if the size of {buffer} is at least
+  `n`.
+  }}
+
+Journal.committed : Journal d a -> d (Chain d (Buffer d a))
+Journal.committed = cases Journal _ committed -> committed
+
+Journal.committed.modify :
+  (d (Chain d (Buffer d a)) ->{g} d (Chain d (Buffer d a)))
+  -> Journal d a
+  ->{g} Journal d a
+Journal.committed.modify f = cases
+  Journal buffer committed -> Journal buffer (f committed)
+
+Journal.committed.set : d (Chain d (Buffer d a)) -> Journal d a -> Journal d a
+Journal.committed.set committed1 = cases
+  Journal buffer _ -> Journal buffer committed1
+
+Journal.doc : Doc
+Journal.doc =
+  use Journal add adds empty join
+  {{
+  A high performance distributed event log, supporting parallel writes at
+  multiple locations. {join} combines two journals, picking an arbitrary but
+  deterministic order for concurrent
+  additions.{{
+  docAside
+    {{
+    That is, {type Journal} is a state-based CRDT, with {join} and {empty}
+    forming the semilattice.
+    }}
+  }}
+
+  Here's an example usage, just using {type Nat} as the event type:
+
+  ```
+  docs.example do
+    j0 = empty 128
+    j1 = j0 |> add 0 |> adds [1, 2, 3] |> commit
+    j2 = j0 |> adds [100, 101, 102]
+    Journal.toList (join j1 j2)
+  ```
+
+  A more interesting application might use {type Journal} used to store a
+  collection of log files (or even individual lines of log files) or
+  application events.
+
+  Fold.journal.run consumes a {type Journal} using a memoized fold, which can
+  be incrementally recomputed when new events are added to the journal.
+
+  # Common functions
+
+        @signatures{empty, add, adds, join, commit, commitEvery}
+
+  # Controlling granularity of stored chunks
+
+    {type Journal} is implemented in terms of {type Storage} ability, an
+    abstract append-only storage layer interface. If your event types are
+    fairly small, it's a good idea to have larger chunks of events stored
+    together to avoid a lot of back and forth between your code and the storage
+    layer. For instance `` empty 128 `` creates an empty {type Journal} with a
+    default chunk size of ``128``.
+
+  # Controlling interleaving
+
+    {add} or {adds} adds events to the {buffer}. {commit} and {commitEvery}
+    flush this buffer to {committed}. {join} will never interleave events
+    between those in a single commit, and it will also never swap the relative
+    order of two sequentially added events.
+  }}
+
+Journal.empty : Nat ->{Storage d} Journal d a
+Journal.empty bufferArity =
+  Journal (Buffer.empty bufferArity) (Storage.save Chain.empty)
+
+Journal.empty.doc : Doc
+Journal.empty.doc =
+  {{
+  `` Journal.empty n `` creates an empty {type Journal} that saves to
+  {type Storage} in chunks of size `n` (which must be at least 2).
+  }}
+
+Journal.equal : Journal d a -> Journal d a ->{Storage d} Boolean
+Journal.equal j1 j2 =
+  Chain.equal (restore (committed j1)) (restore (committed j2))
+    && buffer j1 === buffer j2
+
+Journal.fromList : [a] ->{Storage d} Journal d a
+Journal.fromList as =
+  List.foldLeft (j a -> Journal.add a j) (Journal.empty 64) as
+
+Journal.join : Journal d a -> Journal d a ->{Storage d} Journal d a
+Journal.join j1 j2 = joinChain (commit j1) (commit j2 |> committed |> restore)
+
+Journal.join.doc : Doc
+Journal.join.doc =
+  use Journal adds empty equal lteq
+  {{
+  `` Journal.join j1 j2 `` merges two journals, committing each first.
+
+  ```
+  docs.example do
+    j0 = empty 32 |> adds [0] |> commit
+    j1 = j0 |> adds [1, 2, 3] |> commit |> adds [4, 5, 6]
+    j2 = j0 |> adds [99, 100, 101] |> adds [102, 103, 104]
+    Journal.join j1 j2 |> Journal.toList
+  ```
+
+  Notice that {Journal.join} picks an arbitrary total order for concurrent
+  segments. (The order is deterministic and based on the hash of the segment
+  past the common ancestor).
+
+  The implementation satisfies the following properties:
+
+  * Idempotence: {{ docExample 1 do j -> equal (Journal.join j j) j }}
+  * Commutativity: {{
+    docExample 2 do j1 j2 -> equal (Journal.join j1 j2) (Journal.join j2 j1) }}
+  * Identity: {{ docExample 2 do j n -> equal (Journal.join j (empty n)) j }}
+  * Associativity: {{
+    docExample 3 do
+      j1 j2 j3 ->
+        equal
+          (Journal.join (Journal.join j1 j2) j3)
+          (Journal.join j1 (Journal.join j2 j3)) }}
+  * {{ docExample 2 do j a -> lteq j (Journal.add a j) }}
+  * {{ docExample 2 do j j2 -> lteq j (Journal.join j j2) }}
+
+  # Implementation notes
+
+    The implementation is based on {Chain.join}.
+
+    {{ implementationNotes }}
+  }}
+
+Journal.joinChain :
+  Journal d a -> Chain d (Buffer d a) ->{Storage d} Journal d a
+Journal.joinChain j1 c2 =
+  Journal (buffer j1) (Storage.save (Chain.join (restore (committed j1)) c2))
+
+Journal.lteq : Journal d a -> Journal d a ->{Storage d} Boolean
+Journal.lteq j1 j2 =
+  use Buffer size
+  use Nat ==
+  size (buffer j1) == 0 && size (buffer j2) == 0
+    && Chain.lteq (restore (committed j1)) (restore (committed j2))
+
+Journal.memoFold :
+  Location {Scratch, g}
+  -> (a ->{Remote, Scratch} b)
+  -> b
+  -> (b -> b ->{Remote, Scratch} b)
+  -> Journal distributed_6_0_0.Value a
+  ->{Remote} b
+Journal.memoFold scratch f z op = cases
+  Journal buffer committed ->
+    eval scratch do
+      f2 buf = Buffer.memoFold scratch f z op buf
+      b1 =
+        Value.memo
+          scratch (Value.map (Chain.memoFold scratch f2 z op) committed)
+          |> Value.get
+      b2 = Buffer.memoFold scratch f z op buffer
+      op b1 b2
+
+Journal.memoFoldSequential :
+  Location {Scratch, g}
+  -> b
+  -> (b -> a ->{Remote, Scratch} b)
+  -> Journal distributed_6_0_0.Value a
+  ->{Remote} b
+Journal.memoFoldSequential scratch z f = cases
+  Journal buffer committed ->
+    f2 b buf = Buffer.memoFoldSequential scratch b f buf
+    b2 =
+      Value.memo
+        scratch (Value.map (Chain.memoFoldSequential scratch z f2) committed)
+        |> Value.get
+    Buffer.memoFoldSequential scratch b2 f buffer
+
+Journal.toList : Journal distributed_6_0_0.Value a ->{Remote} [a]
+Journal.toList j = journal.run j do
+  use List ++
+  as = Fold.fold List.singleton [] (++)
+  Value.get as
+
+Journal.toList.doc : Doc
+Journal.toList.doc = {{ Convert a {type Journal} to a list. }}
+
+Journal.toView :
+  (∀ x. d x -> distributed_6_0_0.Value x)
+  -> Journal d a
+  -> Journal distributed_6_0_0.Value a
+Journal.toView f = cases
+  Journal buf committed ->
+    Journal
+      (Buffer.toView f buf)
+      (f committed
+        |> Value.map
+          (committed -> Chain.toView f committed |> Chain.map (Buffer.toView f)))
+
+LwwMap.delete : k -> v -> LwwMap k v -> LwwMap k v
+LwwMap.delete k v = cases
+  LwwMap m ->
+    step = cases
+      None    -> None
+      Some dv -> Some (clear dv)
+    LwwMap (base_2_14_0.data.Map.alter step k m)
+
+LwwMap.deleteWin.join : LwwMap k v -> LwwMap k v -> LwwMap k v
+LwwMap.deleteWin.join = cases
+  LwwMap m1, LwwMap m2 -> LwwMap (Map.unionWith meet m1 m2)
+
+LwwMap.empty : LwwMap k v
+LwwMap.empty = LwwMap Map.empty
+
+LwwMap.insert : k -> v -> LwwMap k v -> LwwMap k v
+LwwMap.insert k v = cases
+  LwwMap m ->
+    step = cases
+      None    -> Some (DVar.new v)
+      Some dv -> Some (DVar.set v dv)
+    LwwMap (base_2_14_0.data.Map.alter step k m)
+
+LwwMap.insertWin.join : LwwMap k v -> LwwMap k v -> LwwMap k v
+LwwMap.insertWin.join = cases
+  LwwMap m1, LwwMap m2 -> LwwMap (Map.unionWith DVar.join m1 m2)
+
+LwwMap.toList : LwwMap k v -> [(k, v)]
+LwwMap.toList = cases
+  LwwMap m ->
+    go = cases (k, dv) -> List.map (v -> (k, v)) (Set.toList (DVar.values dv))
+    List.flatMapRight go (Map.toList m)
+
+Mode.append : Mode -> Mode -> Mode
+Mode.append = cases
+  Parallel, _ -> Parallel
+  _, Parallel -> Parallel
+  _, _        -> Sequential
+
+Op.push : Op g s -> Op g1 s ->{g} Op {h, g} s
+Op.push = cases Op _ f, Op s _ -> Op (f s) f
+
+Range.merge : Range k -> Range k -> Range k
+Range.merge = cases
+  Range.Empty, r           -> r
+  r, Range.Empty           -> r
+  Range k1 k2, Range k3 k4 -> Range (Universal.min k1 k3) (Universal.max k2 k4)
+
+Range.within : k -> Range k -> Boolean
+Range.within k = cases
+  Range.Empty -> false
+  Range a b   -> Universal.gteq k a && Universal.lteq k b
+
+Rbt.adjust : Bytes -> (Nat -> Optional a ->{g} Rbt a) -> Rbt a ->{g} Rbt a
+Rbt.adjust key f r =
+  use Nat +
+  use Rbt Split
+  go depth = cases
+    Rbt.Empty -> f depth None
+    Rbt.One a -> f depth (Some a)
+    Split i miss cs ->
+      match Bytes.at i key with
+        None -> Split i (go (depth + 1) miss) cs
+        Some b ->
+          Split i miss (getOrBug errorMsg (modifyAt b (go (depth + 1)) cs))
+  go 0 r
+
+Rbt.adjust.doc : Doc
+Rbt.adjust.doc =
+  use Rbt adjust empty
+  use fromList impl
+  {{
+  `` adjust key f rbt `` applies `f` to the {Rbt.Empty} or {Rbt.One} it finds
+  for `key`.
+
+  `f` is also given the depth of the current location, where 0 means the
+  current node being replaced has no parents in the tree.
+
+  ```
+  empty
+    |> setInsert 0xs0000
+    |> setInsert 0xs0011
+    |> adjust 0xs0000 (_ _ -> empty)
+    |> Rbt.lookup 0xs0000
+  ```
+  }}
+
+Rbt.doc : Doc
+Rbt.doc =
+  use Rbt empty lookup
+  use fromList impl
+  {{
+  A randomized byte trie representing a mapping from {type Bytes} to `a`.
+
+  Each {Rbt.Split} level inspects a random byte position and branches to a
+  subtree based on the 257 possibilities (a number in 0 to 255, or missing).
+
+  ```
+  empty
+    |> setInsert 0xs00
+    |> setInsert 0xs01
+    |> setInsert 0xs0100
+    |> lookup 0xs0100
+  ```
+
+  ```
+  empty |> setInsert 0xs00 |> setInsert 0xs0100 |> lookup 0xsffa0
+  ```
+  }}
+
+Rbt.empty : Rbt a
+Rbt.empty = Rbt.Empty
+
+Rbt.empty.doc : Doc
+Rbt.empty.doc = {{ The empty {type Rbt}. }}
+
+Rbt.impl.emptyChildren : [Rbt a]
+Rbt.impl.emptyChildren =
+  use Rbt Empty
+  [ Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  , Empty
+  ]
+
+Rbt.impl.errorMsg : Text
+Rbt.impl.errorMsg = "children must be size 256"
+
+Rbt.impl.seedFromPair : Bytes -> Bytes -> Nat
+Rbt.impl.seedFromPair b1 b2 =
+  default = (0, Bytes.empty)
+  leadingBytes b = decodeNat32be b |> Optional.getOrElse default |> at1
+  leadingBytes b1 |> Nat.or (Nat.shiftLeft 32 (leadingBytes b2))
+
+Rbt.impl.split : Nat -> Bytes -> Rbt a -> Bytes -> Rbt a -> Rbt a
+Rbt.impl.split seed key1 rt1 key2 rt2 =
+  go _ =
+    use Bytes at size
+    use Nat !=
+    use Rbt Split
+    i = Random.natIn 0 (Nat.max (size key1) (size key2))
+    match (at i key1, at i key2) with
+      (Some a, Some b)
+        | a != b     ->
+          Split i Rbt.empty (emptyChildren |> replace a rt1 |> replace b rt2)
+        | otherwise  -> go()
+      (Some a, None) -> Split i rt2 (replace a rt1 emptyChildren)
+      (None, Some a) -> Split i rt1 (replace a rt2 emptyChildren)
+      (None, None) -> bug "keys are the same"
+  splitmix seed go
+
+Rbt.insert : (a ->{g} Optional Bytes) -> Bytes -> a -> Rbt a ->{g} Rbt a
+Rbt.insert s key a t =
+  match t with
+    Rbt.Empty -> Rbt.One a
+    Rbt.One a2 ->
+      match s a2 with
+        None      -> t
+        Some key2 ->
+          if key === key2 then Rbt.One a
+          else
+            seed = seedFromPair key key2
+            impl.split seed key (Rbt.One a) key2 t
+    Rbt.Split i miss children ->
+      match Bytes.at i key with
+        None -> Rbt.Split i (Rbt.insert s key a miss) children
+        Some b ->
+          Rbt.Split
+            i
+            miss
+            (getOrBug errorMsg (modifyAt b (Rbt.insert s key a) children))
+
+Rbt.insert.doc : Doc
+Rbt.insert.doc =
+  {{
+  `` Rbt.insert s key a rbt `` inserts an entry into the `rbt`.
+
+  If the insertion point is a {Rbt.One}, `s` is used to extract the key for
+  that leaf and introduce another level of the tree. If `s` returns {None}, the
+  value won't be inserted in this case.
+
+  When introducing a new level to distinguish keys `k1` and `k2`, a random
+  differing byte position is chosen to discriminate on, and a {Rbt.Split} node
+  is introduced.
+  }}
+
+Rbt.insertAtDepth : Nat -> Bytes -> a -> Rbt a ->{Random} Rbt a
+Rbt.insertAtDepth depth key a t =
+  use Bytes at
+  use Nat - ==
+  use Rbt Empty One Split
+  go depth t =
+    match t with
+      Empty
+        | depth == 0  -> One a
+        | otherwise   ->
+          i =
+            sk = Bytes.size key
+            if sk == 0 then 0 else Random.natIn 0 sk
+          match at i key with
+            None -> Split i (go (depth - 1) Empty) emptyChildren
+            Some j ->
+              Split
+                i
+                Empty
+                (modifyAt j (go (depth - 1)) emptyChildren
+                  |> getOrBug errorMsg)
+      One _ -> t
+      Split i miss children ->
+        match at i key with
+          None -> Split i (go (depth - 1) miss) emptyChildren
+          Some j ->
+            Split
+              i
+              miss
+              (modifyAt j (go (depth - 1)) emptyChildren |> getOrBug errorMsg)
+  go depth t
+
+Rbt.insertAtDepth.doc : Doc
+Rbt.insertAtDepth.doc =
+  use Rbt empty
+  use fromList impl
+  {{
+  Like {Rbt.insert}, but ensures the inserted entry is at the provided depth.
+
+  ```
+  splitmix 0 do insertAtDepth 0 0xs00 "hi" empty
+  ```
+
+  ```
+  splitmix 0 do insertAtDepth 1 0xs03 "hi" empty
+  ```
+  }}
+
+Rbt.lookup : Bytes -> Rbt a -> Optional a
+Rbt.lookup key = cases
+  Rbt.Empty                 -> None
+  Rbt.One a                 -> Some a
+  Rbt.Split i miss children ->
+    match Bytes.at i key with
+      None   -> Rbt.lookup key miss
+      Some b -> Rbt.lookup key (getOrBug errorMsg (List.at b children))
+
+Rbt.lookup.doc : Doc
+Rbt.lookup.doc =
+  {{
+  `` Rbt.lookup key rbt `` returns {Some} if `rbt` contains the key, and {None}
+  otherwise.
+  }}
+
+Rbt.one : a -> Rbt a
+Rbt.one = Rbt.One
+
+Rbt.one.doc : Doc
+Rbt.one.doc = {{ The single {type Rbt}. }}
+
+Rbt.setDelete : Bytes -> Rbt Bytes -> Rbt Bytes
+Rbt.setDelete key rbt = toDefaultValue! rbt do setDelete! key rbt
+
+Rbt.setDelete.doc : Doc
+Rbt.setDelete.doc =
+  use fromList impl
+  {{
+  Deletes a key if it exists from an {type Rbt} set.
+
+  Use {setDelete!} to {abort} if the key does not exist.
+
+  ```
+  Rbt.empty
+    |> setInsert 0xs0000
+    |> setInsert 0xs0100
+    |> setDelete 0xs0000
+    |> Rbt.lookup 0xs0000
+  ```
+  }}
+
+Rbt.setDelete! : Bytes -> Rbt Bytes ->{Abort} Rbt Bytes
+Rbt.setDelete! key = cases
+  Rbt.Empty -> abort
+  Rbt.One k -> if key === k then Rbt.Empty else abort
+  Rbt.Split i miss children ->
+    match Bytes.at i key with
+      None -> Rbt.Split i (Rbt.setDelete! key miss) children
+      Some b ->
+        Rbt.Split
+          i
+          miss
+          (modifyAt b (Rbt.setDelete! key) children |> getOrBug errorMsg)
+
+Rbt.setDelete!.doc : Doc
+Rbt.setDelete!.doc =
+  use fromList impl
+  {{
+  Deletes a key if it exists from an {type Rbt} set, otherwise will {abort}.
+
+  ```
+  toOptional! do
+    Rbt.empty
+      |> setInsert 0xs0000
+      |> setInsert 0xs0100
+      |> setDelete! 0xsffff
+      |> Rbt.lookup 0xs0000
+  ```
+  }}
+
+Rbt.setInsert : Bytes -> Rbt Bytes -> Rbt Bytes
+Rbt.setInsert key rbt = Rbt.insert Some key key rbt
+
+Rbt.setInsert.doc : Doc
+Rbt.setInsert.doc =
+  {{
+  `` setInsert key rbt `` performs insertion on an {type Rbt} where keys map to
+  themselves, commonly used to represent a set of {type Bytes}.
+  }}
+
+Rbt.toList : Rbt a -> [a]
+Rbt.toList rbt = handle Rbt.toStream rbt with toList.handler
+
+Rbt.toList.doc : Doc
+Rbt.toList.doc =
+  use Rbt toList
+  use fromList impl
+  {{
+  `` toList rbt `` returns a list of the {Rbt.One} elements of `rbt`, in
+  deterministic but random order.
+
+  ```
+  Rbt.empty
+    |> setInsert 0xs0000
+    |> setInsert 0xsabcd
+    |> setInsert 0xs3939
+    |> toList
+  ```
+  }}
+
+Rbt.toStream : Rbt a ->{Stream a} ()
+Rbt.toStream = cases
+  Rbt.Empty           -> ()
+  Rbt.One a           -> emit a
+  Rbt.Split _ miss cs ->
+    use Rbt toStream
+    toStream miss
+    up.List.map_ toStream cs
+
+Rbt.toStream.doc : Doc
+Rbt.toStream.doc =
+  {{
+  `` Rbt.toStream rbt `` calls {emit} on the leaf {Rbt.One} elements of `rbt`.
+
+  The stream is in a deterministic but random order.
+
+  **See also:** {Rbt.toList}
+  }}
+
+README : Doc
+README =
+  {{
+  # Distributed-extra
+
+    This library is a playground for expressing distributed data types via
+    {type Remote}.
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes = {{ First release }}
+
+Rope.arity : Rope d a -> Nat
+Rope.arity = Buffer.arity << Rope.underlying
+
+Rope.arity.doc : Doc
+Rope.arity.doc =
+  {{
+  The {Rope.arity} of a {type Rope} controls the number of chunks stored at
+  each level of the tree.
+
+  An arity of 10 means that at most 20 chunks are stored at each level before
+  needing to load from {type Storage} to descend deeper into the tree. Using a
+  larger arity means there are fewer trips to {type Storage}, but also larger
+  serialized size and sharing if the value is being sent between nodes.
+  }}
+
+Rope.Chunk.drop : Chunk a -> Nat -> a -> a
+Rope.Chunk.drop = cases Chunk _ _ drop _ -> drop
+
+Rope.Chunk.drop.modify :
+  ((Nat -> a -> a) ->{g} Nat -> a -> a) -> Chunk a ->{g} Chunk a
+Rope.Chunk.drop.modify f = cases
+  Chunk startsWith take drop size -> Chunk startsWith take (f drop) size
+
+Rope.Chunk.drop.set : (Nat -> a -> a) -> Chunk a -> Chunk a
+Rope.Chunk.drop.set drop1 = cases
+  Chunk startsWith take _ size -> Chunk startsWith take drop1 size
+
+Rope.Chunk.flatMap : Chunk a -> (a ->{g} [b]) -> a ->{g} [b]
+Rope.Chunk.flatMap S f a =
+  use List ++
+  if Chunk.isEmpty S a then []
+  else f (Chunk.take S 1 a) ++ Rope.Chunk.flatMap S f (Chunk.drop S 1 a)
+
+Rope.Chunk.isEmpty : Chunk a -> a -> Boolean
+Rope.Chunk.isEmpty S a =
+  use Nat ==
+  Chunk.size S a == 0
+
+Rope.Chunk.map : Chunk a -> (a ->{g} b) -> a ->{g} [b]
+Rope.Chunk.map S f a =
+  use List +:
+  if Chunk.isEmpty S a then []
+  else f (Chunk.take S 1 a) +: Rope.Chunk.map S f (Chunk.drop S 1 a)
+
+Rope.Chunk.select : Chunk a -> a -> [a] -> Optional (List.Nonempty a)
+Rope.Chunk.select S a ss = List.filter (Chunk.startsWith S a) ss |> mayNonempty
+
+Rope.Chunk.size : Chunk a -> a -> Nat
+Rope.Chunk.size = cases Chunk _ _ _ size -> size
+
+Rope.Chunk.size.modify : ((a -> Nat) ->{g} a -> Nat) -> Chunk a ->{g} Chunk a
+Rope.Chunk.size.modify f = cases
+  Chunk startsWith take drop size -> Chunk startsWith take drop (f size)
+
+Rope.Chunk.size.set : (a -> Nat) -> Chunk a -> Chunk a
+Rope.Chunk.size.set size1 = cases
+  Chunk startsWith take drop _ -> Chunk startsWith take drop size1
+
+Rope.Chunk.startsWith : Chunk a -> a -> a -> Boolean
+Rope.Chunk.startsWith = cases Chunk startsWith _ _ _ -> startsWith
+
+Rope.Chunk.startsWith.modify :
+  ((a -> a -> Boolean) ->{g} a -> a -> Boolean) -> Chunk a ->{g} Chunk a
+Rope.Chunk.startsWith.modify f = cases
+  Chunk startsWith take drop size -> Chunk (f startsWith) take drop size
+
+Rope.Chunk.startsWith.set : (a -> a -> Boolean) -> Chunk a -> Chunk a
+Rope.Chunk.startsWith.set startsWith1 = cases
+  Chunk _ take drop size -> Chunk startsWith1 take drop size
+
+Rope.Chunk.stripCommonPrefix :
+  Chunk a -> List.Nonempty a -> (Nat, List.Nonempty a)
+Rope.Chunk.stripCommonPrefix S ss =
+  match ss with
+    Nonempty.Nonempty s [] ->
+      l = Chunk.size S s
+      (l, Nonempty.Nonempty (Chunk.drop S l s) [])
+    Nonempty.Nonempty s ss' ->
+      use Nat +
+      a = Chunk.take S 1 s
+      if Chunk.isEmpty S a then (0, ss)
+      else
+        if List.all (Chunk.startsWith S a) ss' then
+          (lcpl, ssr) =
+            Rope.Chunk.stripCommonPrefix
+              S (List.Nonempty.map (Chunk.drop S 1) ss)
+          (lcpl + 1, ssr)
+        else (0, ss)
+
+Rope.Chunk.suffixes : Chunk a -> a -> [a]
+Rope.Chunk.suffixes S a =
+  step = cases
+    s
+      | Chunk.isEmpty S s -> None
+      | otherwise         -> Some (s, Chunk.drop S 1 s)
+  List.unfold a step
+
+Rope.Chunk.take : Chunk a -> Nat -> a -> a
+Rope.Chunk.take = cases Chunk _ take _ _ -> take
+
+Rope.Chunk.take.modify :
+  ((Nat -> a -> a) ->{g} Nat -> a -> a) -> Chunk a ->{g} Chunk a
+Rope.Chunk.take.modify f = cases
+  Chunk startsWith take drop size -> Chunk startsWith (f take) drop size
+
+Rope.Chunk.take.set : (Nat -> a -> a) -> Chunk a -> Chunk a
+Rope.Chunk.take.set take1 = cases
+  Chunk startsWith _ drop size -> Chunk startsWith take1 drop size
+
+Rope.Chunk.Text : Chunk Text
+Rope.Chunk.Text = Chunk Text.startsWith Text.take Text.drop Text.size
+
+Rope.Chunk.uncons : Chunk a -> a -> Optional (a, a)
+Rope.Chunk.uncons T a =
+  if Chunk.isEmpty T a then None else Some (Chunk.take T 1 a, Chunk.drop T 1 a)
+
+Rope.cons : a -> Rope d a ->{Storage d} Rope d a
+Rope.cons a = cases
+  Rope t n buf -> Rope t (n Nat.+ Chunk.size t a) (Buffer.cons a buf)
+
+Rope.cons.doc : Doc
+Rope.cons.doc =
+  use Rope cons
+  {{
+  `` cons c r `` adds the chunk `c` to the beginning of a {type Rope}.
+
+  ```
+  ram do emptyText |> Rope.snoc "world!" |> cons "👋 " |> Rope.toText
+  ```
+  }}
+
+Rope.doc : Doc
+Rope.doc =
+  use Rope cons drop fromText snoc toText
+  {{
+  A "constant memory" chunked textual type suitable for larger documents. Only
+  the first {Rope.arity} chunks are available in memory, with subsequent chunks
+  requiring fetches from external {type Storage}.
+
+  ```
+  ram do fromText 64 "cadabra!" |> cons "abra" |> snoc " 🪄" |> drop 7 |> toText
+  ```
+
+  # Common functions
+
+        @signatures{fromText, toText, cons, snoc, Rope.take, drop, Rope.startsWith}
+  }}
+
+Rope.drop : Nat -> Rope d a ->{Storage d} Rope d a
+Rope.drop numChars = cases
+  r| numChars Nat.== 0  -> r
+  Rope seq n buf| numChars Nat.>= n  ->
+    Rope seq 0 (Buffer.empty (Buffer.arity buf))
+  r@(Rope seq n buf) ->
+    use Chunk size
+    use Nat - <
+    n' = n - numChars
+    go numChars buf =
+      match Buffer.uncons buf with
+        None -> r
+        Some (hd, buf) ->
+          if numChars < size seq hd then
+            Rope seq n' (Buffer.cons (Chunk.drop seq numChars hd) buf)
+          else go (numChars - size seq hd) buf
+    go numChars buf
+
+Rope.drop.doc : Doc
+Rope.drop.doc =
+  use Rope drop fromText toText
+  {{
+  `` drop n r `` removes the first `n` characters from `r`.
+
+  # Examples
+
+    ```
+    ram do fromText 2 "abc123" |> drop 3 |> toText
+    ```
+
+    ```
+    ram do fromText 2 "abc123" |> drop 1000 |> toText
+    ```
+
+    ```
+    ram do fromText 2 "abc123" |> drop 0 |> toText
+    ```
+  }}
+
+Rope.empty : Nat -> Chunk a -> Rope d a
+Rope.empty arity seq = Rope seq 0 (Buffer.empty arity)
+
+Rope.empty.doc : Doc
+Rope.empty.doc =
+  {{
+  `` Rope.empty arity seq `` creates an empty {type Rope} with {Rope.arity}
+  equal to `arity`.
+
+  **Also see:** {emptyText}
+  }}
+
+Rope.emptyText : Rope d Text
+Rope.emptyText = Rope Text 0 (Buffer.empty 8)
+
+Rope.emptyText.arity : Nat -> Rope d Text
+Rope.emptyText.arity arity = Rope Text 0 (Buffer.empty arity)
+
+Rope.emptyText.arity.doc : Doc
+Rope.emptyText.arity.doc =
+  {{ Creates an empty {type Rope} of {type Text} with a given {Rope.arity}. }}
+
+Rope.emptyText.doc : Doc
+Rope.emptyText.doc =
+  {{
+  Creates an empty {type Rope} of {type Text}, with a default {Rope.arity}.
+  }}
+
+Rope.fromText : Nat -> Text ->{Storage d} Rope d Text
+Rope.fromText chunkSize txt =
+  use Nat ==
+  use Text size
+  go txt buf =
+    if size txt == 0 then buf
+    else
+      hd = Text.take chunkSize txt
+      tl = Text.drop chunkSize txt
+      go tl (Buffer.snoc hd buf)
+  Rope Text (size txt) (go txt (Buffer.empty 8))
+
+Rope.fromText.doc : Doc
+Rope.fromText.doc =
+  use Rope fromText
+  {{
+  `` fromText n txt `` converts from {type Text} to {type Rope}, splitting the
+  {type Text} into chunks of size `n`.
+
+  ```
+  ram do fromText 3 "hello, world!" |> Rope.drop 7 |> Rope.toText
+  ```
+  }}
+
+Rope.size : Rope d a ->{Storage d} Nat
+Rope.size = cases Rope _ n _ -> n
+
+Rope.size.doc : Doc
+Rope.size.doc =
+  {{
+  `` Rope.size r `` returns the total number of characters over all chunks of
+  `r`.
+  }}
+
+Rope.snoc : a -> Rope d a ->{Storage d} Rope d a
+Rope.snoc a = cases
+  Rope t n buf -> Rope t (n Nat.+ Chunk.size t a) (Buffer.snoc a buf)
+
+Rope.snoc.doc : Doc
+Rope.snoc.doc =
+  use Rope snoc
+  {{
+  `` snoc c r `` adds the chunk `c` to the end of a {type Rope}.
+
+  ```
+  ram do emptyText |> snoc "Hi!" |> snoc "👋 " |> Rope.toText
+  ```
+  }}
+
+Rope.startsWith : Rope d a -> Rope d a ->{Storage d} Boolean
+Rope.startsWith prefix r =
+  use Buffer cons uncons
+  use Chunk drop startsWith
+  use Nat == >
+  use Rope underlying
+  if Rope.size prefix > Rope.size r then false
+  else
+    (Rope S _ _) = prefix
+    sz = Chunk.size S
+    go1 hd buf1 buf2 = match uncons buf2 with
+      None              -> sz hd == 0
+      Some (hd2, buf2')
+        | sz hd2 == sz hd -> startsWith S hd hd2 && go buf1 buf2'
+        | sz hd2 > sz hd  ->
+          hd2' = drop S (sz hd) hd2
+          startsWith S hd hd2 && go buf1 (cons hd2' buf2')
+        | otherwise       ->
+          shd2 = sz hd2
+          let
+            (hd1, hd1rem) = (Chunk.take S shd2 hd, drop S shd2 hd)
+            go1 hd1 (cons hd1rem buf1) buf2
+    go buf1 buf2 = match uncons buf1 with
+      None          -> true
+      Some (hd, tl) -> go1 hd tl buf2
+    go (underlying prefix) (underlying r)
+
+Rope.startsWith.doc : Doc
+Rope.startsWith.doc =
+  use Rope fromText startsWith
+  {{
+  `` startsWith prefix r `` returns `` true `` if `prefix` is a prefix of `r`.
+
+  # Examples
+
+    ```
+    ram do startsWith (fromText 3 "abra") (fromText 2 "abracadabra")
+    ```
+
+    ```
+    ram do startsWith (fromText 2 "abracadabra") (fromText 3 "abracadabra")
+    ```
+
+    ```
+    ram do startsWith (fromText 4 "abracadabra") (fromText 6 "abra")
+    ```
+  }}
+
+Rope.take : Nat -> Rope d a ->{Storage d} Rope d a
+Rope.take numChars = cases
+  r@(Rope seq n buf)
+    | numChars Nat.>= n  -> r
+    | otherwise          ->
+      use Buffer snoc
+      use Chunk size
+      use Nat - <= ==
+      n' = Nat.min n numChars
+      go numChars acc buf =
+        if numChars == 0 then Rope seq n' acc
+        else
+          match Buffer.uncons buf with
+            None -> Rope seq n' acc
+            Some (hd, buf) ->
+              remChars = numChars - size seq hd
+              if numChars <= size seq hd then
+                Rope seq n' (snoc (Chunk.take seq numChars hd) acc)
+              else go remChars (snoc hd acc) buf
+      go numChars (Buffer.empty (Buffer.arity buf)) buf
+
+Rope.take.doc : Doc
+Rope.take.doc =
+  use Rope fromText take toText
+  {{
+  `` take n r `` takes the first `n` characters of `r`.
+
+  # Examples
+
+    ```
+    ram do fromText 2 "abc123" |> take 3 |> toText
+    ```
+
+    ```
+    ram do fromText 2 "abc123" |> take 100 |> toText
+    ```
+
+    ```
+    ram do fromText 2 "abc123" |> take 0 |> toText
+    ```
+  }}
+
+test> Rope.tests.associativity = test.verify do
+  use Random natIn
+  use Rope cons startsWith
+  use Text ++ ==
+  Each.repeat 100
+  t1 = natIn 0 100 |> Nat.toText
+  t2 = natIn 0 100 |> Nat.toText
+  t3 = natIn 0 100 |> Nat.toText
+  ram do
+    use Rope toText
+    r = emptyText
+    r2 = cons (t1 ++ t2) (cons t3 r)
+    r3 = cons t1 (cons (t2 ++ t3) r)
+    ensure (toText r2 == toText r3)
+    ensure (startsWith r2 r3)
+    ensure (startsWith r3 r2)
+
+test> Rope.tests.construction =
+  test.verify do
+    use Nat +
+    use Random natIn
+    use Rope drop startsWith take
+    Each.repeat 50
+    txts = Nat.range 0 (natIn 0 100) |> List.map Nat.toText |> shuffle
+    allTxt = Text.join "" txts
+    n = Text.size allTxt
+    ram do
+      use Rope toText
+      rope1 = List.foldLeft (acc a -> Rope.snoc a acc) emptyText txts
+      rope2 = List.foldRight Rope.cons emptyText txts
+      ensure (Rope.size rope1 Nat.== Text.size allTxt)
+      ensure (Rope.size rope2 Nat.== Text.size allTxt)
+      ensure (toText rope1 Text.== allTxt)
+      ensure (toText rope2 Text.== allTxt)
+      k = do natIn 0 (Nat.max n 1)
+      ensure (startsWith (take k() rope1) rope1)
+      ensure (startsWith (take k() rope2) rope2)
+      d1 = k()
+      d2 = k()
+      ensureEqual
+        (toText (drop (d1 + d2) rope1))
+        (toText ((>>) (drop d1) (drop d2) rope1))
+
+Rope.toText : Rope d Text ->{Storage d} Text
+Rope.toText txt =
+  use Text ++
+  Buffer.foldLeft (++) "" (Rope.underlying txt)
+
+Rope.toText.doc : Doc
+Rope.toText.doc = {{  }}
+
+Rope.underlying : Rope d a -> Buffer d a
+Rope.underlying = cases Rope _ _ b -> b
+
+Rope.underlying.doc : Doc
+Rope.underlying.doc =
+  {{
+  `` Rope.underlying r `` returns the underlying {type Buffer} of chunks
+  backing `r`.
+  }}
+
+Semispace.active : Semispace g m k v -> m
+Semispace.active = cases Semispace _ _ _ _ active -> active
+
+Semispace.active.doc : Doc
+Semispace.active.doc =
+  {{
+  The active map of a {type Semispace}. This will survive the next
+  {Semispace.gc}.
+  }}
+
+Semispace.active.modify :
+  (m ->{h1} m) -> Semispace g m k v ->{h1} Semispace g m k v
+Semispace.active.modify f = cases
+  Semispace a b c d active -> Semispace a b c d (f active)
+
+Semispace.doc : Doc
+Semispace.doc =
+  use Semispace gc insert lookup
+  {{
+  A generic semispace cache which allows items to expire without requiring
+  explicit deletion.
+
+      @signatures{Semispace.fromMap, Semispace.fromRbt, lookup, insert, gc}
+
+  Any keys not touched (either by a {lookup} or {insert}) between calls of {gc}
+  expire from the cache.
+
+  # Implementation notes
+
+    The implementation works by keeping two instances of the underlying map
+    type, `m`, called the {active} and {expiring} generations. On {lookup}, we
+    first check for the key in the {active} generation. If found, it's returned
+    and we're done.
+
+    If it's not in {active}, we then check {expiring}. If found, the entry is
+    promoted to {active}.
+
+    On {gc}, the {active} generation becomes the {expiring} generation, and
+    {active} is set to {Semispace.empty}. In this way, keys which aren't
+    touched between calls to {gc} move to {expiring} and then are not copied to
+    {active}.
+
+    Unlike an LRU cache, the common case of a cache hit in the {active}
+    generation is read-only and doesn't require updating any LRU information.
+  }}
+
+Semispace.empty : Semispace g m k v -> m
+Semispace.empty = cases Semispace _ _ empty _ _ -> empty
+
+Semispace.empty.doc : Doc
+Semispace.empty.doc = {{ The empty map for a {type Semispace}. }}
+
+Semispace.expiring : Semispace g m k v -> m
+Semispace.expiring = cases Semispace _ _ _ expiring _ -> expiring
+
+Semispace.expiring.doc : Doc
+Semispace.expiring.doc =
+  {{
+  The expiring map of a {type Semispace}. This will not survive the next
+  {Semispace.gc}, but keys which are touched by {Semispace.lookup} and/or
+  {Semispace.insert} will be promoted to {active}.
+  }}
+
+Semispace.fromMap : Map k v -> Semispace {} (Map k v) k v
+Semispace.fromMap m =
+  use Map empty
+  Semispace Map.get Map.insert empty empty m
+
+Semispace.fromMap.doc : Doc
+Semispace.fromMap.doc =
+  {{
+  {Semispace.fromMap} `m` creates a semispace cache from a {type Map}, setting
+  the {active} generation to `m`.
+  }}
+
+Semispace.fromRbt : Nat -> Rbt v -> Semispace {Random} (Rbt v) Bytes v
+Semispace.fromRbt minDepth m =
+  use Nat -
+  use Rbt empty
+  Semispace
+    Rbt.lookup
+    (k v -> Rbt.adjust k (d _ -> insertAtDepth (minDepth - d) k v empty))
+    empty
+    empty
+    m
+
+Semispace.fromRbt.doc : Doc
+Semispace.fromRbt.doc =
+  {{
+  `` Semispace.fromRbt rbt `` creates a semispace cache from a {type Rbt},
+  setting {active} to `rbt`.
+  }}
+
+Semispace.gc : Semispace g m k v -> Semispace g m k v
+Semispace.gc = cases
+  Semispace lookup insert empty gen1 gen0 ->
+    Semispace lookup insert empty gen0 empty
+
+Semispace.gc.doc : Doc
+Semispace.gc.doc =
+  {{
+  Demotes {active} to {expiring} and replaces {active} with {Semispace.empty}.
+
+  Typical usage would be to call {Semispace.gc} once every X seconds or when
+  {active} reaches some threshold size.
+
+  Note that this function is not idempotent; if you call it twice in
+  succession, it entirely clears the cache!
+  }}
+
+Semispace.insert : k -> v -> Semispace g m k v ->{g} Semispace g m k v
+Semispace.insert k v = cases
+  Semispace lookup insert empty gen1 gen0 ->
+    Semispace lookup insert empty gen1 (insert k v gen0)
+
+Semispace.insert.doc : Doc
+Semispace.insert.doc =
+  {{
+  `` Semispace.insert k v s `` inserts a key into the {active} generation of
+  `s`.
+  }}
+
+Semispace.insert.soft : k -> v -> Semispace g m k v ->{g} Semispace g m k v
+Semispace.insert.soft k v = cases
+  Semispace lookup insert empty gen1 gen0 ->
+    Semispace lookup insert empty (insert k v gen1) gen0
+
+Semispace.insert.soft.doc : Doc
+Semispace.insert.soft.doc =
+  {{
+  Like {Semispace.insert}, but inserts into the {expiring} generation. This is
+  sometimes useful for keys that you think may not be accessed ever again. If
+  they are, they will be promoted to {active} at that point, and if not,
+  they'll disappear on the next {Semispace.gc}.
+  }}
+
+Semispace.lookup :
+  k -> Semispace g m k v ->{g} Optional (v, Optional (Semispace g m k v))
+Semispace.lookup k = cases
+  Semispace lookup insert empty gen1 gen0 ->
+    match lookup k gen0 with
+      None ->
+        match lookup k gen1 with
+          Some v ->
+            Some
+              (v, Some (Semispace lookup insert empty gen1 (insert k v gen0)))
+          _ -> None
+      Some v -> Some (v, None)
+
+Semispace.lookup.doc : Doc
+Semispace.lookup.doc =
+  use Map empty
+  use Optional map
+  use Semispace fromMap gc insert lookup
+  {{
+  `` lookup k s `` returns {Some} along with (optionally) the new
+  {type Semispace} on a successful lookup.
+
+  # Examples
+
+    Here's a cache hit in {active}:
+
+    ```
+    fromMap empty |> insert "a" 1 |> lookup "a"
+    ```
+
+    Notice that there's no new {type Semispace} returned with the result.
+
+    If we do a {gc} before the {lookup}, then everything inserted so far is
+    moved to {expiring}, and the lookup promotes the key to {active}:
+
+    ```
+    fromMap empty
+      |> insert "a" 1
+      |> gc
+      |> lookup "a"
+      |> (map cases (v, semi) -> (v, map active semi))
+    ```
+  }}
+
+test> Semispace.tests.fromMap =
+  test.verify do
+    use Map toList
+    use Random natIn
+    use Semispace gc
+    Each.repeat 100
+    entries = List.replicate (natIn 0 20) do (natIn 0 100, natIn 0 100)
+    m = Map.fromList entries
+    Semispace.fromMap m
+      |> gc
+      |> touch.all (List.map at1 entries)
+      |> gc
+      |> expiring
+      |> toList
+      |> (===) (toList m)
+      |> ensure
+
+test> Semispace.tests.fromRbt =
+  test.verify do
+    use Random natIn
+    use Semispace gc
+    use Set fromList
+    Each.repeat 100
+    keys = List.replicate (natIn 0 20) do Random.bytes (natIn 0 20)
+    r = List.foldLeft (rbt k -> setInsert k rbt) Rbt.empty keys
+    Semispace.fromRbt 2 r
+      |> gc
+      |> touch.all keys
+      |> gc
+      |> expiring
+      |> Rbt.toList
+      |> fromList
+      |> (s -> s === fromList keys)
+
+Semispace.touch.all : [k] -> Semispace g m k v ->{g} Semispace g m k v
+Semispace.touch.all ks s =
+  go s = cases
+    []      -> s
+    k +: ks ->
+      match Semispace.lookup k s with
+        None        -> go s ks
+        Some (_, o) -> go (Optional.getOrElse s o) ks
+  go s ks
+
+SemispaceCache.doc : Doc
+SemispaceCache.doc =
+  use SemispaceCache insert
+  use fromList impl
+  {{
+  A {type SemispaceCache} is an in-memory cache of values that has an
+  inexpensive way of performing Garbage Collection in order to limit how
+  quickly a cache can grow. It accomplishes this by maintaining two cache
+  internally, the "active" cache and the "expiring" cache. Garbage collection
+  is performed by replacing the expired cache with the active cache, and wiping
+  the active cache clean.
+
+  @typecheck ```
+  cache = SemispaceCache.new()
+  insert 0xsabcd1234 "hi" cache
+  insert 0xsdeadbeef "bye" cache
+  SemispaceCache.gcIfSizeExceeds 10 cache
+  SemispaceCache.lookup 0xsabcd1234 cache
+  ```
+  }}
+
+SemispaceCache.gc : SemispaceCache a ->{IO} ()
+SemispaceCache.gc = cases
+  SemispaceCache.SemispaceCache count active expiring ->
+    STM.atomically do
+      use TVar write
+      write count 0
+      write expiring (TVar.read active)
+      write active TMap.empty()
+
+SemispaceCache.gc.doc : Doc
+SemispaceCache.gc.doc =
+  {{ {SemispaceCache.gc} - moves active to expiring and clears active }}
+
+SemispaceCache.gcIfSizeExceeds : Nat -> SemispaceCache a ->{IO, Exception} ()
+SemispaceCache.gcIfSizeExceeds n c = STM.atomically do gcIfSizeExceeds.stm n c
+
+SemispaceCache.gcIfSizeExceeds.doc : Doc
+SemispaceCache.gcIfSizeExceeds.doc =
+  {{
+  {SemispaceCache.gcIfSizeExceeds} - performs the {SemispaceCache.gc} action if
+  the size of the active cache is greater than the given value.
+  }}
+
+SemispaceCache.gcIfSizeExceeds.stm : Nat -> SemispaceCache a ->{STM} ()
+SemispaceCache.gcIfSizeExceeds.stm n = cases
+  SemispaceCache.SemispaceCache count active expiring ->
+    if TVar.read count Nat.> n then
+      use TVar write
+      write count 0
+      write expiring (TVar.read active)
+      write active TMap.empty()
+    else ()
+
+SemispaceCache.insert : Bytes -> a -> SemispaceCache a ->{IO, Exception} ()
+SemispaceCache.insert key v = cases
+  SemispaceCache.SemispaceCache sz activeTv expiringTv ->
+    STM.atomically do
+      use TVar read
+      active = read activeTv
+      match TMap.lookup key active with
+        Some _ -> ()
+        None   ->
+          TMap.insert key v active
+          TVar.write sz (Nat.increment (read sz))
+
+SemispaceCache.insert.doc : Doc
+SemispaceCache.insert.doc =
+  {{ {SemispaceCache.insert} inserts a value into the active cache }}
+
+SemispaceCache.lookup : Bytes -> SemispaceCache a ->{IO, Exception} Optional a
+SemispaceCache.lookup key = cases
+  SemispaceCache.SemispaceCache sz activeTv expiringTv ->
+    use STM atomically
+    use TMap lookup
+    use TVar read
+    active = atomically do read activeTv
+    match atomically do lookup key active with
+      None ->
+        match atomically do lookup key (read expiringTv) with
+          None   -> None
+          Some v ->
+            sz2 = atomically do
+              n = Nat.increment (read sz)
+              TVar.write sz n
+              TMap.insert key v active
+              n
+            Some v
+      some -> some
+
+SemispaceCache.lookup.doc : Doc
+SemispaceCache.lookup.doc =
+  {{
+  {SemispaceCache.lookup} will lookup a key in the active and expiring caches,
+  promoting values found in the expiring cache to the active cache
+  }}
+
+SemispaceCache.new : '{IO, Exception} SemispaceCache a
+SemispaceCache.new = do STM.atomically new.stm
+
+SemispaceCache.new.doc : Doc
+SemispaceCache.new.doc =
+  {{ {SemispaceCache.new} Creates a new {type SemispaceCache} }}
+
+SemispaceCache.new.stm : '{STM} SemispaceCache a
+SemispaceCache.new.stm =
+  do
+    SemispaceCache.SemispaceCache
+      (TVar.new 0) (TVar.new TMap.empty()) (TVar.new TMap.empty())
+
+SemispaceCache.size : SemispaceCache a ->{IO, Exception} Nat
+SemispaceCache.size c = STM.atomically do size.stm c
+
+SemispaceCache.size.doc : Doc
+SemispaceCache.size.doc =
+  {{ {SemispaceCache.size} returns the number of items in the active cache }}
+
+SemispaceCache.size.stm : SemispaceCache a ->{STM} Nat
+SemispaceCache.size.stm = cases
+  SemispaceCache.SemispaceCache sz _ _ -> TVar.read sz
+
+SemispaceCache.tests.ex1 : '{IO, Exception} [Result]
+SemispaceCache.tests.ex1 = do
+  test.verify do
+    use List foreach
+    use Nat + -
+    use Random natIn
+    use SemispaceCache gcIfSizeExceeds lookup
+    Each.repeat 25
+    keys = List.replicate (natIn 0 100) do natIn 0 100
+    cache = SemispaceCache.new()
+    n = Set.fromList keys |> Set.size
+    eq : x -> a -> a -> ()
+    eq msg a a2 = if a === a2 then () else ensureWith msg false
+    go k =
+      kb = encodeNat64be k
+      SemispaceCache.insert kb k cache
+      eq "go" (lookup kb cache) (Some k)
+    foreach keys go
+    eq "after inserts" (SemispaceCache.size cache) n
+    gcIfSizeExceeds (n + 1) cache
+    eq "after no gc" (SemispaceCache.size cache) n
+    gcIfSizeExceeds (n - 1) cache
+    eq ("after gc", SemispaceCache.size cache, n) (SemispaceCache.size cache) 0
+    go2 k =
+      kb = encodeNat64be k
+      eq "lookup worked" (lookup kb cache) (Some k)
+    foreach keys go2
+    eq "end" (SemispaceCache.size cache) n
+
+Seq.accumulate :
+  Location {g, Scratch}
+  -> (i -> t)
+  -> t
+  -> (t -> t -> t)
+  -> Seq k i
+  -> Index Memo t i
+Seq.accumulate region f z op d0 =
+  impl mode d =
+    use Remote fork
+    use Seq unwrap
+    use Two Empty One Two
+    use Value map
+    go = cases
+      Empty              -> (z, Empty)
+      One a              -> (f a, One a)
+      Two Sequential l r ->
+        l' = impl Sequential l
+        r' = impl Sequential r
+        m = op (metric l') (metric r')
+        (m, Two Sequential l' r')
+      Two Parallel l r   ->
+        tl = fork region do impl Parallel l
+        tr = fork region do impl Parallel r
+        l' = await tl
+        r' = await tr
+        m = op (metric l') (metric r')
+        (m, Two Parallel l' r')
+    match mode with
+      Sequential -> Index (map go (unwrap d))
+      Parallel   -> Index (Value.memo region (map go (unwrap d)))
+  impl Parallel d0
+
+Seq.accumulate' :
+  Location {Scratch, g}
+  -> (a ->{Exception, Remote} m)
+  -> m
+  -> (Index Memo m a -> Index Memo m a ->{Exception, Remote} Index Memo m a)
+  -> Seq k a
+  -> Index Memo m a
+Seq.accumulate' region f z op d0 =
+  use Seq unwrap
+  use Two Empty One
+  use Value map memo
+  go :
+    Two Mode a (Seq k a) ->{Exception, Remote} (m, Two Mode a (Index Memo m a))
+  go = cases
+    Empty            -> (z, Empty)
+    One a            -> (f a, One a)
+    Two.Two mode l r -> Index.unwrap! (op (impl mode l) (impl mode r))
+  impl : Mode -> Seq k a ->{Exception, Remote} Index Memo m a
+  impl mode d = match mode with
+    Sequential -> Index (Value.pure (go (Seq.unwrap! d)))
+    Parallel   -> Index (memo region (map go (unwrap d)))
+  Index (memo region (map go (unwrap d0)))
+
+Seq.append : Mode -> Seq k a -> Seq k a -> Seq k a
+Seq.append mode s s2 = Seq (Value.pure (Two.Two mode s s2))
+
+Seq.chunkedRange : Nat -> Nat -> Nat -> Seq Defer Nat
+Seq.chunkedRange chunkSize start stopExclusive =
+  use Nat + - / == >=
+  use Value pure
+  go = cases
+    (start, stop)
+      | start >= stopExclusive -> pure Two.Empty
+      | otherwise              ->
+        size = stop - start
+        if size == 1 then pure (Two.One start)
+        else
+          Value.delay do
+            mode = if size >= chunkSize then Parallel else Sequential
+            mid = start + size / 2
+            Two.Two mode (start, mid) (mid, stop)
+  Seq.unfold (start, stopExclusive) go
+
+Seq.chunkedRange.doc : Doc
+Seq.chunkedRange.doc =
+  {{
+  `` chunkedRange chunkSize start stopExclusive `` is just like {Seq.range} but
+  only produces a {Parallel} subtree if the tree has at least `chunkSize`
+  leaves.
+  }}
+
+Seq.chunkedRangeAt : Location g -> Nat -> Nat -> Nat -> Seq Defer Nat
+Seq.chunkedRangeAt region chunkSize start stopExclusive =
+  distribute region (chunkedRange chunkSize start stopExclusive)
+
+Seq.chunkedRangeAt.doc : Doc
+Seq.chunkedRangeAt.doc =
+  {{
+  `` chunkedRangeAt region chunkSize start stopExclusive `` behaves just like
+  ``chunkedRange chunkSize start stopExclusive``, but any subtrees with more
+  than `chunkSize` elements are placed at `region`.
+
+  This is useful for creating a distributed sequence where chunks smaller than
+  `chunkSize` will be colocated.
+  }}
+
+Seq.distribute : Location g -> Seq k a -> Seq Defer a
+Seq.distribute region s =
+  use Seq distribute
+  use Two Empty One Two
+  use Value pure
+  go = cases
+    Empty -> pure Empty
+    One a -> pure (One a)
+    Two Sequential l r ->
+      pure (Two Sequential (distribute region l) (distribute region r))
+    Two Parallel l r ->
+      delayAt region do
+        Two Parallel (distribute region l) (distribute region r)
+  Seq (Value.flatMap go (Seq.unwrap s))
+
+Seq.distribute.doc : Doc
+Seq.distribute.doc =
+  {{
+  `` distribute region s `` distributes any subtrees marked {Parallel} to a
+  {type Location} within `region`. It's useful for converting a parallel local
+  sequence to a distributed sequence.
+
+  See for instance its use in: @inlineSignature{chunkedRangeAt}
+  }}
+
+Seq.doc : Doc
+Seq.doc =
+  use Nat + <
+  use Seq filter map reduce
+  {{
+  An immutable and lazy distributed sequence type.
+
+  * `a` is the element type.
+  * `k` is either {type Defer} or {type Memo} indicating whether the sequence
+    is __deferred__ (forcing it will repeat the backing computations each time)
+    or __memoized__ (forcing first consults a cache). Functions that inspect a
+    {type Seq} multiple times can require a memoized sequence.
+
+  Here's an example usage:
+
+  ```
+  docs.run do
+    fromChunkedList 10 (Nat.range 0 100)
+      |> filter (x -> x < 10)
+      |> map (x -> x + 1)
+      |> reduce 0 (+)
+  ```
+
+  A few things to note:
+
+  * In the above example, the entire computation will happen in a single pass
+    over the data. Operations like {map}, {filter}, and {Seq.flatMap} are lazy
+    and build a fused computation that will be evaluated in a single pass when
+    an operation like {reduce} forces the sequence.
+  * When working with sequences that span multiple nodes, functions are moved
+    to the data: the arguments to {map} and {filter} are sent to the
+    location(s) where the data lives, rather than sending the data to the
+    caller. Likewise the function passed to {reduce} will be pushed down the
+    tree to the location(s) where the data lives, and reduced results will be
+    returned to the caller.
+  * A {reduce} will work in parallel on subtrees bigger than the chunk size
+    (here `10`), so this library works well for large-scale map-reduce jobs.
+
+  The core {type Seq} type is only a few lines of code, and new operations on
+  this type are often just a few lines each. New contributions are welcome! For
+  instance, here's {map}:
+
+      @source{map}
+
+  To learn more, see the article
+  [Spark-like datasets in Unison](https://unison-lang.org/articles/distributed-datasets).
+  }}
+
+Seq.doc.snippets.totallyLazy : Doc
+Seq.doc.snippets.totallyLazy =
+  {{
+  This function is pure and returns immediately; only when the resulting
+  {type Seq} is demanded will the function `f` be applied. The laziness is also
+  as granular as possible: if only the first 3 elements of the {type Seq} are
+  demanded, then `f` will be called on just those elements.
+
+  If the resulting {type Seq} is expected to be demanded multiple times and the
+  function `f` is expensive, you can use {Seq.memo} to lazily materialize a
+  {type Seq} when it is first demanded.
+
+  This function has no opinion on parallelism; it's up to the code which
+  demands a {type Seq} to decide how to make use of parallelism, possibly using
+  programmer provided {type Mode} hints attached to the {type Seq} itself.
+  }}
+
+Seq.empty : Seq k a
+Seq.empty = Seq (Value.pure Two.Empty)
+
+Seq.filter : (a ->{Exception, Remote} Boolean) -> Seq k a -> Seq Defer a
+Seq.filter f s =
+  use Seq filter
+  use Two Empty One Two
+  go = cases
+    Empty        -> Empty
+    One a        -> if f a then One a else Empty
+    Two mode l r -> Two mode (filter f l) (filter f r)
+  Seq (Value.map go (Seq.unwrap s))
+
+Seq.filter.doc : Doc
+Seq.filter.doc =
+  use Nat <
+  use Seq filter
+  {{
+  `` filter f xs `` lazily removes elements of `xs` for which `f` returns
+  ``false``, applying `f` at the location(s) where the elements of `xs` live.
+
+  ```
+  docs.run do
+    Seq.fromList Sequential [100, 200, 300, 400]
+      |> filter (x -> x < 250)
+      |> Seq.toList
+  ```
+
+  {{ totallyLazy }}
+
+  __See also:__ {Seq.map}, {Seq.flatMap}
+  }}
+
+Seq.flatMap : (a ->{Exception, Remote} Seq Defer b) -> Seq k a -> Seq Defer b
+Seq.flatMap f s =
+  use Seq unwrap
+  use Two Empty
+  use Value pure
+  go :
+    Two Mode a (Seq k a) -> distributed_6_0_0.Value (Two Mode b (Seq Defer b))
+  go = cases
+    Empty            -> pure Empty
+    Two.One a        -> unwrap (f a)
+    Two.Two mode l r -> pure (Two.Two mode (Seq.flatMap f l) (Seq.flatMap f r))
+  Seq (Value.flatMap go (unwrap s))
+
+Seq.fromChunkedList : Nat -> [a] -> Seq k a
+Seq.fromChunkedList chunkSize = cases
+  [] -> Seq (Value.pure Two.Empty)
+  [a] -> Seq (Value.pure (Two.One a))
+  as ->
+    (l, r) = List.halve as
+    use Nat >=
+    use Seq fromChunkedList
+    mode = if List.size as >= chunkSize then Parallel else Sequential
+    Seq
+      (Value.pure
+        (Two.Two
+          mode (fromChunkedList chunkSize l) (fromChunkedList chunkSize r)))
+
+Seq.fromList : Mode -> [a] -> Seq k a
+Seq.fromList mode = cases
+  []  -> Seq.empty
+  [a] -> Seq.one a
+  as  ->
+    (l, r) = List.halve as
+    Seq.append mode (Seq.fromList mode l) (Seq.fromList mode r)
+
+Seq.fromList.doc : Doc
+Seq.fromList.doc =
+  {{
+  Create a {type Seq} from a {type List} by recursively dividing the list in
+  half until it is size 1 or 0.
+
+  All branches in the result tree will have the provided {type Mode}.
+
+  ```
+  docs.run do Seq.fromList Parallel [1, 2, 3] |> Seq.toList
+  ```
+  }}
+
+Seq.fromListAt : Location g -> Nat -> [a] -> Seq k a
+Seq.fromListAt region chunkSize as =
+  use List halve
+  use Nat * <= >=
+  use Two Two
+  step isRoot count as =
+    if List.size as <= chunkSize then
+      Value.at region (Seq.unwrap (Seq.fromList Sequential as)) |> Value.join
+    else
+      if count >= chunkSize
+        || isRoot then
+        delayAt region do
+          (l, r) = halve as
+          Two Parallel (Seq (step false 2 l)) (Seq (step false 2 r))
+      else
+        (l, r) = halve as
+        count' = count * 2
+        Value.pure
+          (Two Parallel (Seq (step false count' l)) (Seq (step false count' r)))
+  Seq (step true 1 as)
+
+Seq.fromListAt.doc : Doc
+Seq.fromListAt.doc =
+  {{
+  `` fromListAt region chunkSize as `` creates a distributed sequence from the
+  list `as`, choosing locations from `region` to achieve good locality.
+
+  ```
+  docs.run do fromListAt here! 3 [1, 2, 3, 4, 5, 6] |> Seq.toList
+  ```
+
+  More specifically:
+
+  * Each subtree with `chunkSize` or fewer elements is colocated.
+  * Every `log₂ chunkSize` levels of the tree are colocated.
+  * Branches with more than `chunkSize` elements are marked {Parallel}.
+
+  When a {type Location} is needed it is selected from
+  `region`.{{
+  docAside
+    {{
+    As a special case, when `region` represents a single node, the entire
+    sequence will be placed onto that node.
+    }}
+  }}
+
+  For example, with a `chunkSize` of 8, a 128-element list will have 16 chunks,
+  and a depth of 4 to reach those chunks (since `2^4 = 16`), so this function
+  will pick a location in `region` for each of the 16 chunks, and a single
+  location in `region` for the root and all tree levels down to the roots of
+  the 16 chunks:
+
+  ``` raw
+  LR(L1(..), L2(..), L3(..) ... L16(..))
+  ```
+
+  Here `L1` is the location of the first chunk, `L2` the second, and so on, and
+  `LR` is the location of the root and its subtrees.
+
+  **See also:** {Seq.fromList}
+  }}
+
+Seq.isEmpty : Seq Memo a ->{Remote} Boolean
+Seq.isEmpty s = match Seq.unwrap! s with
+  Two.Empty     -> true
+  Two.One _     -> false
+  Two.Two _ l r -> Seq.isEmpty l && Seq.isEmpty r
+
+Seq.map : (a ->{Exception, Remote} b) -> Seq k a -> Seq Defer b
+Seq.map f s =
+  use Two Empty One Two
+  go = cases
+    Empty        -> Empty
+    One a        -> One (f a)
+    Two mode l r -> Two mode (Seq.map f l) (Seq.map f r)
+  Seq (Value.map go (Seq.unwrap s))
+
+Seq.map.doc : Doc
+Seq.map.doc =
+  use Nat *
+  use Seq map
+  {{
+  `` map f xs `` lazily transforms elements of `xs` using the function `f`,
+  which will be applied at the location(s) where the elements of `xs` live.
+
+  ```
+  docs.run do
+    Seq.fromList Sequential [1, 2, 3, 4] |> map (x -> x * 100) |> Seq.toList
+  ```
+
+  {{ totallyLazy }}
+
+  __See also:__ {Seq.flatMap}, {mapRandom}, {Seq.filter}
+  }}
+
+Seq.mapRandom : Nat -> (a ->{Random} b) -> Seq k a -> Seq Defer b
+Seq.mapRandom seed f s =
+  impl : RNG -> Seq k a -> Seq Defer b
+  impl rng s =
+    use Two Empty One Two
+    go = cases
+      Empty        -> Empty
+      One a        -> One (RNG.run rng do f a)
+      Two mode l r ->
+        (rng1, rng2) = RNG.split rng
+        Two mode (impl rng1 l) (impl rng2 r)
+    Seq (Value.map go (Seq.unwrap s))
+  impl (fromSplitmix seed) s
+
+Seq.memo : Location {Scratch, g} -> Seq k a -> Seq memo a
+Seq.memo region s0 =
+  use Seq unwrap
+  use Two Empty One
+  use Value map memo
+  impl : Mode -> Seq k a ->{Remote} Seq memo a
+  impl mode s = match mode with
+    Sequential -> Seq (Value.pure (go (Seq.unwrap! s)))
+    Parallel   -> Seq (memo region (map go (unwrap s)))
+  go : Two Mode a (Seq k a) ->{Remote} Two Mode a (Seq memo a)
+  go = cases
+    Empty            -> Empty
+    One a            -> One a
+    Two.Two mode l r -> Two.Two mode (impl mode l) (impl mode r)
+  Seq (memo region (map go (unwrap s0)))
+
+Seq.memo.cast : Seq k a -> Seq memo a
+Seq.memo.cast s = unsafeExtract (Any s)
+
+Seq.memoReduce :
+  Location {Scratch, g} -> m -> (m -> m ->{Remote} m) -> Seq k m ->{Remote} m
+Seq.memoReduce region z op s0 =
+  impl : Mode -> Seq k m ->{Remote} m
+  impl mode s =
+    use Remote fork
+    use Seq unwrap
+    use Value get map
+    go : Two Mode m (Seq k m) ->{Remote} m
+    go = cases
+      Two.Empty              -> z
+      Two.One a              -> a
+      Two.Two Sequential l r -> op (impl Sequential l) (impl Sequential r)
+      Two.Two Parallel l r   ->
+        tl = fork region do impl Parallel l
+        tr = fork region do impl Parallel r
+        op (await tl) (await tr)
+    match mode with
+      Parallel   -> get (Value.memo region (map go (unwrap s)))
+      Sequential -> get (map go (unwrap s))
+  impl Parallel s0
+
+Seq.memoTop : Location {g, Scratch} -> Seq k a -> Seq k a
+Seq.memoTop region s = Seq (Value.memo region (Seq.unwrap s))
+
+Seq.one : a -> Seq k a
+Seq.one a = Seq (Value.pure (Two.One a))
+
+Seq.pack : Location {g, Scratch} -> Nat -> Seq k1 a ->{Remote} Seq k a
+Seq.pack region chunkSize s =
+  use Nat + >=
+  append = cases
+    (0, _), s -> s
+    s, (0, _) -> s
+    (m, s1), (n, s2) ->
+      mn = m + n
+      if mn >= chunkSize then (mn, memoTop region (Seq.append Parallel s1 s2))
+      else (mn, Seq.append Sequential s1 s2)
+  s
+    |> Seq.map (a -> (1, Seq.one a))
+    |> reduceSizeBalanced (0, Seq.empty) append
+    |> at2
+    |> memoTop region
+
+Seq.packAt :
+  Location {g, Scratch} -> Nat -> Seq Memo x -> Seq k1 a ->{Remote} Seq k a
+Seq.packAt region chunkSize dest values =
+  pack region chunkSize (Seq.send region dest values)
+
+Seq.range : Nat -> Nat -> Seq Defer Nat
+Seq.range start stopExclusive = chunkedRange 1 start stopExclusive
+
+Seq.range.doc : Doc
+Seq.range.doc =
+  use Seq range toList
+  use docs run
+  {{
+  `` range start stopExclusive `` lazily produces the {type Nat} between
+  `start` and `stopExclusive`, __not__ including `stopExclusive`.
+
+  ```
+  run do range 1 5 |> toList
+  ```
+
+  ```
+  run do range 4 4 |> toList
+  ```
+  }}
+
+Seq.rangeAt : Location g -> Nat -> Nat -> Nat -> Seq k Nat
+Seq.rangeAt region chunkSize start stop =
+  use Nat + - / == >=
+  use Seq rangeAt
+  step start stop =
+    if start >= stop then Two.Empty
+    else
+      if start + 1 == stop then Two.One start
+      else
+        size = stop - start
+        mid = start + size / 2
+        let
+          (mode, loc) =
+            if size >= chunkSize then (Parallel, region)
+            else (Sequential, near region here!)
+          l = rangeAt loc chunkSize start mid
+          r = rangeAt loc chunkSize mid stop
+          Two.Two mode l r
+  Seq (delayAt region do step start stop)
+
+Seq.rangeAt.doc : Doc
+Seq.rangeAt.doc =
+  use Seq toList
+  use docs run
+  {{
+  `` rangeAt region chunkSize start stopExclusive `` creates a distributed
+  sequence from `start` to `stopExclusive` of the given chunk size.
+
+  All subtrees smaller than `chunkSize` will be placed on the same
+  {type Location} within `region`.
+
+  This function is handy for setting up an initial distributed sequence that
+  can then be hydrated with "real" data via calls to {Seq.map} and/or
+  {Seq.flatMap}.
+
+  ```
+  run do rangeAt here! 5 1 10 |> toList
+  ```
+
+  ```
+  run do rangeAt here! 1 10 10 |> toList
+  ```
+  }}
+
+Seq.reduce : m -> (m -> m ->{Remote} m) -> Seq k m ->{Remote} m
+Seq.reduce z op s =
+  use Remote fork
+  use Seq reduce
+  use Two Two
+  go = cases
+    Two.Empty          -> z
+    Two.One a          -> a
+    Two Sequential l r -> op (reduce z op l) (reduce z op r)
+    Two Parallel l r   ->
+      tl = fork here! do reduce z op l
+      tr = fork here! do reduce z op r
+      op (await tl) (await tr)
+  Value.get (Value.map go (Seq.unwrap s))
+
+Seq.reduce.doc : Doc
+Seq.reduce.doc =
+  use Nat * +
+  use Seq flatMap fromList map reduce
+  {{
+  `` reduce z op s `` does a distributed reduce of `s` using the provided empty
+  element `z` and the combining function `op`. The `op` function is pushed down
+  to the location(s) where `xs` lives.
+
+  This function will use parallelism for any branches of the tree that are
+  marked with the {Parallel} {type Mode}.
+
+  # Examples
+
+    Here's a parallel map-reduce of a {type Seq}:
+
+    ```
+    docs.run do
+      fromList Parallel [1, 2, 3, 4] |> map (x -> x * 10) |> reduce 0 (+)
+    ```
+
+    One trick to control the granularity of parallelism is to build up the
+    {type Seq} using {fromList} and {flatMap}. For instance, we might have a
+    list of URLs or files we want to tokenize and compute statistics for. We
+    want parallelism across urls, but not necessarily within the processing of
+    a single url. This can be done with code like:
+
+    @typecheck ```
+    wordCount tokenizeUrl =
+      fromList Parallel ["url1", "url2", "url3"]
+        |> flatMap tokenizeUrl
+        |> map List.size
+        |> reduce 0 (+)
+    ```
+
+    __Also see:__ {reduceBalanced}
+  }}
+
+Seq.reduceBalanced : z -> (z -> z -> z) -> Seq k z ->{Remote} z
+Seq.reduceBalanced z op s =
+  use Nat +
+  op' = cases (k, m1), (k2, m2) -> (k + k2, op m1 m2)
+  at2 (reduceSizeBalanced (0, z) op' (Seq.map (m -> (1, m)) s))
+
+Seq.reduceSizeBalanced :
+  (Nat, m)
+  -> ((Nat, m) ->{Remote} (Nat, m) ->{Remote} (Nat, m))
+  -> Seq k (Nat, m)
+  ->{Remote} (Nat, m)
+Seq.reduceSizeBalanced z op s =
+  use List +:
+  use Nat >=
+  push : (Nat, m) -> [(Nat, m)] -> [(Nat, m)]
+  push km0 = cases
+    km@(Tuple.Cons k _) +: stack | at1 km0 >= k -> push (op km0 km) stack
+    stack                        -> km0 +: stack
+  finish = cases
+    []        -> z
+    s :+ last -> List.foldRight op last s
+  op' = cases
+    [], stack2           -> stack2
+    stack1, []           -> stack1
+    stack1 :+ km, stack2 -> op' stack1 (push km stack2)
+  finish (Seq.reduce [] op' (memo.cast (Seq.map List.singleton s)))
+
+Seq.sample : Nat -> Nat -> Seq Memo a ->{Remote} [a]
+Seq.sample seed n s = splitmix seed do
+  ts = List.replicate n do
+    rng = split!
+    Remote.fork here! do rng do sample1 s
+  List.map await ts |> List.somes
+
+Seq.sample1 : Seq Memo a ->{Remote, Random} Optional a
+Seq.sample1 s0 =
+  use Random boolean
+  use Seq unwrap!
+  use Two Empty One Two
+  go s = match unwrap! s with
+    Empty     -> go0 s0
+    One a     -> Some a
+    Two _ l r -> if boolean() then go l else go r
+  go0 s = match unwrap! s with
+    Empty     -> None
+    One a     -> Some a
+    Two _ l r -> if boolean() then go l else go r
+  go0 s0
+
+Seq.send : Location {Scratch, g} -> Seq Memo x -> Seq k1 a -> Seq k a
+Seq.send region place0 values =
+  impl place values =
+    use Two Empty One Two
+    go place = match Seq.unwrap! values with
+      Empty          -> Empty
+      One a          -> One a
+      Two mode vl vr ->
+        match place with
+          Two _ pl pr -> Two mode (impl pl vl) (impl pr vr)
+          leaf        -> Two mode (impl place0 vl) (impl place0 vr)
+    Seq (Value.map go (Seq.unwrap place))
+  impl place0 values
+
+Seq.skewUnfold :
+  s -> (s -> distributed_6_0_0.Value ([a], Optional (s, s))) -> Seq Defer a
+Seq.skewUnfold s f =
+  use List size
+  use Nat +
+  use Seq skewUnfold
+  go = cases
+    (hd, None) -> Seq.unwrap! (fromChunkedList (size hd + 1) hd)
+    (hd, Some (l, r)) ->
+      Two.Two
+        Parallel
+        (fromChunkedList (size hd + 1) hd)
+        (Seq.append Parallel (skewUnfold l f) (skewUnfold r f))
+  Seq (Value.map go (f s))
+
+Seq.skewUnfoldAt :
+  Location g -> s -> (s ->{g, Remote} ([a], Optional (s, s))) -> Seq Defer a
+Seq.skewUnfoldAt region s f =
+  f' s = delayAt region do f s
+  skewUnfold s f'
+
+Seq.sort :
+  Location {Scratch, g}
+  -> Nat
+  -> (a -> a ->{Remote} Ordering)
+  -> Seq Memo a
+  ->{Remote} Seq k a
+Seq.sort region chunkSize ord0 s =
+  use memo cast
+  ord = compareAt1By ord0
+  isBefore pivot a = ltBy ord a pivot
+  to a b = packAt region chunkSize a b
+  go seed s =
+    use Nat +
+    use Seq filter
+    use Two Empty One Two
+    step = cases
+      Empty        -> Empty
+      One a        -> One a
+      Two mode l r ->
+        overall = Seq.append mode l r
+        let
+          (s1, s2, s3) =
+            match Seq.sample seed 3 overall with
+              [s1, s2, s3] -> (s1, s2, s3)
+              _            -> bug "Seq.sample 3 did not return 3 elements"
+          pivot = medianOf3By ord s1 s2 s3
+          small = filter (isBefore pivot) overall |> to l
+          big = filter (Boolean.not << isBefore pivot) overall |> to r
+          seed' = seed + 1
+          Two mode (go seed' small) (go seed' big)
+    Seq (Value.map step (Seq.unwrap s))
+  go 0 (cast (zipRandomNat 1 s)) |> Seq.map at1 |> cast
+
+Seq.toList : Seq k a ->{Remote} [a]
+Seq.toList s =
+  use List ++
+  go s = match Seq.unwrap! s with
+    Two.Empty     -> []
+    Two.One a     -> [a]
+    Two.Two _ l r -> go l ++ go r
+  go s
+
+Seq.toRAM : Seq k a ->{Remote} Seq k2 a
+Seq.toRAM s = match Seq.unwrap! s with
+  Two.Empty        -> Seq.empty
+  Two.One a        -> Seq.one a
+  Two.Two mode l r ->
+    use Seq toRAM unwrap!
+    use Two Empty
+    l' = toRAM l
+    r' = toRAM r
+    match (unwrap! l', unwrap! r') with
+      (Empty, _) -> r'
+      (_, Empty) -> l'
+      _          -> Seq.append mode l' r'
+
+Seq.unfold : s -> (s -> distributed_6_0_0.Value (Two Mode a s)) -> Seq Defer a
+Seq.unfold s0 f = Seq (Value.map (Two.map (s -> Seq.unfold s f)) (f s0))
+
+Seq.unfold.doc : Doc
+Seq.unfold.doc =
+  use Nat / <=
+  use Seq unfold
+  use Text size
+  use Value pure
+  {{
+  `` unfold s f `` produces a {type Seq} lazily by recursively splitting `s`
+  using `f`.
+
+  For instance, this creates a {type Seq} from a {type Text} via repeated
+  splitting the text in half:
+
+  ```
+  docs.run do
+    step t =
+      if size t <= 1 then pure (Two.One t)
+      else
+        pure
+          (Two.Two
+            Sequential (Text.take (size t / 2) t) (Text.drop (size t / 2) t))
+    unfold "abracadabra" step |> Seq.toList
+  ```
+
+  The above produces a strict sequence at the current location, but we can
+  achieve other effects:
+
+  * By wrapping steps of the unfold with {Value.delay}, the {type Seq} will be
+    produced lazily as subtrees are examined.
+  * By wrapping steps of the unfold with {delayAt}, the {type Seq} will be
+    produced lazily and distributed to the locations passed to {delayAt}.
+
+  **Also see:** {skewUnfoldAt}, {rangeAt}, {fromListAt}
+  }}
+
+Seq.unfold' : s -> (s -> distributed_6_0_0.Value (Two Mode a s)) -> Seq Defer a
+Seq.unfold' s f = Seq.unfold s (s -> Value.join (Value.delay do f s))
+
+Seq.unfold'.doc : Doc
+Seq.unfold'.doc =
+  {{
+  Just like {Seq.unfold} but the splitting function may use {type Remote}
+  directly.
+
+  Works by wrapping each call to `f` in an additional {Value.delay}.
+  }}
+
+Seq.unwrap : Seq k a -> distributed_6_0_0.Value (Two Mode a (Seq k a))
+Seq.unwrap = cases Seq f -> f
+
+Seq.unwrap! : Seq k a ->{Remote} Two Mode a (Seq k a)
+Seq.unwrap! = cases Seq f -> Value.get f
+
+Seq.zipRandomNat : Nat -> Seq k a -> Seq Defer (a, Nat)
+Seq.zipRandomNat seed = mapRandom seed (a -> (a, nat!))
+
+Stamp.doc : Doc
+Stamp.doc =
+  use Stamp fork join lteq tick zero
+  {{
+  {type Stamp} is an
+  [interval tree clock](https://blog.separateconcerns.com/2017-05-07-itc.html),
+  used for tracking causality in a distributed system.
+
+  Here, we fork a {type Stamp}, which splits it into two different timelines.
+  {tick} of each timeline produces a {type Stamp} which is incomparable to the
+  other (according to {lteq}). A {join} brings them back together.
+
+  ```
+  (t1, t2) = fork zero
+  t1' = tick t1
+  t2' = tick t2
+  (lteq t1' t2', lteq t1' (join t1' t2'))
+  ```
+
+  Here's what the API looks like:
+
+      @signatures{zero, tick, join, fork, lteq}
+
+  __Properties:__
+
+  * {{ docExample 1 do t1 -> lteq t1 (tick t1) }}
+  * {{ docExample 2 do t1 t2 -> lteq t1 (join t1 t2) }}
+  * {{ docExample 2 do t1 t2 -> join t1 t2 === join t2 t1 }}
+  * {{ docExample 1 do t1 -> join t1 t1 === t1 }}
+  * {{
+    docExample 3 do t1 t2 t3 -> join t1 (join t2 t3) === join (join t1 t2) t3
+    }}
+  * {{ docExample 1 do
+      t1 -> let
+        (ta, tb) = fork t1
+        Boolean.not (lteq (tick ta) (tick tb)) }}
+
+  # Credits
+
+    This implementation is a port of
+    [this Haskell library](https://hackage.haskell.org/package/interval-tree-clock-0.1.0.2)
+    by Arne Winter. MIT licensed.
+
+  # Comparison to other clock types
+
+    A {type VectorClock} tracks a count per location, which works fine but
+    doesn't have a great story for garbage collection if the set of locations
+    changes frequently.
+
+    {type Stamp} has a built in mechanism for garbage collection as part of
+    {tick} and {join}, with the amount of storage generally tracking the amount
+    of active concurrent updates. However, the API of needing to {fork} to
+    obtain two independent timelines is sometimes awkward to work with.
+
+    {type Clock} and {type TrimClock} are __content-addressed clocks__, which
+    don't require forking to make new timelines, but require storage
+    proportional to the number of events. {type TrimClock} supports garbage
+    collection of old events, but this has to be called explicitly.
+
+  # Further reading
+
+    * A nice
+      [blog post and lightning talk](https://blog.separateconcerns.com/2017-05-07-itc.html)
+      on interval tree clocks.
+    * The original paper
+      [Interval Tree Clocks: A Logical Clock for Dynamical Systems](http://haslab.uminho.pt/cbm/files/itc.pdf),
+      by Paulo Sérgio Almeida, Carlos Baquero and Victor Fonte.
+  }}
+
+Stamp.Event.decrement : Event -> Nat -> Event
+Stamp.Event.decrement e m =
+  use Nat -
+  Event.modify e (x -> x - m)
+
+Stamp.Event.increment : Event -> Nat -> Event
+Stamp.Event.increment e m =
+  use Nat +
+  Event.modify e (x -> x + m)
+
+Stamp.Event.maxEv : Event -> Nat
+Stamp.Event.maxEv = cases
+  StampEvent n -> n
+  Event.Branch n e1 e2 ->
+    n Nat.+ Nat.max (Stamp.Event.maxEv e1) (Stamp.Event.maxEv e2)
+
+Stamp.Event.minEv : Event -> Nat
+Stamp.Event.minEv = cases
+  StampEvent n -> n
+  Event.Branch n e1 e2 ->
+    n Nat.+ Nat.min (Stamp.Event.minEv e1) (Stamp.Event.minEv e2)
+
+Stamp.Event.modify : Event -> (Nat ->{g} Nat) ->{g} Event
+Stamp.Event.modify = cases
+  StampEvent n, f         -> StampEvent (f n)
+  Event.Branch n e1 e2, f -> Event.Branch (f n) e1 e2
+
+Stamp.Event.normEv : Event -> Event
+Stamp.Event.normEv = cases
+  n@(StampEvent _) -> n
+  Event.Branch n (StampEvent m) (StampEvent m')| m Nat.== m'  ->
+    StampEvent (n Nat.+ m)
+  Event.Branch n e1 e2 ->
+    use Event decrement
+    use Nat +
+    m = Nat.min (minEv e1) (minEv e2)
+    Event.Branch (n + m) (decrement e1 m) (decrement e2 m)
+
+Stamp.fork : Stamp -> (Stamp, Stamp)
+Stamp.fork = cases
+  Stamp i e ->
+    (i1, i2) = Id.split i
+    (Stamp i1 e, Stamp i2 e)
+
+Stamp.forks : Nat -> Stamp -> [Stamp]
+Stamp.forks n s = match n with
+  0 -> []
+  1 -> [s]
+  n ->
+    (l, r) = Stamp.fork s
+    use List ++
+    use Nat - /
+    use Stamp forks
+    half = n / 2
+    forks half l ++ forks (n - half) r
+
+Stamp.Id.no : Stamp.Id
+Stamp.Id.no = StampId false
+
+Stamp.Id.split : Stamp.Id -> (Stamp.Id, Stamp.Id)
+Stamp.Id.split = cases
+  StampId false               -> (no, no)
+  StampId true                -> (Id.Branch yes no, Id.Branch no yes)
+  Id.Branch (StampId false) i ->
+    (i1, i2) = Stamp.Id.split i
+    (Id.Branch no i1, Id.Branch no i2)
+  Id.Branch i (StampId false) ->
+    (i1, i2) = Stamp.Id.split i
+    (Id.Branch i1 no, Id.Branch i2 no)
+  Id.Branch l r               -> (Id.Branch l no, Id.Branch no r)
+
+Stamp.Id.yes : Stamp.Id
+Stamp.Id.yes = StampId true
+
+Stamp.join : Stamp -> Stamp -> Stamp
+Stamp.join = cases
+  s1, s2
+    | s1 === Stamp.zero  -> s2
+    | s2 === Stamp.zero  -> s1
+  Stamp i1 e1, Stamp i2 e2 ->
+    use Event increment
+    use Nat - >
+    normId = cases
+      Id.Branch (StampId false) (StampId false) -> no
+      Id.Branch (StampId true) (StampId true)   -> yes
+      leaf                                      -> leaf
+    sumId = cases
+      StampId false, i -> i
+      i, StampId false -> i
+      Id.Branch l1 r1, Id.Branch l2 r2 ->
+        normId (Id.Branch (sumId l1 l2) (sumId r1 r2))
+      StampId true, StampId true -> StampId true
+      i1, i2 ->
+        bug
+          ( "internal consistency error. Create ids only by means of fork and join."
+          , i1
+          , i2
+          )
+    joinEv = cases
+      StampEvent n1, StampEvent n2 -> StampEvent (Nat.max n1 n2)
+      StampEvent n1, b@(Event.Branch _ _ _) ->
+        joinEv (Event.Branch n1 (StampEvent 0) (StampEvent 0)) b
+      b@(Event.Branch _ _ _), StampEvent n1 ->
+        joinEv b (Event.Branch n1 (StampEvent 0) (StampEvent 0))
+      b1@(Event.Branch n1 _ _), b2@(Event.Branch n2 _ _)| n1 > n2  ->
+        joinEv b2 b1
+      Event.Branch n1 l1 r1, Event.Branch n2 l2 r2 ->
+        normEv
+          (Event.Branch
+            n1
+            (joinEv l1 (increment l2 (n2 - n1)))
+            (joinEv r1 (increment r2 (n2 - n1))))
+    Stamp (sumId i1 i2) (joinEv e1 e2)
+
+Stamp.lteq : Stamp -> Stamp -> Boolean
+Stamp.lteq = cases
+  Stamp _ e1, Stamp _ e2 ->
+    use Event Branch increment
+    use Nat <=
+    evLteq = cases
+      StampEvent n1, StampEvent n2 -> n1 <= n2
+      StampEvent n1, Branch n2 _ _ -> n1 <= n2
+      Branch n1 l1 r1, StampEvent n2 ->
+        n1 <= n2 && evLteq (increment l1 n1) (StampEvent n2)
+          && evLteq (increment r1 n1) (StampEvent n2)
+      Branch n1 l1 r1, Branch n2 l2 r2 ->
+        n1 <= n2 && evLteq (increment l1 n1) (increment l2 n2)
+          && evLteq (increment r1 n1) (increment r2 n2)
+    evLteq e1 e2
+
+test> Stamp.tests = test.verify do
+  use Nat ==
+  use Stamp join lteq zero
+  Each.repeat 10
+  n = Random.natIn 2 16
+  ensure (join zero zero === zero)
+  stamps = shuffle (forks n zero)
+  ensure (List.size stamps == n)
+  ticked = List.map Stamp.tick stamps
+  joined = foldb Function.id join zero ticked
+  s1 = each ticked
+  s2 = each ticked
+  ensure (s1 === s2 || Boolean.not (lteq s1 s2))
+  ensure (lteq s1 (join s1 s2))
+  ensure (lteq s2 (join s2 s1))
+  ensure (lteq s1 joined)
+  ensure (lteq s2 joined)
+
+Stamp.tick : Stamp -> Stamp
+Stamp.tick = cases
+  s@(Stamp i e) ->
+    use Nat + < max
+    fill' = cases
+      StampId false, e                                -> abort
+      StampId true, e                                 -> StampEvent (maxEv e)
+      _, StampEvent _                                 -> abort
+      Id.Branch (StampId true) ir, Event.Branch n l r ->
+        r' = fill' ir r
+        normEv (Event.Branch n (StampEvent (max (maxEv l) (minEv r'))) r')
+      Id.Branch il (StampId true), Event.Branch n l r ->
+        l' = fill' il l
+        normEv (Event.Branch n l' (StampEvent (max (maxEv r) (minEv l'))))
+      Id.Branch il ir, Event.Branch n l r             ->
+        match (toOptional! do fill' il l, toOptional! do fill' ir r) with
+          (None, None)     -> abort
+          (None, Some r)   -> normEv (Event.Branch n l r)
+          (Some l, None)   -> normEv (Event.Branch n l r)
+          (Some l, Some r) -> normEv (Event.Branch n l r)
+    match toOptional! do fill' i e with
+      Some e' -> Stamp i e'
+      None ->
+        grow' : Stamp -> (Event, Nat)
+        grow' = cases
+          Stamp (StampId true) (StampEvent n) -> (StampEvent (n + 1), 0)
+          Stamp i (StampEvent n) ->
+            largeCost = 100000
+            let
+              (e', c) =
+                grow' (Stamp i (Event.Branch n (StampEvent 0) (StampEvent 0)))
+              (e', c + largeCost)
+          Stamp (Id.Branch (StampId false) i) (Event.Branch n l r) ->
+            (r', cr) = grow' (Stamp i r)
+            (Event.Branch n l r', cr + 1)
+          Stamp (Id.Branch i (StampId false)) (Event.Branch n l r) ->
+            (l', cl) = grow' (Stamp i l)
+            (Event.Branch n l' r, cl + 1)
+          Stamp (Id.Branch il ir) (Event.Branch n l r) ->
+            (l', costL) = grow' (Stamp il l)
+            (r', costR) = grow' (Stamp ir r)
+            if costL < costR then (Event.Branch n l' r, costL + 1)
+            else (Event.Branch n l r', costR + 1)
+          _ -> bug "Stamp.tick.grow': impossible case"
+        let
+          (e', _) = grow' s
+          Stamp i e'
+
+Stamp.zero : Stamp
+Stamp.zero = Stamp (StampId true) (StampEvent 0)
+
+Storage.ram : '{g, Storage RAM} a ->{g} a
+Storage.ram a = handle a() with ram.handler
+
+Storage.ram.handler : Request {Storage RAM} a -> a
+Storage.ram.handler = cases
+  { Storage.save a -> resume } ->
+    handle resume (RAM.RAM a) with Storage.ram.handler
+  { restore (RAM.RAM a) -> resume } -> handle resume a with Storage.ram.handler
+  { a } -> a
+
+Storage.ram.value : '{g, Storage distributed_6_0_0.Value} a ->{g, Remote} a
+Storage.ram.value a =
+  go = cases
+    { a }                   -> a
+    { Storage.save x -> k } -> handle k (Value.pure x) with go
+    { restore x -> k }      -> handle k (Value.get x) with go
+  handle a() with go
+
+Storage.ram.value.doc : Doc
+Storage.ram.value.doc =
+  {{
+  Handler for {type Storage} which just converts calls to {Storage.save} to
+  {Value.pure}.
+  }}
+
+Storage.saveWith :
+  (∀ x. x ->{Remote} distributed_6_0_0.Value x)
+  -> '{h, Storage distributed_6_0_0.Value} a
+  ->{h, Remote} a
+Storage.saveWith saver a =
+  go : Request {Storage distributed_6_0_0.Value} x ->{Remote} x
+  go = cases
+    { a }                   -> a
+    { restore v -> k }      -> handle k (Value.get v) with go
+    { Storage.save x -> k } -> handle k (saver x) with go
+  handle a() with go
+
+Storage.saveWith.doc : Doc
+Storage.saveWith.doc =
+  use Storage save
+  {{
+  A {type Storage} handler that uses the provided function to save values, and
+  {Value.get} to retrieve values.
+
+  For example:
+
+  * {{ docExample 0 do saveWith Value.pure do save 42 }} just saves values to
+    RAM.
+  * {{ docExample 1 do loc -> saveWith (replicateFrom loc 5) do save 42 }}
+    saves values to scratch storage at the provided location, replicating
+    elsewhere on demand.
+  }}
+
+Storage.scratch : '{g, Scratch} r -> '{g, Storage Hashed} r ->{g, Scratch} r
+Storage.scratch miss r =
+  go = cases
+    { r }                   -> r
+    { Storage.save a -> k } ->
+      h = Scratch.save a
+      handle k h with go
+    { restore h -> k }      ->
+      match lookupHashed h with
+        None   -> miss()
+        Some a -> handle k a with go
+  handle r() with go
+
+Storage.scratch.doc : Doc
+Storage.scratch.doc =
+  use Storage scratch
+  {{
+  `` scratch miss r `` handles {type Storage} requests into {type Scratch},
+  using `miss` in the event that a hash isn't found. For example:
+
+  ```
+  Scratch.RAM do
+    scratch (do bug "miss") do
+      ah = Storage.save 42
+      restore ah
+  ```
+  }}
+
+Storage.scratchAt :
+  '{Remote} Location {Scratch, g}
+  -> '{h, Storage distributed_6_0_0.Value} a
+  ->{h, Remote} a
+Storage.scratchAt loc a =
+  go : Request {Storage distributed_6_0_0.Value} x ->{Remote} x
+  go = cases
+    { a }                   -> a
+    { restore v -> k }      -> handle k (Value.get v) with go
+    { Storage.save x -> k } ->
+      resolvedLoc = loc()
+      h = (forkAt resolvedLoc do Scratch.save x) |> await
+      v = delayAt resolvedLoc do match lookupHashed h with
+        None   -> Remote.fail (unknownHash "Storage.scratchAt" h)
+        Some a -> a
+      handle k v with go
+  handle a() with go
+
+Storage.scratchAt.doc : Doc
+Storage.scratchAt.doc =
+  {{
+  A handler for {type Storage} that stores all values at `loc` in
+  {type Scratch} storage. `loc` may be a static {type Location} or an
+  expression like:
+
+  @typecheck ```
+  scratchAt do assume (far region! here!)
+  ```
+
+  which picks a {type Location} from some pool.
+  }}
+
+StorageProvider.doc : Doc
+StorageProvider.doc =
+  use StorageProvider lookup saveKeyed
+  {{
+  An interface for content-addressed storage. Any value may be stored using a
+  {type StorageProvider}, and then retrieved via its hash.
+
+      @signatures{StorageProvider.save, lookupHash, forgetHash}
+
+  Different implementations of this interface will offer different guarantees.
+  Some possibilities:
+
+  * An in-memory {type StorageProvider} which uses an LRU cache keyed by hash.
+  * A local disk backed {type StorageProvider} using a SQLite database with a
+    single table keyed by hash. Data is lost if the machine goes away.
+  * A {type StorageProvider} backed by durable cloud storage such as S3.
+
+  And combinations are possible too, like a {type StorageProvider} that stores
+  data in durable cloud storage, but with an in-memory caching layer on top.
+
+  # Additional functions
+
+        @signatures{lookup, StorageProvider.saveHashed, saveKeyed, forget, forgetHash}
+
+    When using {saveKeyed}, {forget}, and {lookup}, the provided `k a` must
+    uniquely determine the associated value. If you try to save multiple
+    distinct values for the same key, results will be nondeterministc.
+  }}
+
+StorageProvider.forget :
+  StorageProvider -> k a ->{Remote} distributed_6_0_0.Value ()
+StorageProvider.forget = cases
+  StorageProvider hash _ forget _ -> k -> forget (hash k)
+
+StorageProvider.forgetHash :
+  StorageProvider -> Hashed a ->{Remote} distributed_6_0_0.Value ()
+StorageProvider.forgetHash = cases StorageProvider _ _ forget _ -> forget
+
+StorageProvider.hashKey : StorageProvider -> k a -> Hashed a
+StorageProvider.hashKey = cases StorageProvider h _ _ _ -> k -> h k
+
+StorageProvider.lookup :
+  StorageProvider -> k a ->{Remote} distributed_6_0_0.Value (Optional a)
+StorageProvider.lookup = cases
+  StorageProvider hash lookupHash _ _ -> k -> lookupHash (hash k)
+
+StorageProvider.lookupHash :
+  StorageProvider -> Hashed a ->{Remote} distributed_6_0_0.Value (Optional a)
+StorageProvider.lookupHash = cases
+  StorageProvider _ lookupHash _ _ -> lookupHash
+
+StorageProvider.save :
+  StorageProvider -> a ->{Remote} distributed_6_0_0.Value (Hashed a)
+StorageProvider.save sp a = StorageProvider.saveKeyed sp (structures.Id.Id a) a
+
+StorageProvider.saveHashed :
+  StorageProvider
+  -> Hashed a
+  -> a
+  ->{Remote} distributed_6_0_0.Value (Hashed a)
+StorageProvider.saveHashed = cases StorageProvider _ _ _ save -> save
+
+StorageProvider.saveKeyed :
+  StorageProvider -> k a -> a ->{Remote} distributed_6_0_0.Value (Hashed a)
+StorageProvider.saveKeyed = cases
+  StorageProvider hash _ _ save -> k a -> save (hash k) a
+
+StorageProvider.scratch : StorageProvider
+StorageProvider.scratch = scratch' Blake2b_256
+
+StorageProvider.scratch.doc : Doc
+StorageProvider.scratch.doc =
+  {{
+  A {type StorageProvider} using the {type Scratch} ability and the
+  {Blake2b_256} hashing algorithm.
+
+  Also see {scratch'} if you'd like to use a different hashing algorithm.
+  }}
+
+StorageProvider.scratch' : HashAlgorithm -> StorageProvider
+StorageProvider.scratch' algo =
+  StorageProvider
+    (k -> Hashed (Hash (crypto.hash algo k)))
+    (h -> delayAt (assume here!) do lookupHashed h)
+    (do Value.pure())
+    (h a ->
+      delayAt (assume here!) do
+        Scratch.saveHashed h a
+        h)
+
+structures.Two.map : (r1 ->{g} r2) -> Two m a r1 ->{g} Two m a r2
+structures.Two.map f = cases
+  Two.Empty     -> Two.Empty
+  Two.One a     -> Two.One a
+  Two.Two m l r -> Two.Two m (f l) (f r)
+
+structures.Two.map.doc : Doc
+structures.Two.map.doc =
+  use Nat +
+  use Two map
+  {{
+  Apply a function to the `r` parameter of {type Two}.
+
+  ```
+  map (x -> x + 1) (Two.Two "hi" 1 2)
+  ```
+
+  ```
+  map (x -> x + 1) Two.Empty
+  ```
+
+  ```
+  map (x -> x + 1) (Two.One "hi")
+  ```
+  }}
+
+(TrimClock.<=) : TrimClock -> TrimClock -> Boolean
+c1 TrimClock.<= c2 =
+  m = seen c2
+  inC2 h = Map.contains h m
+  Set.all inC2 (TrimClock.head c1)
+
+TrimClock.Expiring.isActive : Expiring -> Boolean
+TrimClock.Expiring.isActive = cases
+  Active -> true
+  _      -> false
+
+TrimClock.gc : Nat -> TrimClock -> TrimClock
+TrimClock.gc deleteIfBefore = cases
+  TrimClock n tip seen ->
+    ok = cases
+      (h, (n, exp)) ->
+        if Universal.lt n deleteIfBefore then
+          if isActive exp then Some (h, (n, Expiring)) else None
+        else Some (h, (n, exp))
+    seen' = Map.toList seen |> List.filterMap ok |> Map.fromList
+    TrimClock n tip seen'
+
+TrimClock.head : TrimClock -> Set Bytes
+TrimClock.head = cases TrimClock _ tip _ -> tip
+
+TrimClock.head.normalized : TrimClock -> Set Bytes
+TrimClock.head.normalized t = Set.normalize (TrimClock.head t)
+
+TrimClock.join : TrimClock -> TrimClock -> TrimClock
+TrimClock.join c1 c2 =
+  use Nat +
+  use TrimClock <= head
+  use Universal max
+  if c1 <= c2 then c2
+  else
+    if c2 <= c1 then c1
+    else
+      nc1 = nonce c1
+      nc2 = nonce c2
+      combine : (Nat, Expiring) -> (Nat, Expiring) -> (Nat, Expiring)
+      combine = cases
+        (n, Expiring), (m, Expiring) -> (max n m, Expiring)
+        (n, Active), (m, Active)     -> (max n m, Active)
+        (n, Active), (m, Expiring)   -> (nc1, Expiring)
+        (n, Expiring), (m, Active)   -> (nc2, Expiring)
+      TrimClock
+        (max (nonce c1) (nonce c2) + 1)
+        (Set.union (head c1) (head c2))
+        (Map.unionWith combine (seen c1) (seen c2))
+
+TrimClock.nonce : TrimClock -> Nat
+TrimClock.nonce = cases TrimClock nonce _ _ -> nonce
+
+TrimClock.nonce.modify : (Nat ->{g} Nat) -> TrimClock ->{g} TrimClock
+TrimClock.nonce.modify f = cases
+  TrimClock nonce tip seen -> TrimClock (f nonce) tip seen
+
+TrimClock.nonce.set : Nat -> TrimClock -> TrimClock
+TrimClock.nonce.set nonce1 = cases
+  TrimClock _ tip seen -> TrimClock nonce1 tip seen
+
+TrimClock.origin : TrimClock
+TrimClock.origin = TrimClock 0 Set.empty Map.empty
+
+TrimClock.refresh : TrimClock -> TrimClock
+TrimClock.refresh = cases
+  TrimClock n tip seen ->
+    go : Map Bytes (Nat, Expiring) -> Bytes -> Map Bytes (Nat, Expiring)
+    go m h = Map.insert h (n, Active) m
+    TrimClock n tip (Set.foldLeft go seen tip)
+
+TrimClock.seen : TrimClock -> Map Bytes (Nat, Expiring)
+TrimClock.seen = cases TrimClock _ _ seen -> seen
+
+TrimClock.seen.modify :
+  (Map Bytes (Nat, Expiring) ->{g} Map Bytes (Nat, Expiring))
+  -> TrimClock
+  ->{g} TrimClock
+TrimClock.seen.modify f = cases
+  TrimClock nonce tip seen -> TrimClock nonce tip (f seen)
+
+TrimClock.seen.set : Map Bytes (Nat, Expiring) -> TrimClock -> TrimClock
+TrimClock.seen.set seen1 = cases
+  TrimClock nonce tip _ -> TrimClock nonce tip seen1
+
+TrimClock.tick : a -> TrimClock -> TrimClock
+TrimClock.tick = TrimClock.tick' up.crypto.blake2b_256
+
+TrimClock.tick' :
+  ((a, Set Bytes) ->{g1} Bytes) -> a -> TrimClock ->{g1} TrimClock
+TrimClock.tick' algo a c =
+  use Nat +
+  h = algo (a, TrimClock.head.normalized c)
+  n = nonce c + 1
+  TrimClock n (Set.singleton h) (Map.insert h (n, Active) (seen c))
+
+TrimClock.tip.modify : (Set Bytes ->{g} Set Bytes) -> TrimClock ->{g} TrimClock
+TrimClock.tip.modify f = cases
+  TrimClock nonce tip seen -> TrimClock nonce (f tip) seen
+
+TrimClock.tip.set : Set Bytes -> TrimClock -> TrimClock
+TrimClock.tip.set tip1 = cases
+  TrimClock nonce _ seen -> TrimClock nonce tip1 seen
+
+up.crypto.blake2b_256 : a -> Bytes
+up.crypto.blake2b_256 a = crypto.hash Blake2b_256 a
+
+up.crypto.blake2b_256.doc : Doc
+up.crypto.blake2b_256.doc =
+  use up.crypto blake2b_256
+  {{
+  Computes the hash of any value, using the {Blake2b_256} hash algorithm.
+
+  ```
+  blake2b_256 [42, 43]
+  ```
+
+  ```
+  blake2b_256 "🌈"
+  ```
+  }}
+
+up.List.binarySearch : (a ->{g1} Ordering) -> [a] ->{g1} Either Nat (a, Nat)
+up.List.binarySearch ord as =
+  use List size
+  use Nat +
+  go i = cases
+    []  -> Left i
+    [a] ->
+      match ord a with
+        Equal   -> Right (a, i)
+        Less    -> Left i
+        Greater -> Left (i + 1)
+    as  ->
+      match List.halve as with
+        (l :+ mid, r) ->
+          match ord mid with
+            Less    -> go i l
+            Equal   -> Right (mid, i + size l)
+            Greater -> go (size l + i + 1) r
+        _             -> bug "binarySearch: impossible case"
+  go 0 as
+
+test> up.List.binarySearch.tests =
+  test.verify do
+    use Universal ordering
+    use up.List map_
+    ensureEqual
+      (binarySearch (ordering 3) [1, 2, 3, 5, 7, 20, 99]) (Right (3, 2))
+    r = Nat.range 0 1000
+    ok i = ensureEqual (binarySearch (ordering i) r) (Right (i, i))
+    map_ ok r
+    okDelete i =
+      del = deleteAt i r
+      ensureEqual (binarySearch (ordering i) del) (Left i)
+    map_ okDelete r
+
+up.List.dropEndWhile : (a ->{g} Boolean) -> [a] ->{g} [a]
+up.List.dropEndWhile f xs = match xs with
+  []           -> []
+  init :+ last -> if f last then up.List.dropEndWhile f init else xs
+
+up.List.foldb : (a ->{e} b) -> (b ->{e} b ->{e} b) -> b -> [a] ->{e} b
+up.List.foldb f op z as =
+  use List size
+  use up.List foldb
+  if size as === 0 then z
+  else
+    if size as === 1 then f (List.unsafeAt 0 as)
+    else
+      (left, right) = List.halve as
+      op (foldb f op z left) (foldb f op z right)
+
+up.List.map_ : (a ->{g} b) -> [a] ->{g} ()
+up.List.map_ f = cases
+  []     -> ()
+  h +: t ->
+    _ = f h
+    up.List.map_ f t
+
+up.Random.rng.fromCurrentTime : '{IO} (∀ a g. '{g, Random} a ->{g, IO} a)
+up.Random.rng.fromCurrentTime =
+  do splitmix (unsafeRun! now |> nanosecondOfSecond) up.Random.rng.io
+
+up.Random.rng.io : '{IO, Random} (∀ a g. '{g, Random} a ->{g, IO} a)
+up.Random.rng.io = do
+  ref = IO.ref (RNG split!)
+  go : '{g, Random} a ->{g, IO} a
+  go thunk =
+    rng = Ref.atomically ref RNG.split
+    RNG.run rng thunk
+  go
+
+up.Random.rng.mix : RNG -> RNG -> RNG
+up.Random.rng.mix l r =
+  use Bytes ++
+  use Nat * + / == xor
+  use RNG run split
+  use Random bytes
+  go : RNG -> RNG -> '{g, Random} a ->{g} a
+  go l r p =
+    (thisL, nextL) = split l
+    (thisR, nextR) = split r
+    handle p()
+    with cases
+      { nat! -> resume } ->
+        getNat rng = run rng do nat!
+        out = xor (getNat thisL) (getNat thisR)
+        go nextL nextR do resume out
+      { bytes n -> resume } ->
+        k = n / 64
+        n' = 64 * (if Nat.mod n 64 == 0 then k else k + 1)
+        Bytes.xor out l r = match (decodeNat64be l, decodeNat64be r) with
+          (Some (x, l), Some (y, r)) ->
+            out' = out ++ encodeNat64be (xor x y)
+            Bytes.xor out' l r
+          _                          -> out
+        getBytes rng = run rng do bytes n'
+        out =
+          Bytes.xor Bytes.empty (getBytes thisL) (getBytes thisR)
+            |> Bytes.take n
+        go nextL nextR do resume out
+      { split! -> resume } -> go nextL nextR do resume (go thisL thisR)
+      { x } -> x
+  RNG (go l r)
+
+up.Random.rng.mix.tests.bytes : '{IO} [Result]
+up.Random.rng.mix.tests.bytes = do
+  use List map
+  use up.Random.rng mix
+  a = fromSplitmix randomNat()
+  b = fromSplitmix randomNat()
+  c = fromSplitmix randomNat()
+  d = fromSplitmix randomNat()
+  rng = mix (mix a b) (mix c d)
+  sizes = [0, 1, 2, 63, 120, 128, 128, 1024, 1050]
+  results = RNG.run rng do map Random.bytes sizes
+  test.verify do
+    ensureEqual (map Bytes.size results) sizes
+    ensureEqual (results |> distinct |> List.size) (List.size results)
+
+up.Random.rng.mix.tests.nat : '{IO} [Result]
+up.Random.rng.mix.tests.nat = do
+  use List size
+  use up.Random.rng mix
+  a = fromSplitmix randomNat()
+  b = fromSplitmix randomNat()
+  c = fromSplitmix randomNat()
+  d = fromSplitmix randomNat()
+  rng = mix (mix a b) (mix c d)
+  results = RNG.run rng do [nat!, nat!, nat!, nat!]
+  test.verify do ensureEqual (results |> distinct |> size) (size results)
+
+up.Random.rng.scope :
+  '{Random, Scope s} (∀ a b. '{g, Random} a ->{g, Scope s} a)
+up.Random.rng.scope = do
+  ref = Scope.ref (RNG split!)
+  go : ∀ a g. '{g, Random} a ->{g, Scope s} a
+  go thunk =
+    oldRng = mutable.Ref.read ref
+    let
+      (newState, out) = RNG.split oldRng
+      mutable.Ref.write ref newState
+      RNG.run out thunk
+  go
+
+up.Set.normalize : Set a -> Set a
+up.Set.normalize = cases
+  s@(internal.Set m) ->
+    if Map.size m Nat.<= 1 then s
+    else Map.foldLeftWithKey (s a _ -> Set.insert a s) Set.empty m
+
+up.Set.normalize.doc : Doc
+up.Set.normalize.doc =
+  {{
+  Normalizes the tree structure of a {type Set} such that equal sets have
+  identical tree structure and with {crypto.hash} the same and test equal using
+  {===} (assuming the elements test equal using {===}).
+  }}
+
+up.Tuple.compareAt1By :
+  (a ->{g2} a ->{g1} Ordering) -> Tuple a b -> Tuple a b ->{g1, g2} Ordering
+up.Tuple.compareAt1By ord = cases
+  Tuple.Cons a t1, Tuple.Cons a2 t2 ->
+    match ord a a2 with
+      Equal -> Universal.ordering t1 t2
+      o     -> o
+
+up.Tuple.compareAt1By.doc : Doc
+up.Tuple.compareAt1By.doc =
+  {{
+  `` compareAt1By o t1 t2 `` compares the first element of each tuple using
+  `o`, and if {Equal} uses {Universal.ordering} on the remaining elements.
+  }}
+
+(VectorClock.<=) : VectorClock k -> VectorClock k -> Boolean
+(VectorClock.<=) = VectorClock.lteq
+
+VectorClock.doc : Doc
+VectorClock.doc =
+  use VectorClock <= empty join lteq tick
+  {{
+  A vector clock, with locations identified by `k`. {lteq} (alternately {<=})
+  is a partial order on these clocks.
+
+  # Examples
+
+    Here, a clock is {tick}-ed independently at two different locations, so
+    there is no relative order between the two clocks:
+
+    ```
+    c1 = tick "alice" empty
+    c2 = tick "bob" empty
+    lteq c1 c2
+    ```
+
+    Here's an example showing of the property that {{
+    docExample 2 do c1 c2 -> lteq c1 (join c1 c2) }} is `` true `` for all `c1`
+    and `c2`:
+
+    ```
+    c1 = tick "alice" empty
+    c2 = tick "bob" empty
+    lteq c1 (join c1 c2)
+    ```
+
+    Here's an example of the property that {{
+    docExample 2 do c1 k -> lteq c1 (tick k c1) }} is `` true `` for all `c1`
+    and `k`:
+
+    ```
+    c1 = tick "alice" empty
+    lteq c1 (tick "alice" c1)
+    ```
+
+        @signatures{empty, tick, <=, join}
+
+    ## Other functions
+
+           @signatures{tickBy, unconsCausal, VectorClock.joins, joinsBy}
+
+    ## Garbage collection
+
+       The {type Expiring} attached to each location on the {type VectorClock}
+       can be used to do garbage collection of old locations, if there's lots
+       of churn among locations and the clocks are being used for long-running
+       computations.
+
+       Locations marked as {Expiring} via {expire} don't count when computing
+       {lteq} and can eventually be removed using {VectorClock.remove}.
+  }}
+
+VectorClock.empty : VectorClock k
+VectorClock.empty = VectorClock Map.empty
+
+VectorClock.expire : k -> VectorClock k -> VectorClock k
+VectorClock.expire loc v =
+  go = cases (a, _) -> Some (a, Expiring)
+  VectorClock (Map.update go loc (ticks v))
+
+VectorClock.isTickOf :
+  VectorClock k -> VectorClock k -> Optional (VectorClock k)
+VectorClock.isTickOf base t =
+  use Nat - ==
+  go _ k = cases
+    (_, Expiring) -> ()
+    (n, Active)   ->
+      match tickCountOf k base with
+        m
+          | m == n - 1 -> emit k
+          | m == n     -> ()
+          | otherwise  -> abort
+  match toOptional! do toList! do Map.foldLeftWithKey go () (ticks t) with
+    None    -> None
+    Some [] -> None
+    _       -> Some t
+
+VectorClock.isTickOf.doc : Doc
+VectorClock.isTickOf.doc =
+  {{
+  `` isTickOf t1 t2 `` returns `` Some t2 `` if `t2` can be produced from a
+  single {VectorClock.tick} of `t1` at one or more locations.
+  }}
+
+VectorClock.join : VectorClock k -> VectorClock k -> VectorClock k
+VectorClock.join v1 v2 =
+  use Nat max
+  combine : (Nat, Expiring) -> (Nat, Expiring) -> (Nat, Expiring)
+  combine = cases
+    (n, Active), (m, Active) -> (max n m, Active)
+    (n, _), (m, _)           -> (max n m, Expiring)
+  v3 = Map.unionWith combine (ticks v1) (ticks v2)
+  VectorClock v3
+
+VectorClock.joins : [VectorClock k] -> VectorClock k
+VectorClock.joins = joinsBy Function.id
+
+VectorClock.joinsBy : (a ->{g} VectorClock k) -> [a] ->{g} VectorClock k
+VectorClock.joinsBy by as = foldb by VectorClock.join VectorClock.empty as
+
+VectorClock.lteq : VectorClock k -> VectorClock k -> Boolean
+VectorClock.lteq c1 c2 =
+  use Nat >
+  tc2 = ticks c2
+  go _ k = cases
+    (n, Active) ->
+      match Map.get k tc2 with
+        Some (m, _) -> abortWhen (n > m)
+        None        -> abort
+    _           -> ()
+  handle Map.foldLeftWithKey go () (ticks c1)
+  with cases
+    { _ }          -> true
+    { abort -> _ } -> false
+
+VectorClock.remove : k -> VectorClock k -> VectorClock k
+VectorClock.remove loc v = VectorClock (Map.delete loc (ticks v))
+
+VectorClock.tick : k -> VectorClock k -> VectorClock k
+VectorClock.tick = tickBy 1
+
+VectorClock.tickBy : Nat -> k -> VectorClock k -> VectorClock k
+VectorClock.tickBy m k v =
+  use Nat +
+  go = cases
+    Some (n, a) -> Some (n + m, Active)
+    None        -> Some (m, Active)
+  VectorClock (base_2_14_0.data.Map.alter go k (ticks v))
+
+VectorClock.tickCountOf : k -> VectorClock k -> Nat
+VectorClock.tickCountOf k v = match Map.get k (ticks v) with
+  None        -> 0
+  Some (n, _) -> n
+
+VectorClock.tickHere :
+  VectorClock (Location {}) ->{Remote} VectorClock (Location {})
+VectorClock.tickHere v = VectorClock.tick here! v
+
+VectorClock.ticks : VectorClock k -> Map k (Nat, Expiring)
+VectorClock.ticks = cases VectorClock ticks -> ticks
+
+VectorClock.ticks.modify :
+  (Map k1 (Nat, Expiring) ->{g} Map k (Nat, Expiring))
+  -> VectorClock k1
+  ->{g} VectorClock k
+VectorClock.ticks.modify f = cases VectorClock ticks -> VectorClock (f ticks)
+
+VectorClock.ticks.set :
+  Map k (Nat, Expiring) -> VectorClock k1 -> VectorClock k
+VectorClock.ticks.set ticks1 = cases VectorClock _ -> VectorClock ticks1
+
+VectorClock.unconsCausal :
+  VectorClock k
+  -> [(a, VectorClock k)]
+  -> (VectorClock k, [(a, VectorClock k)], [(a, VectorClock k)])
+VectorClock.unconsCausal base msgs =
+  use List ++
+  peel base msgs =
+    use List :+
+    go hd tl base = cases
+      []               -> (hd, tl)
+      h@(_, t) +: rest ->
+        match isTickOf base t with
+          None      -> go hd (tl :+ h) base rest
+          Some base -> go (hd :+ h) tl base rest
+    go [] [] base msgs
+  ok t = Boolean.not (VectorClock.lteq (at2 t) base)
+  match peel base (List.filter ok msgs) with
+    ([], msgs) -> (base, [], msgs)
+    (hd, tl) ->
+      base2 = joinsBy at2 hd
+      match VectorClock.unconsCausal base2 tl with
+        (base3, hd2, tl) -> (base3, hd ++ hd2, tl)
+
+VectorClock.unconsCausal.doc : Doc
+VectorClock.unconsCausal.doc =
+  {{
+  `` unconsCausal t events `` splits `events` into a tuple,
+  ``(t2, now, later)``, where `now` is events that immediately follow `t`, '''
+    later' is events that follow
+  '''t'' but which are missing some intervening event, and `t2` is the
+  {VectorClock.join} of `t` and all of `now`.
+
+  For example, here, events `e1` through `e4` all immediately follow `t0`, but
+  `e6` does not (since it's missing the preceding event `3` at the "bob" node).
+
+  ```
+  t0 = VectorClock.empty
+  unconsCausal
+    t0
+    [ ("e1", tickBy 1 "alice" t0)
+    , ("e2", tickBy 2 "alice" t0)
+    , ("e3", tickBy 1 "bob" t0)
+    , ("e4", tickBy 2 "bob" t0)
+    , ("e6", tickBy 4 "bob" t0)
+    ]
+  ```
+
+  This can be used to causally order events or as part of an implementation of
+  reliable causal broadcast: events returned from `` unconsCausal t events ``
+  can be delivered immediately, while other events should be kept buffered
+  until other events arrive to fill in gaps.
+
+  # Notes
+
+    Events that occur on or before `t` are considered to have been seen before
+    and will be removed from the output lists.
+
+    A {type VectorClock}, `t2` is said to __immediately follow__ another, `t1`
+    if ``isTickOf t1 t2 === Some t2``.
+  }}
