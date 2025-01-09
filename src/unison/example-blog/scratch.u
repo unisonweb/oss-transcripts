@@ -1,0 +1,395 @@
+authors.alice : BlogAuthor
+authors.alice =
+  BlogAuthor
+    "Alice" "Alice is a writer and programmer." None "alice@example.com"
+
+authors.bob : BlogAuthor
+authors.bob =
+  BlogAuthor "Bob" "Bob is a writer and programmer." None "bob@example.com"
+
+blog : '{Exception, Cloud} Blog
+blog = do
+  slug = "example-blog"
+  title = "Example Unison Blog"
+  shareProject = ProjectRef "unison" "example-blog"
+  Blog.new slug title shareProject
+
+blog.build : '{IO, Exception} ()
+blog.build =
+  Cloud.main do
+    withBlog blog() do
+      publishAll
+        [ BlogEnv.post
+            "Unison Doc Example"
+            alice
+            (NamespacePath ["posts", "unisonDocExample"])
+            |> withSummary
+              "An example that demonstrates the basic elements of a blog post with Unison Doc."
+        , BlogEnv.post
+            "The Elements of Programming"
+            bob
+            (NamespacePath ["posts", "elementsOfProgramming"])
+            |> withSummary "An excerpt from SICP"
+        , BlogEnv.post
+            "This blog post was generated from Unison"
+            bob
+            (NamespacePath ["posts", "blogWithUnison"])
+            |> withSummary "This blog post was written in Unison"
+        ]
+
+blog.buildDeploy : '{IO, Exception} URI
+blog.buildDeploy = do
+  blog.build()
+  blog.deploy()
+
+blog.deploy : '{IO, Exception} URI
+blog.deploy = Cloud.main do Blog.deploy blog()
+
+posts.blogWithUnison : Doc
+posts.blogWithUnison =
+  use List flatMap
+  {{
+  # This blog post was generated from Unison
+
+    This blog was generated from the same Unison {type Doc} type used for API
+    docs and READMEs on Unison Share and is hosted with the Unison Cloud.
+
+    {{
+    docAside
+      {{
+      Did you know the same type is also used for our website,
+      [unison-lang.org](https://www.unison-lang.org/)?
+      }} }}
+
+    {{
+    docCallout
+      (Some {{ 👋 }})
+      {{
+      If you’d like to make your own blog, check out
+      [@unison/blog-engine](https://share.unison-lang.org/@unison/blog-engine)
+      to learn more. The blogging engine supports RSS and Atom feeds, and email
+      subscriptions.
+      }} }}
+
+    ## Including code in your blog post
+
+       Here's an example of including some Unison source code, using the
+       `@source{..}` syntax. Everything in the Unison code snippet is
+       hyperlinked, taking you to the definition of the code on Unison Share:
+
+           @source{flatMap}
+
+       You can also include evaluated Unison expressions:
+
+       ```
+       flatMap (List.fill 2) [1, 2, 3]
+       ```
+
+       Other languages receive syntax highlighting when included in fenced code
+       blocks; here's some Ruby:
+
+       ``` ruby
+       def greet name
+         puts "Hello " + name
+       end
+       ```
+
+    ## Including special content
+
+       You can also make use of mathematical notation in your posts, for
+       instance
+       [Euler's identity](https://en.wikipedia.org/wiki/Euler%27s_identity) has
+       been called one of the most beautiful equations in all of mathematics.
+
+       ``` latex
+       e^{ix}=\cos x+i\sin x
+       ```
+
+       Or mermaid diagrams for flowcharts, sequence diagrams, or Gantt charts:
+
+       ``` mermaid
+        sequenceDiagram
+        Note left of Client: Sends SYN
+        Client->>Server: SYN
+        Note right of Server: Receives SYN
+        Note right of Server: Sends SYN + ACK
+        Server->>Client: SYN + ACK
+        Note left of Client: Receives SYN + ACK
+        Note left of Client: Sends ACK
+        Client->>Server: ACK
+        Note right of Server: Receives ACK
+       ```
+  }}
+
+posts.elementsOfProgramming : Doc
+posts.elementsOfProgramming =
+  use Nat * - /
+  {{
+  # The Elements of Programming
+
+    {{
+    docCallout
+      (Some {{ 📚 }})
+      {{
+      This post is an exerpt from the book
+      [Structure and Interpretation of Computer Programs](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html)
+      by Harold Abelson and Gerald Sussman, with some modifications, licensed
+      under [CC-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+      }} }}
+
+    A powerful programming language is more than just a means for instructing a
+    computer to perform tasks. The language also serves as a framework within
+    which we organize our ideas about processes. Thus, when we describe a
+    language, we should pay particular attention to the means that the language
+    provides for combining simple ideas to form more complex ideas. Every
+    powerful language has three mechanisms for accomplishing this:
+
+    1. Primitive expressions, which represent the simplest entities the
+       language is concerned with
+    2. Means of combination, by which compound elements are built from simpler
+       ones, and
+    3. Means of abstraction, by which compound elements can be named and
+       manipulated as units.
+
+    In programming, we deal with two kinds of elements: procedures and data.
+    (Later we will discover that they are really not so distinct.) Informally,
+    data is "stuff" that we want to manipulate, and procedures are descriptions
+    of the rules for manipulating the data. Thus, any powerful programming
+    language should be able to describe primitive data and primitive procedures
+    and should have methods for combining and abstracting procedures and data.
+
+    In this chapter we will deal only with simple numerical data so that we can
+    focus on the rules for building procedures. {{
+    docAside
+      {{
+      The characterization of numbers as "simple data" is a barefaced bluff. In
+      fact, the treatment of numbers is one of the trickiest and most confusing
+      aspects of any programming language. Some typical issues involved are
+      these: Some computer systems distinguish integers, such as ``2``, from
+      real numbers, such as ``2.71``. Is the real number `` 2.0 `` different
+      from the integer ``2``? Are the arithmetic operations used for integers
+      the same as the operations used for real numbers? Does `` 6 `` divided by
+      `` 2 `` produce ``3``, or ``3.0``? How large a number can we represent?
+      How many decimal places of accuracy can we represent? Is the range of
+      integers the same as the range of real numbers? Above and beyond these
+      questions, of course, lies a collection of issues concerning roundoff and
+      truncation errors — the entire science of numerical analysis. Since our
+      focus in this book is on large-scale program design rather than on
+      numerical techniques, we are going to ignore these problems. The
+      numerical examples in this chapter will exhibit the usual roundoff
+      behavior that one observes when using arithmetic operations that preserve
+      a limited number of decimal places of accuracy in noninteger operations.
+      }} }} In later chapters we will see that these same rules allow us to
+    build procedures to manipulate compound data as well.
+
+    ## Expressions
+
+       One easy way to get started at programming is to examine some typical
+       interactions with an interpreter for the Scheme dialect of Lisp. Imagine
+       that you are sitting at a computer terminal. You type an expression, and
+       the interpreter responds by displaying the result of its evaluating that
+       expression.
+
+       One kind of primitive expression you might type is a number. (More
+       precisely, the expression that you type consists of the numerals that
+       represent the number in base 10.) If you present Unison with a number,
+       ``486``, the interpreter will respond by printing ``486``:
+
+       ```
+       486
+       ```
+
+       Expressions representing numbers may be combined with an expression
+       representing a primitive procedure (such as {Nat.+} or {*}) to form a
+       compound expression that represents the application of the procedure to
+       those numbers. For example:
+
+       ```
+       137 Nat.+ 349
+       ```
+
+       ```
+       1000 - 334
+       ```
+
+       ```
+       5 * 99
+       ```
+
+       ```
+       10 / 5
+       ```
+
+       ```
+       2.7 Float.+ 10.0
+       ```
+
+       Expressions such as these are called combinations. The function being
+       applied is is called the operator, and the other elements are called
+       operands. The value of a combination is obtained by applying the
+       procedure specified by the operator to the arguments that are the values
+       of the operands.
+
+       We can add and multiply many numbers using a list:
+
+       ```
+       Nat.sum [21, 35, 12, 7]
+       ```
+
+       ```
+       Nat.product [25, 4, 12]
+       ```
+
+       Combinations can be nested, that is, we can have combinations whose
+       elements are themselves combinations:
+
+       ```
+       3 * 5 Nat.+ (10 - 6)
+       ```
+
+       There is no limit (in principle) to the depth of such nesting and to the
+       overall complexity of the expressions that the Unison interpreter can
+       evaluate. It is we humans who get confused by still relatively simple
+       expressions such as
+
+       ```
+       3 * (2 * 4 Nat.+ (3 Nat.+ 5)) Nat.+ (10 - 7 Nat.+ 6)
+       ```
+  }}
+
+posts.unisonDocExample : Doc
+posts.unisonDocExample =
+  use Text ++
+  {{
+  # Unison Doc Example
+
+    This is an __example__ **blog** post.
+
+    * We can have lists
+      * That are
+      * nested
+    * And its great
+
+    1. Even lists
+    2. That are numbered
+
+    ~~striketrhrough~~
+
+    Inline `monospace` font.
+
+    ## Assets
+
+       **KaTeX**
+
+       ``` latex
+       f(\relax{x}) = \int_{-\infty}^\infty
+       \hat{f}(\xi)\,e^{2 \pi i \xi x}
+       \,d\xi
+       ```
+
+       **Mermaid**
+
+       ``` mermaid
+       graph
+           A-->B[Unison]
+           B-->C[supports]
+           C-->D[Mermaid]
+       ```
+
+       **Image**
+
+       {{
+       Image
+         {{
+         Unison asset
+         }}
+         {{
+         https://www.unison-lang.org/assets/thing15.svg
+         }}
+         None }}
+
+       **Video**
+
+       {{
+       Special
+         (Embed
+           (Any
+             (Video
+               [ MediaSource
+                   "https://unison-lang.org/assets/feed/m4-codehosting/m4-codehosting-demo.mov"
+                   None
+               ]
+               [ ( "poster"
+                 , "https://unison-lang.org/assets/feed/m4-codehosting/m4-codehosting-demo.png"
+                 )
+               , ("controls", "true")
+               ]))) }}
+
+    ## Code
+
+       You can evaluate Unison code blocks:
+
+       ```
+       greet : Text -> Text
+       greet name = "Hello " ++ name
+       greet "World"
+       ```
+
+       You can inlude the source code of a Unison definition in your codebase:
+
+           @source{List.map}
+
+       And you can include code blocks in a specific language. This is Ruby:
+
+       ``` ruby
+       def greet name
+         puts "Hello " + name
+       end
+       ```
+
+    ## Callouts
+
+       Callouts are blocks that break up the main text.
+
+       {{ docCallout (Some {{ 🎉 }}) {{ This is a callout. }} }}
+
+    ## Asides
+
+       Asides go on the side of a text.
+
+       {{ docAside {{ This is an aside. }} }}
+
+       Text after the aside is back in the main text.
+
+    ## Tables
+
+       {{ docTable [[{{ Header 1 }}, {{ Header 2 }}], [{{ row1 }}, {{ row2 }}]]
+       }}
+
+    ## And more!
+
+       See
+       [The docs on Docs](https://www.unison-lang.org/docs/usage-topics/documentation/)
+       for more details.
+  }}
+
+README : Doc
+README =
+  {{
+  # Example Blog
+
+    This is an example blog using {{ shareSlug "@unison/blog-engine" }}.
+
+    Browse the code to see how you might organize your posts, build, and deploy
+    your blog.
+
+    ## A few key examples
+
+       The main {type Blog} value:     @source{blog}
+
+       Building posts:     @source{blog.build}
+
+       Deploying the blog:     @source{blog.deploy}
+
+       Do both in one go:     @source{blog.buildDeploy}
+  }}

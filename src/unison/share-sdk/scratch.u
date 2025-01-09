@@ -1,0 +1,2530 @@
+type BranchRef
+  = BranchRef Text
+  | ReleaseBranchRef Text
+
+type EmbedKatex
+  = { markup : Text, display : KatexDisplay }
+
+type EmbedKatex.KatexDisplay
+  = Inline
+  | Block
+
+type EmbedMermaid
+  = { diagram : Text, theme : Theme }
+
+type EmbedMermaid.Theme
+  = Predefined Text
+
+type EmbedSvg
+  = { markup : Text }
+
+type FoldToggle
+  = { toggleable : Toggleable, position : FoldToggle.Position }
+
+type FoldToggle.Position
+  = Opened
+  | Closed
+
+type FoldToggle.Toggleable
+  = Toggleable
+  | Disabled
+
+type FQN
+  = FQN (List.Nonempty Text)
+
+type Hash
+  = Hash InternalHash
+
+type HashQualified
+  = NameOnly FQN
+  | HashOnly Hash
+  | HashQualified FQN Hash
+
+type Icon
+  = Icon Text [Attribute] [Svg]
+
+type InternalHash
+  = { hash : Text,
+      isAssumedBuiltin : Boolean,
+      constructorSuffix : Optional Text }
+
+type NamespacePath
+  = NamespacePath [Text]
+
+type ProjectRef
+  = ProjectRef Text Text
+
+type ProjectRef.ProjectSlug
+  = ProjectRef.ProjectSlug Text
+
+type Reference
+  = TermReference HashQualified
+  | TypeReference HashQualified
+  | AbilityConstructorReference HashQualified
+  | DataConstructorReference HashQualified
+
+type ShareDefinitionSlug
+  = { projectRef : ProjectRef, fqn : FQN }
+
+type ShareDoc
+  = Folded ShareDoc.FoldedDoc
+  | Blankline
+  | Linebreak
+  | SectionBreak
+  | Table [[ShareDoc]]
+  | Image ShareDoc ShareDoc (Optional ShareDoc)
+  | Word Text
+  | CodeBlock Text ShareDoc
+  | Style Text ShareDoc
+  | Anchor Text ShareDoc
+  | Special ShareDoc.SpecialForm
+  | Code ShareDoc
+  | Bold ShareDoc
+  | Italic ShareDoc
+  | Strikethrough ShareDoc
+  | Blockquote ShareDoc
+  | Aside ShareDoc
+  | Group ShareDoc
+  | Tooltip ShareDoc ShareDoc
+  | NamedLink ShareDoc ShareDoc
+  | Section ShareDoc [ShareDoc]
+  | NumberedList Nat [ShareDoc]
+  | Span [ShareDoc]
+  | BulletedList [ShareDoc]
+  | Join [ShareDoc]
+  | UntitledSection [ShareDoc]
+  | Column [ShareDoc]
+  | Callout (Optional ShareDoc) ShareDoc
+
+type ShareDoc.EmbeddedSource
+  = ShareDoc.Builtin Syntax
+  | ShareDoc.EmbeddedSource Syntax Syntax
+
+type ShareDoc.FoldedDoc
+  = { foldId : FoldId,
+      isFolded : Boolean,
+      summary : ShareDoc,
+      details : ShareDoc }
+
+type ShareDoc.FoldedSource
+  = { foldId : FoldId, isFolded : Boolean, source : EmbeddedSource }
+
+type ShareDoc.FoldId
+  = ShareDoc.FoldId Text
+
+type ShareDoc.IsFolded
+  = Disabled Html
+  | IsFolded [Html] FoldId Boolean
+
+type ShareDoc.MediaSource
+  = { mediaSourceUrl : Text, mediaSourceMimeType : Optional Text }
+
+type ShareDoc.NamedLinkHref
+  = ReferenceHref Reference
+  | InvalidHref
+  | Href Text
+
+type ShareDoc.SpecialForm
+  = Eval Syntax Syntax
+  | EvalInline Syntax Syntax
+  | Example Syntax
+  | ExampleBlock Syntax
+  | Link Syntax
+  | Embed Syntax
+  | EmbedInline Syntax
+  | Video [ShareDoc.MediaSource] (Map Text Text)
+  | Signature [TermSignature]
+  | Source [FoldedSource]
+  | FrontMatter (Map Text [Text])
+  | LaTeXInline Text
+  | Svg Text
+  | SignatureInline TermSignature
+
+type Source
+  = Type TypeSource
+  | Term FQN TermSource
+
+type Source.ViewConfig
+  = Monochrome
+  | Plain
+  | Rich Linked
+
+type Syntax
+  = Syntax (List.Nonempty SyntaxSegment)
+
+type Syntax.Linked
+  = Linked (Reference -> Text)
+  | NotLinked
+
+type Syntax.SyntaxSegment
+  = SyntaxSegment SyntaxType Text
+
+type Syntax.SyntaxSegment.SeqOp
+  = Cons
+  | Snoc
+  | Concat
+
+type Syntax.SyntaxSegment.SyntaxType
+  = NumericLiteral
+  | TextLiteral
+  | BytesLiteral
+  | CharLiteral
+  | BooleanLiteral
+  | Blank
+  | Var
+  | AbilityBraces
+  | ControlKeyword
+  | TypeOperator
+  | BindingEquals
+  | TypeAscriptionColon
+  | DataTypeKeyword
+  | DataTypeParams
+  | Unit
+  | DataTypeModifier
+  | UseKeyword
+  | UsePrefix
+  | UseSuffix
+  | DelayForceChar
+  | DelimiterChar
+  | Parenthesis
+  | LinkKeyword
+  | DocDelimiter
+  | DocKeyword
+  | Op SeqOp
+  | HashQualifier Text
+  | TypeReference Hash (Optional FQN)
+  | TermReference Hash (Optional FQN)
+  | DataConstructorReference Hash (Optional FQN)
+  | AbilityConstructorReference Hash (Optional FQN)
+
+type Syntax.Width
+  = Width Int
+
+type Term
+  = Term Hash TermCategory TermSource
+
+type Term.TermCategory
+  = PlainTerm
+  | TestTerm
+  | DocTerm
+
+type Term.TermSignature
+  = TermSignature Syntax
+
+type Term.TermSource
+  = Source TermSignature Syntax
+  | Builtin TermSignature
+
+type Type.Type
+  = Type Hash TypeCategory TypeSource
+
+type Type.TypeCategory
+  = DataType
+  | AbilityType
+
+type Type.TypeSource
+  = Source Syntax
+  | Builtin
+
+type UserHandle
+  = UserHandle Text
+
+BranchRef.toAPIPath : BranchRef -> Path
+BranchRef.toAPIPath = cases
+  BranchRef t        -> Path ["branches", t]
+  ReleaseBranchRef v -> Path ["releases", v]
+
+BranchRef.toSharePath : BranchRef -> Path
+BranchRef.toSharePath = cases
+  BranchRef b        -> Path [b]
+  ReleaseBranchRef v -> Path ["releases", v]
+
+EmbedKatex.asBlock : EmbedKatex -> EmbedKatex
+EmbedKatex.asBlock = cases EmbedKatex markup _ -> EmbedKatex markup Block
+
+EmbedKatex.asInline : EmbedKatex -> EmbedKatex
+EmbedKatex.asInline = cases EmbedKatex markup _ -> EmbedKatex markup Inline
+
+EmbedKatex.display : EmbedKatex -> KatexDisplay
+EmbedKatex.display = cases EmbedKatex _ display -> display
+
+EmbedKatex.display.modify :
+  (KatexDisplay ->{g} KatexDisplay) -> EmbedKatex ->{g} EmbedKatex
+EmbedKatex.display.modify f = cases
+  EmbedKatex markup display -> EmbedKatex markup (f display)
+
+EmbedKatex.display.set : KatexDisplay -> EmbedKatex -> EmbedKatex
+EmbedKatex.display.set display1 = cases
+  EmbedKatex markup _ -> EmbedKatex markup display1
+
+EmbedKatex.katex : Text -> EmbedKatex
+EmbedKatex.katex markup = EmbedKatex markup Block
+
+EmbedKatex.markup : EmbedKatex -> Text
+EmbedKatex.markup = cases EmbedKatex markup _ -> markup
+
+EmbedKatex.markup.modify : (Text ->{g} Text) -> EmbedKatex ->{g} EmbedKatex
+EmbedKatex.markup.modify f = cases
+  EmbedKatex markup display -> EmbedKatex (f markup) display
+
+EmbedKatex.markup.set : Text -> EmbedKatex -> EmbedKatex
+EmbedKatex.markup.set markup1 = cases
+  EmbedKatex _ display -> EmbedKatex markup1 display
+
+EmbedKatex.toHtml : EmbedKatex -> Html
+EmbedKatex.toHtml k =
+  displayToText = cases
+    Inline -> "inline"
+    Block  -> "block"
+  html_2_3_0.element
+    "embed-katex"
+    [ Attribute.id "embed-katex"
+    , Attribute "markup" (EmbedKatex.markup k)
+    , Attribute "display" (displayToText (EmbedKatex.display k))
+    ]
+    []
+
+EmbedMermaid.diagram : EmbedMermaid -> Text
+EmbedMermaid.diagram = cases EmbedMermaid diagram _ -> diagram
+
+EmbedMermaid.diagram.modify :
+  (Text ->{g} Text) -> EmbedMermaid ->{g} EmbedMermaid
+EmbedMermaid.diagram.modify f = cases
+  EmbedMermaid diagram theme -> EmbedMermaid (f diagram) theme
+
+EmbedMermaid.diagram.set : Text -> EmbedMermaid -> EmbedMermaid
+EmbedMermaid.diagram.set diagram1 = cases
+  EmbedMermaid _ theme -> EmbedMermaid diagram1 theme
+
+EmbedMermaid.mermaid : Text -> EmbedMermaid
+EmbedMermaid.mermaid diagram = EmbedMermaid diagram (Predefined "neutral")
+
+EmbedMermaid.theme : EmbedMermaid -> Theme
+EmbedMermaid.theme = cases EmbedMermaid _ theme -> theme
+
+EmbedMermaid.theme.modify :
+  (Theme ->{g} Theme) -> EmbedMermaid ->{g} EmbedMermaid
+EmbedMermaid.theme.modify f = cases
+  EmbedMermaid diagram theme -> EmbedMermaid diagram (f theme)
+
+EmbedMermaid.theme.set : Theme -> EmbedMermaid -> EmbedMermaid
+EmbedMermaid.theme.set theme1 = cases
+  EmbedMermaid diagram _ -> EmbedMermaid diagram theme1
+
+EmbedMermaid.toHtml : EmbedMermaid -> Html
+EmbedMermaid.toHtml = cases
+  EmbedMermaid diagram theme ->
+    themeAttr =
+      (Predefined themeName) = theme
+      Attribute "theme-name" themeName
+    html_2_3_0.element
+      "mermaid-diagram" [Attribute "diagram" diagram, themeAttr] []
+
+EmbedMermaid.withTheme : Text -> EmbedMermaid -> EmbedMermaid
+EmbedMermaid.withTheme themeName m = theme.set (Predefined themeName) m
+
+EmbedSvg.markup : EmbedSvg -> Text
+EmbedSvg.markup = cases EmbedSvg.Svg markup -> markup
+
+EmbedSvg.markup.modify : (Text ->{g} Text) -> EmbedSvg ->{g} EmbedSvg
+EmbedSvg.markup.modify f = cases EmbedSvg.Svg markup -> EmbedSvg.Svg (f markup)
+
+EmbedSvg.markup.set : Text -> EmbedSvg -> EmbedSvg
+EmbedSvg.markup.set markup1 = cases EmbedSvg.Svg _ -> EmbedSvg.Svg markup1
+
+EmbedSvg.svg : Text -> EmbedSvg
+EmbedSvg.svg markup = EmbedSvg.Svg markup
+
+EmbedSvg.toHtml : EmbedSvg -> Html
+EmbedSvg.toHtml = cases
+  EmbedSvg.Svg markup ->
+    html_2_3_0.element
+      "embed-svg" [Attribute.id "embed-svg"] [html_2_3_0.text markup]
+
+FoldToggle.close : FoldToggle -> FoldToggle
+FoldToggle.close toggle = FoldToggle.position.set Closed toggle
+
+FoldToggle.disabled : FoldToggle
+FoldToggle.disabled = FoldToggle Toggleable.Disabled Closed
+
+FoldToggle.foldToggle : FoldToggle
+FoldToggle.foldToggle = FoldToggle Toggleable Closed
+
+FoldToggle.isClosed : Boolean -> FoldToggle -> FoldToggle
+FoldToggle.isClosed isClosed_ toggle =
+  FoldToggle.isOpen (Boolean.not isClosed_) toggle
+
+FoldToggle.isDisabled : Boolean -> FoldToggle -> FoldToggle
+FoldToggle.isDisabled isDisabled_ toggle =
+  if isDisabled_ then toggleable.set Toggleable.Disabled toggle else toggle
+
+FoldToggle.isOpen : Boolean -> FoldToggle -> FoldToggle
+FoldToggle.isOpen isOpen_ = cases
+  FoldToggle toggleable _ ->
+    position = if isOpen_ then Opened else Closed
+    FoldToggle toggleable position
+
+FoldToggle.open : FoldToggle -> FoldToggle
+FoldToggle.open toggle = FoldToggle.position.set Opened toggle
+
+FoldToggle.position : FoldToggle -> FoldToggle.Position
+FoldToggle.position = cases FoldToggle _ position -> position
+
+FoldToggle.position.modify :
+  (FoldToggle.Position ->{g} FoldToggle.Position)
+  -> FoldToggle
+  ->{g} FoldToggle
+FoldToggle.position.modify f = cases
+  FoldToggle toggleable position -> FoldToggle toggleable (f position)
+
+FoldToggle.position.set : FoldToggle.Position -> FoldToggle -> FoldToggle
+FoldToggle.position.set position1 = cases
+  FoldToggle toggleable _ -> FoldToggle toggleable position1
+
+FoldToggle.toggleable : FoldToggle -> Toggleable
+FoldToggle.toggleable = cases FoldToggle toggleable _ -> toggleable
+
+FoldToggle.toggleable.modify :
+  (Toggleable ->{g} Toggleable) -> FoldToggle ->{g} FoldToggle
+FoldToggle.toggleable.modify f = cases
+  FoldToggle toggleable position -> FoldToggle (f toggleable) position
+
+FoldToggle.toggleable.set : Toggleable -> FoldToggle -> FoldToggle
+FoldToggle.toggleable.set toggleable1 = cases
+  FoldToggle _ position -> FoldToggle toggleable1 position
+
+FoldToggle.toHtml : FoldToggle -> Html
+FoldToggle.toHtml toggle =
+  use List +:
+  isOpen_ = FoldToggle.position toggle === Opened
+  let
+    (onClickAttrs, isDisabled_) =
+      match toggleable toggle with
+        Toggleable          -> ([], false)
+        Toggleable.Disabled -> ([], true)
+    html_2_3_0.div
+      (classList
+        [ ("fold-toggle", true)
+        , ("folded-open", isOpen_)
+        , ("disabled", isDisabled_)
+        ]
+        +: onClickAttrs)
+      [html_2_3_0.text "►"]
+
+FoldToggle.toHtml.doc : Doc
+FoldToggle.toHtml.doc =
+  {{
+  Render {type FoldToggle} to {type Html}.
+
+  TODO: Use the correct svg icon for the caret.
+
+  Caret orientation for folded/unfolded should be rotated by CSS such that it
+  can be animated
+  }}
+
+FQN.decode : '{Decoder} FQN
+FQN.decode = do match value! with
+  Text t -> FQN.fromText t
+  _      -> Decoder.fail "expected: text"
+
+FQN.decodeFromParent : FQN -> '{Decoder} FQN
+FQN.decodeFromParent parentFqn = do match value! with
+  Text t -> fromParent parentFqn t
+  _      -> Decoder.fail "expected: text"
+
+FQN.fromList : [Text] -> FQN
+FQN.fromList segments_ =
+  segments_
+    |> List.map trim
+    |> List.filter (Text.isEmpty >> Boolean.not)
+    |> mayNonempty
+    |> Optional.getOrElse (List.Nonempty.singleton ".")
+    |> FQN
+
+FQN.fromParent : FQN -> Text -> FQN
+FQN.fromParent fqn childName =
+  use Nonempty ++
+  (FQN parentParts) = fqn
+  FQN (parentParts ++ List.Nonempty.singleton childName)
+
+FQN.fromText : Text -> FQN
+FQN.fromText rawFqn =
+  use List +:
+  go : [Text] -> [Text]
+  go = cases
+    []            -> []
+    ["", ""]      -> ["."]
+    ["", ""] ++ z -> "." +: go z
+    "" +: z       -> go z
+    x +: y        -> x +: go y
+  rawFqn |> Text.split ?. |> go |> FQN.fromList
+
+FQN.fromText.doc : Doc
+FQN.fromText.doc =
+  use FQN fromText
+  {{
+  Turn a string, like `"data.List.map"` into `FQN ["base", "List", "map"]`
+
+  Split text into segments. A smarter version of `Text.split` that handles the
+  name `.` properly.
+
+  # Examples
+
+    ```
+    fromText "data.List.map"
+    ```
+
+    ```
+    fromText ".data"
+    ```
+
+    ```
+    fromText "."
+    ```
+  }}
+
+FQN.segments : FQN -> List.Nonempty Text
+FQN.segments = cases FQN segments -> segments
+
+FQN.toText : FQN -> Text
+FQN.toText = cases
+  FQN nameParts ->
+    trimLeadingDot str = if startsWith ".." str then Text.drop 1 str else str
+    nameParts |> List.Nonempty.toList |> Text.join "." |> trimLeadingDot
+
+FQN.toText.doc : Doc
+FQN.toText.doc =
+  {{
+  Convert an {type FQN} to {type Text}
+
+  {{
+  docCallout
+    None
+    {{
+    Note: Absolute FQNs start with a dot, so when also joining parts using a
+    dot, we get dot dot (..), which we don't want.
+    }} }}
+  }}
+
+Hash.apiPrefix : Text
+Hash.apiPrefix = "@"
+
+Hash.decode : '{Decoder} Hash
+Hash.decode = do match value! with
+  Text t ->
+    match Hash.tryFromText t with
+      Some h -> h
+      None   -> Decoder.fail "Invalid Hash"
+  _      -> Decoder.fail "expected: text"
+
+Hash.fromText : Text ->{Exception} Hash
+Hash.fromText raw =
+  use Text ++
+  Optional.toException
+    ("Invalid Hash: " ++ raw) (typeLink Hash) (Hash.tryFromText raw)
+
+Hash.fromText_ : Text ->{Exception} Hash
+Hash.fromText_ raw =
+  use Text ++
+  Optional.toException
+    ("Invalid Hash: " ++ raw) (typeLink Hash) (Hash.tryFromText_ raw)
+
+Hash.isAbilityConstructorHash : Hash -> Boolean
+Hash.isAbilityConstructorHash hash =
+  p =
+    Pattern.join
+      [ some (literal "#")
+      , some (notChars "#")
+      , literal "#a"
+      , some patterns.digit
+      , eof
+      ]
+  isDataConstructorSuffix t = isMatch p t
+  hash |> Hash.toText |> isDataConstructorSuffix
+
+Hash.isAbilityConstructorHash.doc : Doc
+Hash.isAbilityConstructorHash.doc =
+  use Hash tryFromText
+  use Optional map
+  {{
+  Checks if a Hash is an Ability Constructor hash. Ability Constructors hashs
+  are suffixed with `#d` followed by a positional number.
+
+  Examples:
+
+  ```
+  tryFromText "#asd1234" |> map isAbilityConstructorHash
+  ```
+
+  ```
+  tryFromText "#asd1234#a2" |> map isAbilityConstructorHash
+  ```
+  }}
+
+Hash.isAssumedBuiltin : Hash -> Boolean
+Hash.isAssumedBuiltin = cases
+  Hash (InternalHash _ isAssumedBuiltin _) -> isAssumedBuiltin
+
+Hash.isAssumedBuiltin_ : Text -> Text -> Boolean
+Hash.isAssumedBuiltin_ prefix raw =
+  use Text ++
+  startsWith (prefix ++ prefix) raw
+
+Hash.isAssumedBuiltin_.doc : Doc
+Hash.isAssumedBuiltin_.doc =
+  {{
+  Checking that a hash starts with 2 `#` characters is a weak heuristic for
+  builtins, but is sometimes useful.
+
+  * `Hash "##IO.socketSend.impl" -> True`
+  * `Hash "##Debug.watch" -> True`
+  * `Hash "#abc123def456" -> False`
+  }}
+
+Hash.isDataConstructorHash : Hash -> Boolean
+Hash.isDataConstructorHash hash =
+  p =
+    Pattern.join
+      [ some (literal "#")
+      , some (notChars "#")
+      , literal "#d"
+      , some patterns.digit
+      , eof
+      ]
+  isDataConstructorSuffix t = isMatch p t
+  hash |> Hash.toText |> isDataConstructorSuffix
+
+Hash.isDataConstructorHash.doc : Doc
+Hash.isDataConstructorHash.doc =
+  use Hash tryFromText
+  use Optional map
+  {{
+  Checks if a Hash is a Data Constructor hash. Data Constructors hashs are
+  suffixed with `#d` followed by a positional number.
+
+  Examples:
+
+  ```
+  tryFromText "#asd1234" |> map isDataConstructorHash
+  ```
+
+  ```
+  tryFromText "#asd1234#d2" |> map isDataConstructorHash
+  ```
+  }}
+
+Hash.isList : Hash -> Boolean
+Hash.isList hash_ =
+  use Text ==
+  Hash.toText hash_ == "##Sequence"
+
+Hash.isRawHash : Text -> Boolean
+Hash.isRawHash str = startsWith prefix str || startsWith apiPrefix str
+
+Hash.isTuple : Hash -> Boolean
+Hash.isTuple hash_ =
+  use Text ==
+  Hash.toText hash_
+    == "#2lg4ah6ir6t129m33d7gssnigacral39qdamo20mn6r2vefliubpeqnjhejai9ekjckv0qnu9mlu3k9nbpfhl2schec4dohn7rjhjt8"
+
+Hash.prefix : Text
+Hash.prefix = "#"
+
+Hash.stripHashPrefix : Text -> Text
+Hash.stripHashPrefix s = match Pattern.run (many (chars "#")) s with
+  Some (_, s_) -> s_
+  None         -> s
+
+Hash.stripHashPrefix.doc : Doc
+Hash.stripHashPrefix.doc =
+  {{
+  Assuming a Hash string, it strips __any number__ of prefixes at the beginning
+  of the string
+
+  Examples:
+
+  ```
+  stripHashPrefix "#abc123def456"
+  ```
+
+  ```
+  stripHashPrefix "#abc123def456#123"
+  ```
+
+  ```
+  stripHashPrefix "##IO.socketSend.impl"
+  ```
+
+  This is often useful when rendering next to a Hash icon or when parsing.
+  }}
+
+Hash.toApiUrlText : Hash -> Text
+Hash.toApiUrlText hash_ = toText_ apiPrefix escape hash_
+
+Hash.toShortText : Hash -> Text
+Hash.toShortText h = toShortText_ prefix h
+
+Hash.toShortText_ : Text -> Hash -> Text
+Hash.toShortText_ p h =
+  shorten s = if Hash.isAssumedBuiltin h then s else Text.take 11 s
+  h |> toText_ p Function.id |> shorten
+
+Hash.toShortText_.doc : Doc
+Hash.toShortText_.doc =
+  {{
+  Converts a Hash to a shortened (11 characters including the `#` character) of
+  the raw hash value.
+
+  Example:
+
+  * `Hash "#cv93ajol371idlcd47do5g3nmj7...4s829ofv57mi19pls3l630" -> "#cv93ajol"`
+
+  Note, that it does not shorten hashes that are assumed to be builtins:
+
+  * `Hash "##Debug.watch" -> "##Debug.watch"`
+  * `Hash "##IO.socketSend.impl" -> "##IO.SocketSend.impl"`
+  }}
+
+Hash.toText : Hash -> Text
+Hash.toText hash_ = toText_ prefix Function.id hash_
+
+Hash.toText_ : Text -> (Text ->{g} Text) -> Hash ->{g} Text
+Hash.toText_ prefix_ encode = cases
+  Hash (InternalHash hash isAssumedBuiltin constructorSuffix) ->
+    use Text ++
+    p = if isAssumedBuiltin then prefix_ ++ prefix_ else prefix_
+    s =
+      constructorSuffix
+        |> Optional.map (s_ -> prefix_ ++ encode s_)
+        |> Optional.getOrElse ""
+    p ++ encode hash ++ s
+
+Hash.toUnescapedApiUrlText : Hash -> Text
+Hash.toUnescapedApiUrlText hash_ = toText_ apiPrefix Function.id hash_
+
+Hash.toUnescapedApiUrlText.doc : Doc
+Hash.toUnescapedApiUrlText.doc =
+  {{
+  Sometimes we use a Hash in a URL thats going through {URI.toText} which also
+  escapes, using an unescaped version prevents double escaping.
+  }}
+
+Hash.toUnprefixedShortText : Hash -> Text
+Hash.toUnprefixedShortText h = toShortText_ "" h
+
+Hash.toUnprefixedText : Hash -> Text
+Hash.toUnprefixedText h = toText_ "" Function.id h
+
+Hash.tryFromText : Text -> Optional Hash
+Hash.tryFromText raw =
+  if startsWith prefix raw then Hash.tryFromText_ raw else None
+
+Hash.tryFromText_ : Text -> Optional Hash
+Hash.tryFromText_ raw =
+  use Nat >
+  toSegments = cases
+    [h, c] -> Some (h, Some c)
+    [h]    -> Some (h, None)
+    _      -> None
+  toHash = cases
+    (hash, constructorSuffix) ->
+      Hash (InternalHash hash (isAssumedBuiltin_ prefix raw) constructorSuffix)
+  raw
+    |> stripHashPrefix
+    |> Text.split ?#
+    |> List.filter (s -> Text.size s > 0)
+    |> toSegments
+    |> Optional.map toHash
+
+HashQualified.doc : Doc
+HashQualified.doc =
+  {{
+  # HashQualified: Definition Identifier
+
+    The `NameOnly` variant doesn't mean that the definition doesn't have a
+    `Hash`, but that we aren't using the `Hash` to identify it, same with
+    `HashOnly`.
+
+    The `HashQualified` variant is used when the name isn't enough to identify
+    a definition; meaning there are multiple definitions with the same name. To
+    disambiguate a `Hash` is added in addition to the name. The stringified
+    example of this looks like so: `data.List.map@abc123`.
+  }}
+
+HashQualified.fromText : Text -> HashQualified
+HashQualified.fromText str =
+  use FQN fromText
+  str
+    |> Hash.tryFromText
+    |> Optional.map HashOnly
+    |> Optional.orElse (HashQualified.tryFromText_ fromText prefix str)
+    |> Optional.getOrElse (NameOnly (fromText str))
+
+HashQualified.isRawHashQualified : Text -> Boolean
+HashQualified.isRawHashQualified str =
+  Boolean.not (isRawHash str) && Text.contains apiPrefix str
+
+HashQualified.toSharePath : HashQualified -> Path
+HashQualified.toSharePath = cases
+  NameOnly fqn        -> Path (fqn |> FQN.segments |> List.Nonempty.toList)
+  HashOnly h          -> Path [toUnescapedApiUrlText h]
+  HashQualified fqn h -> Path [toUnescapedApiUrlText h]
+
+HashQualified.toSharePath.doc : Doc
+HashQualified.toSharePath.doc =
+  {{
+  Note that this uses {toUnescapedApiUrlText} because its later used with
+  {URI.toText} (which escapes).
+  }}
+
+HashQualified.tryFromText_ :
+  (Text ->{g} FQN) -> Text -> Text ->{g} Optional HashQualified
+HashQualified.tryFromText_ toFQN sep str =
+  use Text ++
+  if isRawHashQualified str then
+    parts = splitOn (Class.in sep) str
+    match parts with
+      [] -> None
+      [""] -> None
+      "" +: _ -> None
+      [name_, unprefixedHash] ++ [] ->
+        Hash.tryFromText (prefix ++ unprefixedHash)
+          |> Optional.map (HashQualified (toFQN name_))
+      _ -> None
+  else None
+
+Icon.arrowDown : Icon
+Icon.arrowDown =
+  Icon
+    "arrow-down"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M7.45504 3.17663C7.45504 2.91774 7.24518 2.70788 6.98629 2.70788V2.70788C6.72741 2.70788 6.51754 2.91774 6.51754 3.17663V9.11C6.51754 9.33273 6.24826 9.44427 6.09077 9.28678L4.14397 7.33999C3.9631 7.15911 3.66955 7.16007 3.48986 7.34212V7.34212C3.31182 7.5225 3.31277 7.81276 3.49198 7.99197L6.63313 11.1331C6.82824 11.3282 7.14452 11.3284 7.33985 11.1335L10.4803 8.00005C10.6636 7.81713 10.6628 7.51988 10.4785 7.33794V7.33794C10.2959 7.15759 10.0018 7.15877 9.82054 7.34058L7.8821 9.28515C7.72472 9.44303 7.45504 9.33157 7.45504 9.10865L7.45504 3.17663Z"
+        ]
+        []
+    ]
+
+Icon.arrowEscapeBox : Icon
+Icon.arrowEscapeBox =
+  Icon
+    "arrow-escape-box"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , fillRule "evenodd"
+        , d
+            "M6.19986 8.20727C6.38292 8.39033 6.67972 8.39033 6.86278 8.20727L11.057 4.01304C11.2147 3.85536 11.4843 3.96736 11.4838 4.19035L11.4801 5.9355C11.4795 6.19221 11.6866 6.40106 11.9433 6.40272C12.2022 6.40439 12.4129 6.19478 12.4125 5.93586L12.4078 2.49932C12.4074 2.22344 12.1837 2 11.9078 2H8.46543C8.21199 2 8.00607 2.20458 8.00442 2.45801C8.00275 2.7138 8.20964 2.92205 8.46543 2.92205L10.2186 2.92205C10.4413 2.92205 10.5529 3.19134 10.3954 3.34883L6.19986 7.54436C6.0168 7.72742 6.0168 8.02421 6.19986 8.20727ZM3 4.80014C3 4.24785 3.44772 3.80014 4 3.80014H5.5C5.77614 3.80014 6 3.57628 6 3.30014C6 3.024 5.77614 2.80014 5.5 2.80014H4C2.89543 2.80014 2 3.69557 2 4.80014V10.8001C2 11.9047 2.89543 12.8001 4 12.8001H10C11.1046 12.8001 12 11.9047 12 10.8001V8.30014C12 8.024 11.7761 7.80014 11.5 7.80014C11.2239 7.80014 11 8.024 11 8.30014V10.8001C11 11.3524 10.5523 11.8001 10 11.8001H4C3.44772 11.8001 3 11.3524 3 10.8001V4.80014Z"
+        ]
+        []
+    ]
+
+Icon.arrowLeft : Icon
+Icon.arrowLeft =
+  Icon
+    "arrow-left"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M10.8135 7.46875C11.0724 7.46875 11.2823 7.25888 11.2823 7V7C11.2823 6.74111 11.0724 6.53125 10.8135 6.53125L4.88017 6.53125C4.65744 6.53125 4.5459 6.26196 4.70339 6.10447L6.65019 4.15767C6.83106 3.9768 6.8301 3.68325 6.64805 3.50356V3.50356C6.46767 3.32553 6.17741 3.32648 5.9982 3.50569L2.85705 6.64684C2.66194 6.84195 2.66176 7.15822 2.85665 7.35355L5.99012 10.494C6.17304 10.6773 6.4703 10.6766 6.65224 10.4922V10.4922C6.83258 10.3096 6.8314 10.0155 6.64959 9.83424L4.70502 7.8958C4.54715 7.73843 4.6586 7.46875 4.88152 7.46875L10.8135 7.46875Z"
+        ]
+        []
+    ]
+
+Icon.arrowLeftUp : Icon
+Icon.arrowLeftUp =
+  Icon
+    "arrow-left-up"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M8.9657 9.62743C9.14875 9.81049 9.44555 9.81049 9.62861 9.62743C9.81167 9.44438 9.81167 9.14758 9.62861 8.96452L5.43308 4.76899C5.27558 4.6115 5.38713 4.34221 5.60985 4.34221L8.36304 4.34221C8.61883 4.34221 8.82572 4.13396 8.82405 3.87817C8.8224 3.62474 8.61648 3.42016 8.36304 3.42016L3.92078 3.42016C3.64485 3.42016 3.42109 3.64368 3.42078 3.91961L3.41583 8.35595C3.41554 8.61493 3.62629 8.82455 3.88527 8.82288C4.14197 8.82123 4.34908 8.61244 4.34868 8.35573L4.34434 5.61003C4.34399 5.38711 4.61349 5.27523 4.77112 5.43286L8.9657 9.62743Z"
+        ]
+        []
+    ]
+
+Icon.arrowRight : Icon
+Icon.arrowRight =
+  Icon
+    "arrow-right"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M3.16291 6.53514C2.90403 6.53514 2.69416 6.74501 2.69416 7.00389V7.00389C2.69416 7.26278 2.90403 7.47264 3.16291 7.47264L9.09629 7.47264C9.31901 7.47264 9.43056 7.74193 9.27306 7.89942L7.32627 9.84622C7.14539 10.0271 7.14635 10.3206 7.32841 10.5003V10.5003C7.50878 10.6784 7.79905 10.6774 7.97826 10.4982L11.1194 7.35705C11.3145 7.16195 11.3147 6.84567 11.1198 6.65034L7.98633 3.50988C7.80341 3.32655 7.50616 3.32734 7.32422 3.51164V3.51164C7.14387 3.69433 7.14505 3.98842 7.32686 4.16965L9.27143 6.10809C9.42931 6.26547 9.31785 6.53514 9.09494 6.53514L3.16291 6.53514Z"
+        ]
+        []
+    ]
+
+Icon.arrowsFromLine : Icon
+Icon.arrowsFromLine =
+  Icon
+    "arrows-from-line"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , fillRule "evenodd"
+        , d
+            "M9.05676 3.49649C9.25283 3.82981 9.0125 4.25 8.62579 4.25L5.37421 4.25C4.9875 4.25 4.74717 3.8298 4.94324 3.49649L6.56903 0.732643C6.76236 0.40399 7.23764 0.40399 7.43097 0.732643L9.05676 3.49649ZM1 7C1 6.72386 1.22386 6.5 1.5 6.5H12.5C12.7761 6.5 13 6.72386 13 7C13 7.27614 12.7761 7.5 12.5 7.5H1.5C1.22386 7.5 1 7.27614 1 7ZM5.37421 9.75C4.9875 9.75 4.74717 10.1702 4.94324 10.5035L6.56903 13.2674C6.76236 13.596 7.23764 13.596 7.43097 13.2674L9.05676 10.5035C9.25283 10.1702 9.0125 9.75 8.62579 9.75H5.37421Z"
+        ]
+        []
+    ]
+
+Icon.arrowsToLine : Icon
+Icon.arrowsToLine =
+  Icon
+    "arrows-to-line"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , fillRule "evenodd"
+        , d
+            "M4.94324 1.75351C4.74717 1.42019 4.9875 1 5.37421 1H8.62579C9.0125 1 9.25283 1.42019 9.05676 1.75351L7.43097 4.51736C7.23764 4.84601 6.76236 4.84601 6.56903 4.51736L4.94324 1.75351ZM1 7C1 6.72386 1.22386 6.5 1.5 6.5H12.5C12.7761 6.5 13 6.72386 13 7C13 7.27614 12.7761 7.5 12.5 7.5H1.5C1.22386 7.5 1 7.27614 1 7ZM8.62579 13C9.0125 13 9.25283 12.5798 9.05676 12.2465L7.43097 9.48264C7.23764 9.15399 6.76236 9.15399 6.56903 9.48264L4.94324 12.2465C4.74717 12.5798 4.9875 13 5.37421 13H8.62579Z"
+        ]
+        []
+    ]
+
+Icon.arrowUp : Icon
+Icon.arrowUp =
+  Icon
+    "arrow-up"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M6.52143 10.8273C6.52143 11.0861 6.73129 11.296 6.99018 11.296V11.296C7.24906 11.296 7.45893 11.0861 7.45893 10.8273L7.45893 4.89389C7.45893 4.67116 7.72821 4.55962 7.8857 4.71711L9.8325 6.66391C10.0134 6.84478 10.3069 6.84382 10.4866 6.66177V6.66177C10.6646 6.48139 10.6637 6.19113 10.4845 6.01192L7.34334 2.87077C7.14823 2.67566 6.83195 2.67548 6.63662 2.87037L3.49616 6.00384C3.31283 6.18676 3.31362 6.48401 3.49793 6.66595V6.66595C3.68062 6.8463 3.9747 6.84512 4.15593 6.66331L6.09437 4.71874C6.25175 4.56087 6.52143 4.67232 6.52143 4.89524L6.52143 10.8273Z"
+        ]
+        []
+    ]
+
+Icon.caretDown : Icon
+Icon.caretDown =
+  Icon
+    "caret-down"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M4.23677 4.18182C3.85006 4.18182 3.60974 4.60201 3.80581 4.93533L6.56796 9.63099C6.76129 9.95964 7.23657 9.95964 7.42989 9.63099L10.1921 4.93533C10.3881 4.60201 10.1478 4.18182 9.76108 4.18182H4.23677Z"
+        ]
+        []
+    ]
+
+Icon.caretLeft : Icon
+Icon.caretLeft =
+  Icon
+    "caret-left"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M9.15451 10.284C9.48783 10.4801 9.90802 10.2398 9.90802 9.85306V4.32875C9.90802 3.94204 9.48783 3.70172 9.15451 3.89779L4.45885 6.65994C4.13019 6.85327 4.13019 7.32855 4.45885 7.52188L9.15451 10.284Z"
+        ]
+        []
+    ]
+
+Icon.caretRight : Icon
+Icon.caretRight =
+  Icon
+    "caret-right"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M4.08984 9.85306C4.08984 10.2398 4.51004 10.4801 4.84335 10.284L9.53902 7.52188C9.86767 7.32855 9.86767 6.85327 9.53902 6.65994L4.84335 3.89779C4.51004 3.70172 4.08984 3.94204 4.08984 4.32875V9.85306Z"
+        ]
+        []
+    ]
+
+Icon.caretUp : Icon
+Icon.caretUp =
+  Icon
+    "caret-up"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , d
+            "M3.80581 9.24649C3.60974 9.5798 3.85006 10 4.23677 10H9.76108C10.1478 10 10.3881 9.57981 10.1921 9.24649L7.42989 4.55082C7.23657 4.22217 6.76129 4.22217 6.56796 4.55082L3.80581 9.24649Z"
+        ]
+        []
+    ]
+
+Icon.toHtml : Icon -> Html
+Icon.toHtml = cases
+  Icon name attrs content ->
+    use Attribute class
+    use List +:
+    iconAttrs = class "icon" +: (class name +: attrs)
+    html_2_3_0.span
+      iconAttrs
+      [ svg.toHtml
+          (svg_1_0_0.svg
+            [width "100%", height "100%", viewBox "0 0 14 14"] content)
+      ]
+
+Icon.unisonMark : Icon
+Icon.unisonMark =
+  Icon
+    "unison-mark"
+    []
+    [ svg_1_0_0.path
+        [ SvgAttribute.fill "currentColor"
+        , fillRule "evenodd"
+        , d
+            "M12.4255 3.88396C12.5728 4.03084 12.5728 4.27245 12.4255 4.41933C12.2781 4.56611 12.0357 4.56611 11.8883 4.41933C11.8181 4.34848 11.7786 4.25278 11.7786 4.15318C11.7786 3.94545 11.9502 3.77451 12.1587 3.77451C12.2585 3.77451 12.3545 3.81375 12.4256 3.88368L12.4255 3.88396ZM10.101 2.67362C10.3854 2.73037 10.6635 2.81492 10.9313 2.92603C11.1184 3.00356 11.2086 3.22155 11.1313 3.40898C11.0744 3.54687 10.9395 3.63726 10.7905 3.63726C10.7421 3.63726 10.6941 3.62769 10.6493 3.60909H10.6487C10.4285 3.51767 10.2 3.44784 9.96642 3.40056C9.96018 3.39947 9.95408 3.39825 9.94784 3.39689C9.72004 3.35208 9.48852 3.32893 9.25638 3.32775H9.2374C8.71088 3.32772 8.22276 3.04541 7.95941 2.58858C7.95778 2.58573 7.95602 2.58274 7.95453 2.57975C7.71295 2.16293 7.39239 1.79741 7.01089 1.50381C5.39449 0.260973 3.07904 0.566434 1.8382 2.18619C1.7684 2.27743 1.66 2.33102 1.54527 2.33102C1.34281 2.33102 1.1762 2.16409 1.1762 1.96122C1.1762 1.8799 1.20298 1.80079 1.25235 1.73625C1.25615 1.73136 1.26008 1.7266 1.26401 1.72185C1.61621 1.266 2.05372 0.883267 2.55203 0.595099C4.66886 -0.629803 7.37587 0.0968651 8.59895 2.21798V2.21866L8.60207 2.22395C8.7314 2.44458 8.96622 2.58275 9.22154 2.58844H9.23794C9.52791 2.58843 9.81718 2.61696 10.1016 2.67362H10.101ZM0.938763 7.40106C0.941883 7.39509 0.945409 7.38913 0.948936 7.38329C1.07451 7.15898 1.07415 6.88464 0.947986 6.66066C0.944324 6.65456 0.940933 6.64846 0.937542 6.64236C0.355782 5.62773 0.19896 4.42288 0.501616 3.29314C0.544727 3.1323 0.691605 3.01961 0.858129 3.01961C1.06061 3.01961 1.22723 3.18621 1.22723 3.38869C1.22723 3.42096 1.223 3.45308 1.21464 3.48424C0.962391 4.42608 1.09341 5.43053 1.57882 6.27616C1.58289 6.28294 1.58682 6.28986 1.59062 6.29691C1.84473 6.74743 1.84427 7.2998 1.5894 7.7499C1.58465 7.75844 1.57977 7.76699 1.57434 7.77526C1.33697 8.19126 1.18278 8.64948 1.12038 9.12436C0.854399 11.1452 2.2768 12.9983 4.29774 13.2644V13.2652C4.48045 13.2893 4.61855 13.4467 4.61855 13.631C4.61855 13.6471 4.61749 13.6632 4.61539 13.6792C4.58898 13.8796 4.40249 14.023 4.20198 13.9969H4.20266C3.626 13.9209 3.06994 13.732 2.56637 13.4409C0.449939 12.2202 -0.276786 9.51768 0.938763 7.40106ZM1.57568 7.83712C1.58518 7.82889 1.59393 7.82021 1.60187 7.81114L1.60288 7.80994C1.59464 7.81942 1.58555 7.8285 1.57568 7.83712ZM5.92412 13.9186C5.72234 13.9723 5.51174 13.8517 5.4576 13.6515C5.40346 13.4511 5.52506 13.2419 5.72698 13.1882C5.75773 13.1804 5.78933 13.1765 5.82106 13.1765C6.03006 13.1765 6.20203 13.3472 6.20203 13.5546C6.20203 13.7235 6.08805 13.8728 5.92426 13.9186H5.92412ZM9.26785 11.4315C9.00746 11.4315 8.76557 11.5688 8.63224 11.7921C8.63061 11.7952 8.62885 11.7983 8.62708 11.8013C8.4817 12.0527 8.31193 12.2891 8.12022 12.5073C8.18168 12.4372 8.18181 12.4376 8.12022 12.5073C8.11642 12.5116 8.11261 12.5158 8.10867 12.5199C7.91993 12.733 7.71108 12.9275 7.48502 13.1007C7.32409 13.2241 7.08997 13.1935 6.96634 13.0328C6.84281 12.8721 6.8735 12.6384 7.03432 12.5149C7.22657 12.3676 7.40384 12.2017 7.56361 12.0198C7.50433 12.0877 7.50419 12.0868 7.56361 12.0198C7.56823 12.0146 7.57285 12.0096 7.5772 12.0048C7.72866 11.8304 7.8634 11.6421 7.97964 11.4425C7.98182 11.4384 7.98413 11.4345 7.98644 11.4304C8.25062 10.9746 8.73971 10.693 9.26717 10.693C9.75299 10.693 10.2341 10.5974 10.6829 10.4117C12.5666 9.63257 13.4634 7.47928 12.6898 5.5967C12.6882 5.59317 12.6865 5.5895 12.685 5.58583C12.6673 5.54197 12.6583 5.49512 12.6583 5.44783C12.6583 5.24519 12.8253 5.07843 13.0282 5.07843C13.176 5.07843 13.3103 5.16691 13.3684 5.30264C13.5915 5.84064 13.7064 6.41731 13.7064 6.99964C13.7064 9.4478 11.7188 11.4325 9.26704 11.4325L9.26785 11.4315ZM8.90927 4.10364C9.00699 4.09299 9.10508 4.08713 9.20354 4.08604C9.21361 4.08594 9.22369 4.08589 9.23377 4.08589C10.8564 4.08589 12.1917 5.41648 12.1917 7.0335C12.1917 8.65049 10.8564 9.9811 9.23377 9.9811C9.12558 9.9811 9.01748 9.97518 8.90994 9.96337C8.30272 9.91688 7.72602 10.2485 7.46262 10.7957C6.99169 11.865 5.92571 12.5588 4.75392 12.5588C3.13116 12.5588 1.79582 11.2282 1.79582 9.61109C1.79582 8.97743 2.00086 8.36035 2.38035 7.85191C2.71507 7.35132 2.71059 6.69472 2.36907 6.19873C2.33375 6.15062 2.29992 6.10156 2.26759 6.05156C1.96075 5.5761 1.79755 5.02257 1.79755 4.45727C1.79755 2.84034 3.13275 1.5098 4.75537 1.5098C5.9266 1.5098 6.99214 2.20304 7.4633 3.27157C7.72667 3.81823 8.30276 4.14967 8.90954 4.10364H8.90927ZM2.91427 10.7573C3.3076 11.4466 4.03688 11.8725 4.82355 11.8725C6.03298 11.8725 7.0282 10.8657 7.0282 9.64216C7.0282 8.4186 6.03298 7.41177 4.82355 7.41177C4.43656 7.41177 4.05631 7.51485 3.72118 7.71062C2.67394 8.32252 2.30973 9.69771 2.91427 10.7573ZM7.32044 8.14944C7.71376 8.83871 8.44307 9.26471 9.22976 9.26471C10.4392 9.26471 11.4344 8.25788 11.4344 7.03431C11.4344 5.81076 10.4392 4.80392 9.22976 4.80392C8.84281 4.80392 8.46259 4.90699 8.12749 5.10272C7.08021 5.71456 6.71593 7.08977 7.32044 8.14944ZM4.82577 6.65686C6.0341 6.65648 7.0282 5.64976 7.0282 4.42647C7.0282 3.20292 6.03368 2.19608 4.82509 2.19608C3.6165 2.19608 2.62199 3.20292 2.62199 4.42647C2.62199 4.42661 2.62199 4.42674 2.62199 4.42688C2.62229 5.65031 3.61677 6.65686 4.82523 6.65686C4.8254 6.65686 4.82558 6.65686 4.82577 6.65686Z"
+        ]
+        []
+    ]
+
+Icon.withAttributes : [Attribute] -> Icon -> Icon
+Icon.withAttributes attrsToAdd = cases
+  Icon name attrs content -> Icon name (attrs List.++ attrsToAdd) content
+
+Icon.withClass : Text -> Icon -> Icon
+Icon.withClass class_ icon = withAttributes [Attribute.class class_] icon
+
+Icon.withClassList : [(Text, Boolean)] -> Icon -> Icon
+Icon.withClassList classes icon = withAttributes [classList classes] icon
+
+InternalHash.constructorSuffix : InternalHash -> Optional Text
+InternalHash.constructorSuffix = cases
+  InternalHash _ _ constructorSuffix -> constructorSuffix
+
+InternalHash.constructorSuffix.modify :
+  (Optional Text ->{g} Optional Text) -> InternalHash ->{g} InternalHash
+InternalHash.constructorSuffix.modify f = cases
+  InternalHash hash isAssumedBuiltin constructorSuffix ->
+    InternalHash hash isAssumedBuiltin (f constructorSuffix)
+
+InternalHash.constructorSuffix.set :
+  Optional Text -> InternalHash -> InternalHash
+InternalHash.constructorSuffix.set constructorSuffix1 = cases
+  InternalHash hash isAssumedBuiltin _ ->
+    InternalHash hash isAssumedBuiltin constructorSuffix1
+
+InternalHash.hash : InternalHash -> Text
+InternalHash.hash = cases InternalHash hash _ _ -> hash
+
+InternalHash.hash.modify : (Text ->{g} Text) -> InternalHash ->{g} InternalHash
+InternalHash.hash.modify f = cases
+  InternalHash hash isAssumedBuiltin constructorSuffix ->
+    InternalHash (f hash) isAssumedBuiltin constructorSuffix
+
+InternalHash.hash.set : Text -> InternalHash -> InternalHash
+InternalHash.hash.set hash1 = cases
+  InternalHash _ isAssumedBuiltin constructorSuffix ->
+    InternalHash hash1 isAssumedBuiltin constructorSuffix
+
+InternalHash.isAssumedBuiltin : InternalHash -> Boolean
+InternalHash.isAssumedBuiltin = cases
+  InternalHash _ isAssumedBuiltin _ -> isAssumedBuiltin
+
+InternalHash.isAssumedBuiltin.modify :
+  (Boolean ->{g} Boolean) -> InternalHash ->{g} InternalHash
+InternalHash.isAssumedBuiltin.modify f = cases
+  InternalHash hash isAssumedBuiltin constructorSuffix ->
+    InternalHash hash (f isAssumedBuiltin) constructorSuffix
+
+InternalHash.isAssumedBuiltin.set : Boolean -> InternalHash -> InternalHash
+InternalHash.isAssumedBuiltin.set isAssumedBuiltin1 = cases
+  InternalHash hash _ constructorSuffix ->
+    InternalHash hash isAssumedBuiltin1 constructorSuffix
+
+NamespacePath.toApiText : NamespacePath -> Text
+NamespacePath.toApiText = cases
+  NamespacePath segments -> Text.join "." segments
+
+NamespacePath.toAPIText.doc : Doc
+NamespacePath.toAPIText.doc =
+  {{
+  Change a {type NamespacePath} to a {type Text} separate by dots (as is the
+  format of the API):
+
+  ```
+  toApiText (NamespacePath ["hello", "world"])
+  ```
+  }}
+
+NamespacePath.toList : NamespacePath -> [Text]
+NamespacePath.toList = cases NamespacePath p -> p
+
+NamespacePath.toPath : NamespacePath -> Path
+NamespacePath.toPath = cases NamespacePath p -> Path p
+
+ProjectRef.doc : Doc
+ProjectRef.doc =
+  use ProjectRef fromText projectRef
+  {{
+  {type ProjectRef} represents a project on Share. It consists of a user handle
+  and a project name. Construct one with {projectRef} or {fromText}.
+
+  {{
+  docCallout
+    (Some {{ ⚠️ }})
+    {{
+    **Deprecation warning:** n the near future {type ProjectRef} will wrap
+    {type UserHandle} and {type ProjectSlug}, so best avoid using the
+    {ProjectRef} constructor directly and instead use either {projectRef} or
+    {fromText}.
+    }} }}
+  }}
+
+ProjectRef.fromText : Text ->{Exception} ProjectRef
+ProjectRef.fromText rawProjectRef =
+  match Text.split ?/ rawProjectRef with
+    [h, ps] ++ rest -> ProjectRef.projectRef h ps
+    _ ->
+      ArrayFailure.raise
+        ("Invalid ProjectRef: "
+          Text.++ rawProjectRef
+          Text.++ ". A valid ProjectRef includes a slash like so: @unison/base")
+        (typeLink ProjectRef)
+
+ProjectRef.fromText.doc : Doc
+ProjectRef.fromText.doc =
+  {{
+  Accepts a project ref in the project format of "@unison/base".
+
+  Will throw if the format is invalid (if it doesn't contain a `/`).
+  }}
+
+ProjectRef.projectRef : Text -> Text ->{Exception} ProjectRef
+ProjectRef.projectRef rawHandle rawProjectSlug =
+  h = UserHandle.fromText rawHandle
+  ps = ProjectSlug.fromText rawProjectSlug
+  ProjectRef (UserHandle.toUnprefixedText h) (ProjectSlug.toText ps)
+
+ProjectRef.projectRef.doc : Doc
+ProjectRef.projectRef.doc =
+  {{
+  Smart constructor for creating a {ype ProjectRef}. It's forgiving and
+  supports both a handle format of `` "@unison" `` as well as `` "unison" ``
+  }}
+
+ProjectRef.projectSlug : ProjectRef -> Text
+ProjectRef.projectSlug = cases ProjectRef _ p -> p
+
+ProjectRef.ProjectSlug.fromText : Text ->{Exception} ProjectSlug
+ProjectRef.ProjectSlug.fromText raw =
+  use Text ++
+  Optional.toException
+    ("Invalid ProjectSlug: " ++ raw)
+    (typeLink ProjectSlug)
+    (ProjectSlug.tryFromText raw)
+
+ProjectRef.ProjectSlug.fromText.doc : Doc
+ProjectRef.ProjectSlug.fromText.doc =
+  {{ Create a {type ProjectSlug} from a valid {type Text}. }}
+
+ProjectRef.ProjectSlug.isValidProjectSlug : Text -> Boolean
+ProjectRef.ProjectSlug.isValidProjectSlug raw =
+  reserved = ["code", "p"]
+  isReserved = List.contains (Text.toLowercase raw) reserved
+  pattern =
+    Pattern.join
+      [ sepMany (many (chars "-_")) (some (patterns.char Class.alphanumeric))
+      , eof
+      ]
+  Boolean.not isReserved
+    && isMatch pattern raw
+
+ProjectRef.ProjectSlug.isValidProjectSlug.doc : Doc
+ProjectRef.ProjectSlug.isValidProjectSlug.doc =
+  {{
+  Requirements
+
+  * May only contain alphanumeric characters, underscores, and hyphens.
+  * No special symbols or spaces
+  * no slashes
+  * Can't be a reserved word, like "code" or "p" (those are used in URLs to
+    mean other things)
+  }}
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.aDashAreValid =
+  check (isValidProjectSlug "ba-se")
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.anUnderscoreAreValid =
+  check (isValidProjectSlug "ba_se")
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.codeIsInvalid =
+  check
+    let
+      expected = false
+      result = isValidProjectSlug "code"
+      expected === result
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.dashesAreValid =
+  check (isValidProjectSlug "ba--se")
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.lettersAreValid =
+  check (isValidProjectSlug "base")
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.nonAlphanumIsInvalid =
+  check
+    let
+      expected = false
+      result = isValidProjectSlug "ba#s!"
+      expected === result
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.numbersAreValid =
+  check (isValidProjectSlug "base123")
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.pIsInvalid =
+  check
+    let
+      expected = false
+      result = isValidProjectSlug "p"
+      expected === result
+
+test> ProjectRef.ProjectSlug.isValidProjectSlug.tests.underscoresAreValid =
+  check (isValidProjectSlug "ba__se")
+
+ProjectRef.ProjectSlug.toText : ProjectSlug -> Text
+ProjectRef.ProjectSlug.toText = cases ProjectSlug raw -> raw
+
+ProjectRef.ProjectSlug.toText.doc : Doc
+ProjectRef.ProjectSlug.toText.doc =
+  {{ Extract a {type ProjectSlug} to a {type Text}. }}
+
+ProjectRef.ProjectSlug.tryFromText : Text -> Optional ProjectSlug
+ProjectRef.ProjectSlug.tryFromText raw =
+  validate s = if isValidProjectSlug s then Some s else None
+  raw |> validate |> Optional.map ProjectSlug
+
+ProjectRef.toSharePath : ProjectRef -> Path
+ProjectRef.toSharePath projectRef =
+  use Text ++
+  Path ["@" ++ userHandle projectRef, projectSlug projectRef]
+
+ProjectRef.userHandle : ProjectRef -> Text
+ProjectRef.userHandle = cases ProjectRef h _ -> h
+
+README : Doc
+README =
+  {{
+  # Share SDK
+
+    This is the official Unison Share SDK. With it. It's currently very early
+    days, and the feature set just allows for fetching definitions (and
+    rendered docs).
+
+    The main functions to get familiar with are:
+
+    * {fetchTerm}: fetch a {type Term} (wrapping {type Syntax}) from the Share
+      API by project, branch, and namespace path.
+    * {fetchType}: fetch a {type Type.Type} (wrapping {type Syntax}) from the
+      Share API by project, branch, and namespace path.
+    * {fetchDoc}: fetch a {type Doc} as a {type ShareDoc} from the Share API by
+      project, branch, and namespace path.
+    * {Syntax.toHtml}: render {type Term}, and {type Type.Type} to hyperlinked
+      {type Html} (links back to Share by hash).
+    * {ShareDoc.toHtml}: render a {type ShareDoc} to hyperlinked {type Html}
+      (unstyled).
+  }}
+
+Reference.fromText : (HashQualified ->{g} Reference) -> Text ->{g} Reference
+Reference.fromText toRef str = str |> HashQualified.fromText |> toRef
+
+Reference.toShareURI : ProjectRef -> BranchRef -> Reference -> URI
+Reference.toShareURI projectRef branchRef ref =
+  use Path ++
+  projectPath = ProjectRef.toSharePath projectRef
+  branchPath = BranchRef.toSharePath branchRef
+  refPath =
+    match ref with
+      Reference.AbilityConstructorReference hq ->
+        Path ["ability-constructors"] ++ HashQualified.toSharePath hq
+      Reference.DataConstructorReference hq ->
+        Path ["data-constructors"] ++ HashQualified.toSharePath hq
+      Reference.TermReference hq ->
+        Path ["terms"] ++ HashQualified.toSharePath hq
+      Reference.TypeReference hq ->
+        Path ["types"] ++ HashQualified.toSharePath hq
+  [projectPath, Path ["code"], branchPath, Path ["latest"], refPath]
+    |> List.foldLeft (++) (Path [])
+    |> fromPath
+    |> withHost shareHost
+    |> withHost shareHost
+    |> scheme.set (Scheme "https")
+
+share.apiHost : Text
+share.apiHost = "api.unison-lang.org"
+
+share.fetchDoc :
+  ProjectRef -> BranchRef -> NamespacePath ->{Exception, Http} [ShareDoc]
+share.fetchDoc projectRef branchRef namespacePath =
+  path =
+    Path ["users", userHandle projectRef, "projects", projectSlug projectRef]
+      Path.++ toAPIPath branchRef
+      Path.++ Path ["definitions", "by-name"]
+      Path.++ Path [namespacePath |> toApiText]
+  url = parseOrBug ("https://" Text.++ apiHost Text.++ Path.toText path)
+  toDoc : (Hash, Json) -> ShareDoc
+  toDoc = cases
+    (_, value) ->
+      decode_ = object.at "termDocs" (array.at 0 (array.at 2 ShareDoc.decode))
+      run.parsed decode_ value
+  decode : '{Decoder} Map Text Json
+  decode = object.at "termDefinitions" (Decoder.object Decoder.value)
+  eResponse =
+    catch do
+      Http.get url
+        |> up.HttpResponse.ensureSuccess
+        |> bodyText
+        |> Decoder.run decode
+        |> Map.mapKeys Hash.fromText
+        |> Map.toList
+        |> List.map toDoc
+  match eResponse with
+    Left e         -> raiseGeneric "Failed to fetch doc" (URI.toText url, e)
+    Right response -> response
+
+share.fetchTerm :
+  ProjectRef -> BranchRef -> NamespacePath ->{Exception, Http} [Term]
+share.fetchTerm projectRef branchRef namespacePath =
+  path =
+    Path ["users", userHandle projectRef, "projects", projectSlug projectRef]
+      Path.++ toAPIPath branchRef
+      Path.++ Path ["definitions", "by-name"]
+      Path.++ Path [namespacePath |> toApiText]
+  url = parseOrBug ("https://" Text.++ apiHost Text.++ Path.toText path)
+  toTerm : (Hash, Json) -> Term
+  toTerm = cases (hash, value) -> run.parsed (Term.decode hash) value
+  decode : '{Decoder} Map Text Json
+  decode = object.at "termDefinitions" (Decoder.object Decoder.value)
+  eResponse =
+    catch do
+      Http.get url
+        |> up.HttpResponse.ensureSuccess
+        |> bodyText
+        |> Decoder.run decode
+        |> Map.mapKeys Hash.fromText
+        |> Map.toList
+        |> List.map toTerm
+  match eResponse with
+    Left e         -> raiseGeneric "Failed to fetch term" (URI.toText url, e)
+    Right response -> response
+
+share.fetchType :
+  ProjectRef -> BranchRef -> NamespacePath ->{Exception, Http} [Type.Type]
+share.fetchType projectRef branchRef namespacePath =
+  path =
+    Path ["users", userHandle projectRef, "projects", projectSlug projectRef]
+      Path.++ toAPIPath branchRef
+      Path.++ Path ["definitions", "by-name"]
+      Path.++ Path [namespacePath |> toApiText]
+  url = parseOrBug ("https://" Text.++ apiHost Text.++ Path.toText path)
+  toType : (Hash, Json) -> Type.Type
+  toType = cases (hash, value) -> run.parsed (Type.decode hash) value
+  decode : '{Decoder} Map Text Json
+  decode = object.at "typeDefinitions" (Decoder.object Decoder.value)
+  eResponse =
+    catch do
+      Http.get url
+        |> up.HttpResponse.ensureSuccess
+        |> bodyText
+        |> Decoder.run decode
+        |> Map.mapKeys Hash.fromText
+        |> Map.toList
+        |> List.map toType
+  match eResponse with
+    Left e         -> raiseGeneric "Failed to fetch type" (URI.toText url, e)
+    Right response -> response
+
+share.shareHost : Text
+share.shareHost = "share.unison-lang.org"
+
+ShareDefinitionSlug.fqn : ShareDefinitionSlug -> FQN
+ShareDefinitionSlug.fqn = cases ShareDefinitionSlug _ fqn -> fqn
+
+ShareDefinitionSlug.fqn.modify :
+  (FQN ->{g} FQN) -> ShareDefinitionSlug ->{g} ShareDefinitionSlug
+ShareDefinitionSlug.fqn.modify f = cases
+  ShareDefinitionSlug projectRef fqn -> ShareDefinitionSlug projectRef (f fqn)
+
+ShareDefinitionSlug.fqn.set : FQN -> ShareDefinitionSlug -> ShareDefinitionSlug
+ShareDefinitionSlug.fqn.set fqn1 = cases
+  ShareDefinitionSlug projectRef _ -> ShareDefinitionSlug projectRef fqn1
+
+ShareDefinitionSlug.projectRef : ShareDefinitionSlug -> ProjectRef
+ShareDefinitionSlug.projectRef = cases
+  ShareDefinitionSlug projectRef _ -> projectRef
+
+ShareDefinitionSlug.projectRef.modify :
+  (ProjectRef ->{g} ProjectRef)
+  -> ShareDefinitionSlug
+  ->{g} ShareDefinitionSlug
+ShareDefinitionSlug.projectRef.modify f = cases
+  ShareDefinitionSlug projectRef fqn -> ShareDefinitionSlug (f projectRef) fqn
+
+ShareDefinitionSlug.projectRef.set :
+  ProjectRef -> ShareDefinitionSlug -> ShareDefinitionSlug
+ShareDefinitionSlug.projectRef.set projectRef1 = cases
+  ShareDefinitionSlug _ fqn -> ShareDefinitionSlug projectRef1 fqn
+
+ShareDoc.decode : '{Decoder} ShareDoc
+ShareDoc.decode =
+  do
+    match object.at! "tag" Decoder.text with
+      "Word" -> ShareDoc.Word (object.at! "contents" Decoder.text)
+      "Code" -> ShareDoc.Code (object.at! "contents" ShareDoc.decode)
+      "CodeBlock" ->
+        ShareDoc.CodeBlock
+          (object.at! "contents" (array.at 0 Decoder.text))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Bold" -> ShareDoc.Bold (object.at! "contents" ShareDoc.decode)
+      "Italic" -> ShareDoc.Italic (object.at! "contents" ShareDoc.decode)
+      "Strikethrough" ->
+        ShareDoc.Strikethrough (object.at! "contents" ShareDoc.decode)
+      "Style" ->
+        ShareDoc.Style
+          (object.at! "contents" (array.at 0 Decoder.text))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Anchor" ->
+        ShareDoc.Anchor
+          (object.at! "contents" (array.at 0 Decoder.text))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Blockquote" ->
+        ShareDoc.Blockquote (object.at! "contents" ShareDoc.decode)
+      "Blankline" -> ShareDoc.Blankline
+      "Linebreak" -> ShareDoc.Linebreak
+      "SectionBreak" -> ShareDoc.SectionBreak
+      "Tooltip" ->
+        ShareDoc.Tooltip
+          (object.at! "contents" (array.at 0 ShareDoc.decode))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Aside" -> ShareDoc.Aside (object.at! "contents" ShareDoc.decode)
+      "Callout" ->
+        ShareDoc.Callout
+          (optional! (object.at "contents" (array.at 0 ShareDoc.decode)))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Table" ->
+        ShareDoc.Table
+          (object.at!
+            "contents" (Decoder.array (Decoder.array ShareDoc.decode)))
+      "Folded" ->
+        ShareDoc.Folded
+          ((isFolded summary details ->
+            FoldedDoc (FoldId "TODO") isFolded summary details)
+            (object.at! "contents" (array.at 0 Decoder.boolean))
+            (object.at! "contents" (array.at 1 ShareDoc.decode))
+            (object.at! "contents" (array.at 2 ShareDoc.decode)))
+      "Paragraph" ->
+        Span (object.at! "contents" (Decoder.array ShareDoc.decode))
+      "BulletedList" ->
+        ShareDoc.BulletedList
+          (object.at! "contents" (Decoder.array ShareDoc.decode))
+      "NumberedList" ->
+        ShareDoc.NumberedList
+          (object.at! "contents" (array.at 0 Decoder.nat))
+          (object.at! "contents" (array.at 1 (Decoder.array ShareDoc.decode)))
+      "Section" ->
+        ShareDoc.Section
+          (object.at! "contents" (array.at 0 ShareDoc.decode))
+          (object.at! "contents" (array.at 1 (Decoder.array ShareDoc.decode)))
+      "NamedLink" ->
+        ShareDoc.NamedLink
+          (object.at! "contents" (array.at 0 ShareDoc.decode))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+      "Image" ->
+        ShareDoc.Image
+          (object.at! "contents" (array.at 0 ShareDoc.decode))
+          (object.at! "contents" (array.at 1 ShareDoc.decode))
+          (optional! (object.at "contents" (array.at 2 ShareDoc.decode)))
+      "Special" -> ShareDoc.Special (object.at! "contents" SpecialForm.decode)
+      "Join" ->
+        ShareDoc.Join (object.at! "contents" (Decoder.array ShareDoc.decode))
+      "UntitledSection" ->
+        ShareDoc.UntitledSection
+          (object.at! "contents" (Decoder.array ShareDoc.decode))
+      "Column" ->
+        ShareDoc.Column (object.at! "contents" (Decoder.array ShareDoc.decode))
+      "Group" -> ShareDoc.Group (object.at! "contents" ShareDoc.decode)
+      _ -> Decoder.fail "Invalid ShareDoc"
+
+ShareDoc.Folded.toHtml : [Attribute] -> IsFolded -> Html
+ShareDoc.Folded.toHtml attrs = cases
+  IsFolded.Disabled summary ->
+    html_2_3_0.div
+      (Attribute.class "folded is-folded" List.+: attrs)
+      [ disabled |> FoldToggle.toHtml
+      , html_2_3_0.div [Attribute.class "folded-content"] [summary]
+      ]
+  IsFolded content foldId isFolded ->
+    html_2_3_0.div
+      (classList [("folded", true), ("is-folded", isFolded)] List.+: attrs)
+      [ foldToggle
+          |> FoldToggle.isOpen (Boolean.not isFolded)
+          |> FoldToggle.toHtml
+      , html_2_3_0.div [Attribute.class "folded-content"] content
+      ]
+
+ShareDoc.FoldedDoc.details : FoldedDoc -> ShareDoc
+ShareDoc.FoldedDoc.details = cases FoldedDoc _ _ _ details -> details
+
+ShareDoc.FoldedDoc.details.modify :
+  (ShareDoc ->{g} ShareDoc) -> FoldedDoc ->{g} FoldedDoc
+ShareDoc.FoldedDoc.details.modify f = cases
+  FoldedDoc foldId isFolded summary details ->
+    FoldedDoc foldId isFolded summary (f details)
+
+ShareDoc.FoldedDoc.details.set : ShareDoc -> FoldedDoc -> FoldedDoc
+ShareDoc.FoldedDoc.details.set details1 = cases
+  FoldedDoc foldId isFolded summary _ ->
+    FoldedDoc foldId isFolded summary details1
+
+ShareDoc.FoldedDoc.foldId : FoldedDoc -> FoldId
+ShareDoc.FoldedDoc.foldId = cases FoldedDoc foldId _ _ _ -> foldId
+
+ShareDoc.FoldedDoc.foldId.modify :
+  (FoldId ->{g} FoldId) -> FoldedDoc ->{g} FoldedDoc
+ShareDoc.FoldedDoc.foldId.modify f = cases
+  FoldedDoc foldId isFolded summary details ->
+    FoldedDoc (f foldId) isFolded summary details
+
+ShareDoc.FoldedDoc.foldId.set : FoldId -> FoldedDoc -> FoldedDoc
+ShareDoc.FoldedDoc.foldId.set foldId1 = cases
+  FoldedDoc _ isFolded summary details ->
+    FoldedDoc foldId1 isFolded summary details
+
+ShareDoc.FoldedDoc.isFolded : FoldedDoc -> Boolean
+ShareDoc.FoldedDoc.isFolded = cases FoldedDoc _ isFolded _ _ -> isFolded
+
+ShareDoc.FoldedDoc.isFolded.modify :
+  (Boolean ->{g} Boolean) -> FoldedDoc ->{g} FoldedDoc
+ShareDoc.FoldedDoc.isFolded.modify f = cases
+  FoldedDoc foldId isFolded summary details ->
+    FoldedDoc foldId (f isFolded) summary details
+
+ShareDoc.FoldedDoc.isFolded.set : Boolean -> FoldedDoc -> FoldedDoc
+ShareDoc.FoldedDoc.isFolded.set isFolded1 = cases
+  FoldedDoc foldId _ summary details ->
+    FoldedDoc foldId isFolded1 summary details
+
+ShareDoc.FoldedDoc.summary : FoldedDoc -> ShareDoc
+ShareDoc.FoldedDoc.summary = cases FoldedDoc _ _ summary _ -> summary
+
+ShareDoc.FoldedDoc.summary.modify :
+  (ShareDoc ->{g} ShareDoc) -> FoldedDoc ->{g} FoldedDoc
+ShareDoc.FoldedDoc.summary.modify f = cases
+  FoldedDoc foldId isFolded summary details ->
+    FoldedDoc foldId isFolded (f summary) details
+
+ShareDoc.FoldedDoc.summary.set : ShareDoc -> FoldedDoc -> FoldedDoc
+ShareDoc.FoldedDoc.summary.set summary1 = cases
+  FoldedDoc foldId isFolded _ details ->
+    FoldedDoc foldId isFolded summary1 details
+
+ShareDoc.FoldedSource.foldId : FoldedSource -> FoldId
+ShareDoc.FoldedSource.foldId = cases
+  FoldedSource.FoldedSource foldId _ _ -> foldId
+
+ShareDoc.FoldedSource.foldId.modify :
+  (FoldId ->{g} FoldId) -> FoldedSource ->{g} FoldedSource
+ShareDoc.FoldedSource.foldId.modify f = cases
+  FoldedSource.FoldedSource foldId isFolded source ->
+    FoldedSource.FoldedSource (f foldId) isFolded source
+
+ShareDoc.FoldedSource.foldId.set : FoldId -> FoldedSource -> FoldedSource
+ShareDoc.FoldedSource.foldId.set foldId1 = cases
+  FoldedSource.FoldedSource _ isFolded source ->
+    FoldedSource.FoldedSource foldId1 isFolded source
+
+ShareDoc.FoldedSource.isFolded : FoldedSource -> Boolean
+ShareDoc.FoldedSource.isFolded = cases
+  FoldedSource.FoldedSource _ isFolded _ -> isFolded
+
+ShareDoc.FoldedSource.isFolded.modify :
+  (Boolean ->{g} Boolean) -> FoldedSource ->{g} FoldedSource
+ShareDoc.FoldedSource.isFolded.modify f = cases
+  FoldedSource.FoldedSource foldId isFolded source ->
+    FoldedSource.FoldedSource foldId (f isFolded) source
+
+ShareDoc.FoldedSource.isFolded.set : Boolean -> FoldedSource -> FoldedSource
+ShareDoc.FoldedSource.isFolded.set isFolded1 = cases
+  FoldedSource.FoldedSource foldId _ source ->
+    FoldedSource.FoldedSource foldId isFolded1 source
+
+ShareDoc.FoldedSource.source : FoldedSource -> EmbeddedSource
+ShareDoc.FoldedSource.source = cases
+  FoldedSource.FoldedSource _ _ source -> source
+
+ShareDoc.FoldedSource.source.modify :
+  (EmbeddedSource ->{g} EmbeddedSource) -> FoldedSource ->{g} FoldedSource
+ShareDoc.FoldedSource.source.modify f = cases
+  FoldedSource.FoldedSource foldId isFolded source ->
+    FoldedSource.FoldedSource foldId isFolded (f source)
+
+ShareDoc.FoldedSource.source.set :
+  EmbeddedSource -> FoldedSource -> FoldedSource
+ShareDoc.FoldedSource.source.set source1 = cases
+  FoldedSource.FoldedSource foldId isFolded _ ->
+    FoldedSource.FoldedSource foldId isFolded source1
+
+ShareDoc.MediaSource.mediaSourceMimeType :
+  ShareDoc.MediaSource -> Optional Text
+ShareDoc.MediaSource.mediaSourceMimeType = cases
+  ShareDoc.MediaSource.MediaSource _ mediaSourceMimeType -> mediaSourceMimeType
+
+ShareDoc.MediaSource.mediaSourceMimeType.modify :
+  (Optional Text ->{g} Optional Text)
+  -> ShareDoc.MediaSource
+  ->{g} ShareDoc.MediaSource
+ShareDoc.MediaSource.mediaSourceMimeType.modify f = cases
+  ShareDoc.MediaSource.MediaSource mediaSourceUrl mediaSourceMimeType ->
+    ShareDoc.MediaSource.MediaSource mediaSourceUrl (f mediaSourceMimeType)
+
+ShareDoc.MediaSource.mediaSourceMimeType.set :
+  Optional Text -> ShareDoc.MediaSource -> ShareDoc.MediaSource
+ShareDoc.MediaSource.mediaSourceMimeType.set mediaSourceMimeType1 = cases
+  ShareDoc.MediaSource.MediaSource mediaSourceUrl _ ->
+    ShareDoc.MediaSource.MediaSource mediaSourceUrl mediaSourceMimeType1
+
+ShareDoc.MediaSource.mediaSourceUrl : ShareDoc.MediaSource -> Text
+ShareDoc.MediaSource.mediaSourceUrl = cases
+  ShareDoc.MediaSource.MediaSource mediaSourceUrl _ -> mediaSourceUrl
+
+ShareDoc.MediaSource.mediaSourceUrl.modify :
+  (Text ->{g} Text) -> ShareDoc.MediaSource ->{g} ShareDoc.MediaSource
+ShareDoc.MediaSource.mediaSourceUrl.modify f = cases
+  ShareDoc.MediaSource.MediaSource mediaSourceUrl mediaSourceMimeType ->
+    ShareDoc.MediaSource.MediaSource (f mediaSourceUrl) mediaSourceMimeType
+
+ShareDoc.MediaSource.mediaSourceUrl.set :
+  Text -> ShareDoc.MediaSource -> ShareDoc.MediaSource
+ShareDoc.MediaSource.mediaSourceUrl.set mediaSourceUrl1 = cases
+  ShareDoc.MediaSource.MediaSource _ mediaSourceMimeType ->
+    ShareDoc.MediaSource.MediaSource mediaSourceUrl1 mediaSourceMimeType
+
+ShareDoc.mergeWords : Text -> [ShareDoc] -> [ShareDoc]
+ShareDoc.mergeWords sep docs =
+  use List +:
+  use ShareDoc Word
+  use Text ++
+  merge_ : ShareDoc -> [ShareDoc] -> [ShareDoc]
+  merge_ d acc = match (d, acc) with
+    (Word w, Word w_ +: rest) -> Word (w ++ sep ++ w_) +: rest
+    _                         -> d +: acc
+  List.foldRight merge_ [] docs
+
+ShareDoc.mergeWords.doc : Doc
+ShareDoc.mergeWords.doc =
+  {{
+  Merge adjacent Word elements in a list to 1 element with a string of words
+  separated by space— useful for rendering to the dom without creating dom
+  elements for each and every word in the doc, but instead rely on textNodes
+  }}
+
+ShareDoc.normalizeHref : NamedLinkHref -> ShareDoc -> NamedLinkHref
+ShareDoc.normalizeHref href = cases
+  ShareDoc.Word w ->
+    match href with
+      InvalidHref     -> Href w
+      Href h          -> Href (h Text.++ w)
+      ReferenceHref _ -> href
+  ShareDoc.Group d_ -> ShareDoc.normalizeHref href d_
+  ShareDoc.Join ds ->
+    List.foldLeft (acc d -> ShareDoc.normalizeHref acc d) href ds
+  ShareDoc.Special (ShareDoc.SpecialForm.Link syntax) ->
+    folder acc seg = match acc with
+      None -> reference seg
+      _    -> acc
+    syntax
+      |> Syntax.foldLeft folder None
+      |> Optional.map ReferenceHref
+      |> Optional.getOrElse InvalidHref
+  _ -> href
+
+ShareDoc.SpecialForm.decode : '{Decoder} ShareDoc.SpecialForm
+ShareDoc.SpecialForm.decode =
+  do
+    use Decoder array fail object text
+    use ShareDoc.SpecialForm Source
+    use Syntax decode
+    use Text ++
+    use object at!
+    tag = object.at "tag" text
+    decodeSignature = do TermSignature decode()
+    decodeSource_ : Boolean -> '{Decoder} FoldedSource
+    decodeSource_ isFolded =
+      do
+        use array at
+        source_ =
+          match tag() with
+            "UserObject" ->
+              EmbeddedSource
+                (at! "contents" (at 0 decode)) (at! "contents" (at 1 decode))
+            "BuiltinObject" -> ShareDoc.Builtin (at! "contents" decode)
+            t -> fail ("Couldn't match tag: " ++ t)
+        FoldedSource.FoldedSource (FoldId "TODO") isFolded source_
+    decodeSource : Boolean -> '{Decoder} FoldedSource
+    decodeSource isFolded = do match tag() with
+      "Term" -> at! "contents" (array.at 1 (decodeSource_ isFolded))
+      "Type" -> at! "contents" (array.at 1 (decodeSource_ isFolded))
+      t      -> fail ("Couldn't match tag: " ++ t)
+    decodeMediaSource =
+      do
+        ShareDoc.MediaSource.MediaSource
+          (at! "mediaSourceUrl" text) (optionalAt! "mediaSourceMimeType" text)
+    match tag() with
+      "Source" -> Source (at! "contents" (array (decodeSource false)))
+      "FoldedSource" -> Source (at! "contents" (array (decodeSource true)))
+      "Example" -> ShareDoc.SpecialForm.Example (at! "contents" decode)
+      "ExampleBlock" ->
+        ShareDoc.SpecialForm.ExampleBlock (at! "contents" decode)
+      "Link" -> ShareDoc.SpecialForm.Link (at! "contents" decode)
+      "Signature" ->
+        ShareDoc.SpecialForm.Signature (at! "contents" (array decodeSignature))
+      "SignatureInline" ->
+        ShareDoc.SpecialForm.SignatureInline (at! "contents" decodeSignature)
+      "Eval" ->
+        ShareDoc.SpecialForm.Eval
+          (at! "contents" (array.at 0 decode))
+          (at! "contents" (array.at 1 decode))
+      "EvalInline" ->
+        ShareDoc.SpecialForm.EvalInline
+          (at! "contents" (array.at 0 decode))
+          (at! "contents" (array.at 1 decode))
+      "Embed" -> ShareDoc.SpecialForm.Embed (at! "contents" decode)
+      "EmbedInline" -> ShareDoc.SpecialForm.EmbedInline (at! "contents" decode)
+      "Video" ->
+        SpecialForm.Video
+          (at! "contents" (array.at 0 (array decodeMediaSource)))
+          (at! "contents" (array.at 1 (object text)))
+      "FrontMatter" ->
+        SpecialForm.FrontMatter (at! "contents" (object (array text)))
+      "LaTeXInline" -> LaTeXInline (at! "contents" text)
+      "Svg" -> SpecialForm.Svg (at! "contents" text)
+      _ -> fail "Invalid Doc"
+
+ShareDoc.toHtml : Linked -> ShareDoc -> Html
+ShareDoc.toHtml linked document =
+  use Attribute class
+  use Text join
+  use html_2_3_0 div span text
+  nothing = text ""
+  viewSignature = TermSignature.toHtml (Rich linked)
+  syntaxToHtml = Syntax.toHtml linked
+  textToClass t = replaceAll " " "__" t
+  inlineCode classNames c =
+    span
+      [ class
+          ("rich source inline-code "
+            Text.++ (classNames |> List.map textToClass |> join " "))
+      ]
+      [html_2_3_0.code [] [c]]
+  codeBlock classNames c =
+    div
+      [ class
+          ("rich source code "
+            Text.++ (classNames |> List.map textToClass |> join " "))
+      ]
+      [pre [] [html_2_3_0.code [] [c]]]
+  view_ sectionLevel doc =
+    use Attribute href target
+    use EmbedKatex katex
+    use List +:
+    use Map get
+    use Nat +
+    use html_2_3_0 a
+    viewAtCurrentSectionLevel = view_ sectionLevel
+    viewSectionContent renderer doc_ = match doc_ with
+      Span _ -> p [] [renderer doc_]
+      _      -> renderer doc_
+    match doc with
+      ShareDoc.Word word -> span [class "word"] [text word]
+      ShareDoc.Code code -> inlineCode [] (viewAtCurrentSectionLevel code)
+      ShareDoc.CodeBlock lang code ->
+        match Text.toLowercase lang with
+          "latex" -> katex (ShareDoc.toText "" code) |> EmbedKatex.toHtml
+          "mermaid" -> mermaid (ShareDoc.toText "" code) |> EmbedMermaid.toHtml
+          _ -> codeBlock ["by-language", lang] (viewAtCurrentSectionLevel code)
+      ShareDoc.Bold d -> strong [] [viewAtCurrentSectionLevel d]
+      ShareDoc.Italic d -> span [class "italic"] [viewAtCurrentSectionLevel d]
+      ShareDoc.Strikethrough d ->
+        span [class "strikethrough"] [viewAtCurrentSectionLevel d]
+      ShareDoc.Style cssClass d ->
+        div [cssClass |> textToClass |> class] [viewAtCurrentSectionLevel d]
+      ShareDoc.Anchor id_ d ->
+        a [Attribute.id id_, target id_] [viewAtCurrentSectionLevel d]
+      ShareDoc.Blockquote d -> blockquote [] [viewAtCurrentSectionLevel d]
+      ShareDoc.Blankline -> div [] [br [], br []]
+      ShareDoc.Linebreak -> br []
+      ShareDoc.SectionBreak -> hr [class "divider"]
+      ShareDoc.Tooltip triggerContent tooltipContent ->
+        div
+          [class "tooltip-trigger"]
+          [ ShareDoc.toHtml linked triggerContent
+          , div
+              [class "tooltip below arrow-start"]
+              [ div
+                  [class "tooltip-bubble"]
+                  [ShareDoc.toHtml linked tooltipContent]
+              ]
+          ]
+      ShareDoc.Aside d ->
+        span
+          [class "doc_aside-anchor"] [aside [] [viewAtCurrentSectionLevel d]]
+      ShareDoc.Callout icon content ->
+        (cls, ico) =
+          match icon with
+            Some emoji ->
+              ( class "doc_callout doc_callout-with-icon"
+              , div
+                  [class "doc_callout-icon"] [text (ShareDoc.toText "" emoji)]
+              )
+            None -> (class "doc_callout", nothing)
+        div
+          [cls]
+          [ ico
+          , div
+              [class "doc_callout-content"] [viewAtCurrentSectionLevel content]
+          ]
+      ShareDoc.Table rows ->
+        use List map
+        viewCell d = td [] [viewAtCurrentSectionLevel d]
+        viewRow cells = tr [] (map viewCell (mergeWords " " cells))
+        div
+          [class "doc_table"]
+          [html_2_3_0.table [] [tbody [] (map viewRow rows)]]
+      ShareDoc.Folded (FoldedDoc foldId isFolded summary details) ->
+        content =
+          if isFolded then [viewAtCurrentSectionLevel summary]
+          else
+            [ viewAtCurrentSectionLevel summary
+            , viewAtCurrentSectionLevel details
+            ]
+        Folded.toHtml [] (IsFolded content foldId isFolded)
+      Span docs ->
+        match docs with
+          [d] -> viewAtCurrentSectionLevel d
+          ds ->
+            span
+              [class "span"]
+              (ds
+                |> mergeWords " "
+                |> List.map viewAtCurrentSectionLevel
+                |> intersperse (text " "))
+      ShareDoc.BulletedList items ->
+        viewItem d = li [] [viewAtCurrentSectionLevel d]
+        ul [] (List.map viewItem (mergeWords " " items))
+      ShareDoc.NumberedList startNum items ->
+        viewItem d = li [] [viewAtCurrentSectionLevel d]
+        ol
+          [Attribute.start startNum] (List.map viewItem (mergeWords " " items))
+      ShareDoc.Section title docs ->
+        use Text ++
+        level = Nat.min 6 sectionLevel
+        titleEl =
+          html_2_3_0.element
+            ("h" ++ Nat.toText level) [] [viewAtCurrentSectionLevel title]
+        section
+          []
+          (titleEl
+            +: List.map (viewSectionContent (view_ (sectionLevel + 1))) docs)
+      ShareDoc.NamedLink label href_ ->
+        match normalizeHref InvalidHref href_ with
+          Href h ->
+            a
+              [ class "named-link"
+              , href h
+              , Attribute.rel "noopener"
+              , target "_blank"
+              ]
+              [viewAtCurrentSectionLevel label]
+          ReferenceHref ref ->
+            match linked with
+              Linked toHref ->
+                a
+                  [class "named-link", href (toHref ref), target "_blank"]
+                  [viewAtCurrentSectionLevel label]
+              NotLinked -> span [] [viewAtCurrentSectionLevel label]
+          InvalidHref ->
+            span
+              [class "named-link invalid-href"]
+              [viewAtCurrentSectionLevel label]
+      ShareDoc.Image altText src_ caption ->
+        use List ++
+        use ShareDoc toText
+        altAttr = [alt (toText " " altText)]
+        image = img (altAttr ++ [src (toText "" src_)])
+        imageWithCaption c =
+          div
+            [class "image-with-caption"]
+            [image, div [class "caption"] [viewAtCurrentSectionLevel c]]
+        caption |> Optional.map imageWithCaption |> Optional.getOrElse image
+      ShareDoc.Special specialForm ->
+        match specialForm with
+          ShareDoc.SpecialForm.Source sources ->
+            use Folded toHtml
+            viewFoldedSource = cases
+              FoldedSource.FoldedSource foldId isFolded source ->
+                content summary details =
+                  if isFolded then
+                    [codeBlock ["unison"] (syntaxToHtml summary)]
+                  else [codeBlock ["unison"] (syntaxToHtml details)]
+                match source with
+                  ShareDoc.Builtin summary ->
+                    toHtml
+                      [class "rich source"]
+                      (IsFolded.Disabled
+                        (div
+                          [class "builtin-summary"]
+                          [ codeBlock ["unison"] (syntaxToHtml summary)
+                          , div
+                              [class "badge"]
+                              [ span
+                                  []
+                                  [ strong [] [text "Built-in "]
+                                  , span
+                                      []
+                                      [text "provided by the Unison runtime"]
+                                  ]
+                              ]
+                          ]))
+                  EmbeddedSource summary details ->
+                    toHtml
+                      [class "rich source"]
+                      (IsFolded (content summary details) foldId isFolded)
+            div [class "folded-sources"] (List.map viewFoldedSource sources)
+          ShareDoc.SpecialForm.Example syntax ->
+            inlineCode ["example-inline"] (syntaxToHtml syntax)
+          ShareDoc.SpecialForm.ExampleBlock syntax ->
+            codeBlock ["example"] (syntaxToHtml syntax)
+          ShareDoc.SpecialForm.Link syntax ->
+            inlineCode ["link"] (syntaxToHtml syntax)
+          ShareDoc.SpecialForm.Signature signatures ->
+            codeBlock
+              ["signatures"]
+              (div
+                []
+                (List.map
+                  (signature ->
+                    div [class "signature"] [viewSignature signature])
+                  signatures))
+          ShareDoc.SpecialForm.SignatureInline signature ->
+            inlineCode ["signature-inline"] (viewSignature signature)
+          ShareDoc.SpecialForm.Eval source result ->
+            div
+              [class "eval"]
+              [ codeBlock [] (syntaxToHtml source)
+              , div
+                  [class "result"]
+                  [div [class "result-indicator"] [Icon.toHtml arrowDown]]
+              , codeBlock [] (syntaxToHtml result)
+              ]
+          ShareDoc.SpecialForm.EvalInline source result ->
+            inlineCode
+              ["eval-inline"]
+              (span
+                []
+                [ syntaxToHtml source
+                , span
+                    [class "result"]
+                    [Icon.toHtml arrowRight, syntaxToHtml result]
+                ])
+          ShareDoc.SpecialForm.Embed syntax ->
+            codeBlock ["embed"] (syntaxToHtml syntax)
+          ShareDoc.SpecialForm.EmbedInline syntax ->
+            inlineCode ["embed-inline"] (syntaxToHtml syntax)
+          SpecialForm.Video mediaSources attrs ->
+            viewMediaSource s =
+              mimeType = match mediaSourceMimeType s with
+                Some m -> [Attribute "type" m]
+                None   -> []
+              html_2_3_0.source
+                (Attribute "src" (mediaSourceUrl s) +: mimeType)
+            sources = List.map viewMediaSource mediaSources
+            videoAttrs =
+              [ get "poster" attrs |> Optional.map (Attribute "poster")
+              , get "controls" attrs
+                  |> Optional.map (const (Attribute "controls" "true"))
+              , get "autoplay" attrs
+                  |> Optional.map (const (Attribute "autoplay" "true"))
+              , get "muted" attrs
+                  |> Optional.map (const (Attribute "muted" "muted"))
+              , get "loop" attrs
+                  |> Optional.map (const (Attribute "loop" "true"))
+              ]
+            html_2_3_0.video (somes videoAttrs) sources
+          SpecialForm.FrontMatter _ -> nothing
+          LaTeXInline latex -> latex |> katex |> asInline |> EmbedKatex.toHtml
+          SpecialForm.Svg svg -> svg |> EmbedSvg.svg |> EmbedSvg.toHtml
+      ShareDoc.Join docs ->
+        span
+          [class "doc_join"]
+          (List.map viewAtCurrentSectionLevel (mergeWords " " docs))
+      ShareDoc.UntitledSection docs ->
+        section
+          [] (List.map (viewSectionContent viewAtCurrentSectionLevel) docs)
+      ShareDoc.Column docs ->
+        ul
+          [class "doc_column"]
+          (List.map
+            (c -> li [] [viewAtCurrentSectionLevel c]) (mergeWords " " docs))
+      ShareDoc.Group content ->
+        span [class "doc_group"] [viewAtCurrentSectionLevel content]
+  article [class "definition-doc"] [view_ 1 document]
+
+ShareDoc.toText : Text -> ShareDoc -> Text
+ShareDoc.toText sep doc =
+  use ShareDoc toText
+  use Text ++
+  listToText =
+    List.map (toText sep)
+      >> List.filter (Text.isEmpty >> Boolean.not)
+      >> Text.join sep
+  match doc with
+    Span ds                     -> listToText ds
+    ShareDoc.Group d            -> toText sep d
+    ShareDoc.Join ds            -> listToText ds
+    ShareDoc.Bold d             -> toText sep d
+    ShareDoc.Italic d           -> toText sep d
+    ShareDoc.Strikethrough d    -> toText sep d
+    ShareDoc.Blockquote d       -> toText sep d
+    ShareDoc.Section d ds       -> toText sep d ++ sep ++ listToText ds
+    ShareDoc.UntitledSection ds -> listToText ds
+    ShareDoc.Column ds          -> listToText ds
+    ShareDoc.Word w             -> w
+    _                           -> ""
+
+ShareDoc.toText.doc : Doc
+ShareDoc.toText.doc =
+  {{
+  Merge down ShareDoc to Text by merging Paragraphs and Words. Used for things
+  like extract an src of an image. I.e something that has to be a Text and not
+  a ShareDoc
+  }}
+
+Source.codeToHtml : ViewConfig -> Html -> Html
+Source.codeToHtml viewConfig content =
+  pre
+    []
+    [ html_2_3_0.code
+        [Attribute.class (ViewConfig.toClassName viewConfig)] [content]
+    ]
+
+Source.isBuiltin : Source -> Boolean
+Source.isBuiltin = cases
+  Source.Type TypeSource.Builtin       -> true
+  Source.Term _ (TermSource.Builtin _) -> true
+  _                                    -> false
+
+Source.syntaxToHtml : ViewConfig -> Syntax -> Html
+Source.syntaxToHtml viewConfig = Syntax.toHtml (toSyntaxLinked viewConfig)
+
+Source.toHtml : ViewConfig -> Source -> Html
+Source.toHtml viewConfig = cases
+  Source.Type typeSource -> TypeSource.toHtml viewConfig typeSource
+  Source.Term termName termSource ->
+    TermSource.toHtml viewConfig termName termSource
+
+Source.ViewConfig.toClassName : ViewConfig -> Text
+Source.ViewConfig.toClassName = cases
+  Rich _           -> "rich"
+  Monochrome       -> "monochrome"
+  ViewConfig.Plain -> "plain"
+
+Source.ViewConfig.toSyntaxLinked : ViewConfig -> Linked
+Source.ViewConfig.toSyntaxLinked = cases
+  Rich linked -> linked
+  _           -> NotLinked
+
+Syntax.decode : '{Decoder} Syntax
+Syntax.decode = do
+  segments = array! SyntaxSegment.decode
+  match mayNonempty segments with
+    Some segments_ -> Syntax segments_
+    None           -> Decoder.fail "Empty data set"
+
+Syntax.foldLeft : (b ->{g1} SyntaxSegment ->{g} b) -> b -> Syntax ->{g, g1} b
+Syntax.foldLeft f init syntax =
+  syntax |> Syntax.segments |> List.Nonempty.foldLeft f init
+
+Syntax.fromList : [SyntaxSegment] ->{Abort} Syntax
+Syntax.fromList segments = Syntax (List.nonempty segments)
+
+Syntax.numLines : Syntax -> Nat
+Syntax.numLines = cases
+  Syntax segments ->
+    use Nat +
+    count acc = cases
+      SyntaxSegment _ segment_ ->
+        if Text.contains "\n" segment_ then acc + 1 else acc
+    List.Nonempty.foldLeft count 1 segments
+
+Syntax.segments : Syntax -> List.Nonempty SyntaxSegment
+Syntax.segments = cases Syntax segments -> segments
+
+Syntax.SyntaxSegment.decode : '{Decoder} SyntaxSegment
+Syntax.SyntaxSegment.decode =
+  do
+    use Decoder text
+    use object at
+    hashToReference hash fqn =
+      if isDataConstructorHash hash then
+        SyntaxType.DataConstructorReference hash fqn
+      else
+        if isAbilityConstructorHash hash then
+          SyntaxType.AbilityConstructorReference hash fqn
+        else SyntaxType.TermReference hash fqn
+    hashContents = at "annotation" (at "contents" Hash.decode)
+    textContents = at "annotation" (at "contents" text)
+    fqnSegment = optionalAt "segment" FQN.decode
+    tag =
+      optionalAt! "annotation" (at "tag" text) |> Optional.getOrElse "Blank"
+    syntaxType = match tag with
+      "TermReference" -> hashToReference hashContents() fqnSegment()
+      "TypeReference" -> SyntaxType.TypeReference hashContents() fqnSegment()
+      "Op"            -> decodeOp()
+      "HashQualifier" -> HashQualifier textContents()
+      t               -> SyntaxType.fromText t
+    SyntaxSegment syntaxType (object.at! "segment" text)
+
+Syntax.SyntaxSegment.reference : SyntaxSegment -> Optional Reference
+Syntax.SyntaxSegment.reference = cases
+  SyntaxSegment syntaxType _ ->
+    match syntaxType with
+      SyntaxType.TypeReference h fqn ->
+        match fqn with
+          Some n -> Some (Reference.TypeReference (HashQualified n h))
+          None   -> Some (Reference.TypeReference (HashOnly h))
+      SyntaxType.TermReference h fqn ->
+        match fqn with
+          Some n -> Some (Reference.TermReference (HashQualified n h))
+          None   -> Some (Reference.TermReference (HashOnly h))
+      SyntaxType.AbilityConstructorReference h fqn ->
+        match fqn with
+          Some n ->
+            Some (Reference.AbilityConstructorReference (HashQualified n h))
+          None -> Some (Reference.AbilityConstructorReference (HashOnly h))
+      SyntaxType.DataConstructorReference h fqn ->
+        match fqn with
+          Some n ->
+            Some (Reference.DataConstructorReference (HashQualified n h))
+          None -> Some (Reference.DataConstructorReference (HashOnly h))
+      _ -> None
+
+Syntax.SyntaxSegment.SyntaxType.decodeOp : '{Decoder} SyntaxType
+Syntax.SyntaxSegment.SyntaxType.decodeOp = do
+  use Text ++
+  tag = object.at! "annotation" (object.at "contents" Decoder.text)
+  match tag with
+    "Cons"   -> Op SeqOp.Cons
+    "Snoc"   -> Op Snoc
+    "Concat" -> Op Concat
+    invalid  -> Decoder.fail ("Invalid tag: " ++ invalid)
+
+Syntax.SyntaxSegment.SyntaxType.fromText : Text -> SyntaxType
+Syntax.SyntaxSegment.SyntaxType.fromText = cases
+  "NumericLiteral"      -> NumericLiteral
+  "TextLiteral"         -> TextLiteral
+  "BytesLiteral"        -> BytesLiteral
+  "CharLiteral"         -> CharLiteral
+  "BooleanLiteral"      -> BooleanLiteral
+  "Blank"               -> Blank
+  "Var"                 -> Var
+  "AbilityBraces"       -> AbilityBraces
+  "ControlKeyword"      -> ControlKeyword
+  "TypeOperator"        -> TypeOperator
+  "BindingEquals"       -> BindingEquals
+  "TypeAscriptionColon" -> TypeAscriptionColon
+  "DataTypeKeyword"     -> DataTypeKeyword
+  "DataTypeParams"      -> DataTypeParams
+  "Unit"                -> SyntaxType.Unit
+  "DataTypeModifier"    -> DataTypeModifier
+  "UseKeyword"          -> UseKeyword
+  "UsePrefix"           -> UsePrefix
+  "UseSuffix"           -> UseSuffix
+  "DelayForceChar"      -> DelayForceChar
+  "DelimiterChar"       -> DelimiterChar
+  "Parenthesis"         -> Parenthesis
+  "LinkKeyword"         -> LinkKeyword
+  "DocDelimiter"        -> DocDelimiter
+  "DocKeyword"          -> DocKeyword
+  _                     -> Blank
+
+Syntax.SyntaxSegment.SyntaxType.toClassName : SyntaxType -> Text
+Syntax.SyntaxSegment.SyntaxType.toClassName = cases
+  NumericLiteral                             -> "numeric-literal"
+  TextLiteral                                -> "text-literal"
+  BytesLiteral                               -> "bytes-literal"
+  CharLiteral                                -> "char-literal"
+  BooleanLiteral                             -> "boolean-literal"
+  Blank                                      -> "blank"
+  Var                                        -> "var"
+  SyntaxType.TypeReference _ _               -> "type-reference"
+  SyntaxType.TermReference _ _               -> "term-reference"
+  SyntaxType.DataConstructorReference _ _    -> "data-constructor-reference"
+  SyntaxType.AbilityConstructorReference _ _ -> "ability-constructor-reference"
+  Op seqOp                                   ->
+    match seqOp with
+      SeqOp.Cons -> "op cons"
+      Snoc       -> "op snoc"
+      Concat     -> "op concat"
+  AbilityBraces                              -> "ability-braces"
+  ControlKeyword                             -> "control-keyword"
+  TypeOperator                               -> "type-operator"
+  BindingEquals                              -> "binding-equals"
+  TypeAscriptionColon                        -> "type-ascription-colon"
+  DataTypeKeyword                            -> "data-type-keyword"
+  DataTypeParams                             -> "data-type-params"
+  SyntaxType.Unit                            -> "unit"
+  DataTypeModifier                           -> "data-type-modifier"
+  UseKeyword                                 -> "use-keyword"
+  UsePrefix                                  -> "use-prefix"
+  UseSuffix                                  -> "use-suffix"
+  HashQualifier _                            -> "hash-qualifier"
+  DelayForceChar                             -> "delay-force-char"
+  DelimiterChar                              -> "delimeter-char"
+  Parenthesis                                -> "parenthesis"
+  LinkKeyword                                -> "link-keyword"
+  DocDelimiter                               -> "doc-delimeter"
+  DocKeyword                                 -> "doc-keyword"
+
+Syntax.SyntaxSegment.toHtml : Linked -> SyntaxSegment -> Html
+Syntax.SyntaxSegment.toHtml linked = cases
+  SyntaxSegment sType sText ->
+    use Attribute class
+    use Text contains
+    use html_2_3_0 span text
+    ref =
+      match sType with
+        SyntaxType.TypeReference h fqn ->
+          match fqn with
+            Some n -> Some (Reference.TypeReference (HashQualified n h))
+            None   -> Some (Reference.TypeReference (HashOnly h))
+        SyntaxType.TermReference h fqn ->
+          match fqn with
+            Some n -> Some (Reference.TermReference (HashQualified n h))
+            None   -> Some (Reference.TermReference (HashOnly h))
+        SyntaxType.AbilityConstructorReference h fqn ->
+          match fqn with
+            Some n ->
+              Some (Reference.AbilityConstructorReference (HashQualified n h))
+            None -> Some (Reference.AbilityConstructorReference (HashOnly h))
+        SyntaxType.DataConstructorReference h fqn ->
+          match fqn with
+            Some n ->
+              Some (Reference.DataConstructorReference (HashQualified n h))
+            None -> Some (Reference.DataConstructorReference (HashOnly h))
+        _ -> None
+    isFQN =
+      isFQN_ = contains "." sText
+      match sType with
+        SyntaxType.TypeReference _ _               -> isFQN_
+        SyntaxType.TermReference _ _               -> isFQN_
+        HashQualifier _                            -> isFQN_
+        SyntaxType.DataConstructorReference _ _    -> isFQN_
+        SyntaxType.AbilityConstructorReference _ _ -> isFQN_
+        _                                          -> false
+    className = SyntaxType.toClassName sType
+    content =
+      if contains "->" sText then span [class "arrow"] [text sText]
+      else if isFQN then viewFQN (FQN.fromText sText) else text sText
+    match (linked, ref) with
+      (Linked toHref, Some r) ->
+        html_2_3_0.a
+          [ Attribute.href (toHref r)
+          , class className
+          , Attribute.target "_blank"
+          ]
+          [content]
+      _ -> span [class className] [content]
+
+Syntax.toHtml : Linked -> Syntax -> Html
+Syntax.toHtml linked = cases
+  Syntax segments ->
+    renderedSegments =
+      segments
+        |> List.Nonempty.map (SyntaxSegment.toHtml linked)
+        |> List.Nonempty.toList
+    html_2_3_0.span [Attribute.class "syntax"] renderedSegments
+
+Syntax.tryFromList : [SyntaxSegment] -> Optional Syntax
+Syntax.tryFromList segments = segments |> mayNonempty |> Optional.map Syntax
+
+Syntax.viewFQN : FQN -> Html
+Syntax.viewFQN fqn =
+  use Attribute class
+  use html_2_3_0 span text
+  fqn
+    |> FQN.segments
+    |> List.Nonempty.map (s -> span [class "segment"] [text s])
+    |> List.Nonempty.toList
+    |> intersperse (span [class "sep"] [text "."])
+    |> span [class "fqn"]
+
+Term.decode : Hash -> '{Decoder} Term
+Term.decode hash =
+  do
+    use Decoder text
+    use Syntax decode
+    use object at at!
+    tag = at! "termDefinition" (at "tag" text)
+    signature = TermSignature (at! "signature" decode)
+    category = match at! "defnTermTag" text with
+      "Test" -> TestTerm
+      "Doc"  -> DocTerm
+      _      -> PlainTerm
+    termSource =
+      match tag with
+        "UserObject" ->
+          TermSource.Source
+            signature (at! "termDefinition" (at "contents" decode))
+        "BuiltinObject" -> TermSource.Builtin signature
+        _ -> Decoder.fail "Invalid Term"
+    Term.Term hash category termSource
+
+Term.TermSignature.toHtml : ViewConfig -> TermSignature -> Html
+Term.TermSignature.toHtml viewConfig = cases
+  TermSignature syntax ->
+    codeToHtml viewConfig (syntaxToHtml viewConfig syntax)
+
+Term.TermSignature.toNamedHtml : ViewConfig -> FQN -> TermSignature -> Html
+Term.TermSignature.toNamedHtml viewConfig termName signature =
+  codeToHtml viewConfig (toNamedHtml_ viewConfig termName signature)
+
+Term.TermSignature.toNamedHtml_ : ViewConfig -> FQN -> TermSignature -> Html
+Term.TermSignature.toNamedHtml_ viewConfig termName = cases
+  TermSignature syntax ->
+    html_2_3_0.span
+      []
+      [ html_2_3_0.span
+          [Attribute.class "hash-qualifier"]
+          [html_2_3_0.text (FQN.toText termName)]
+      , html_2_3_0.span
+          [Attribute.class "type-ascription-colon"] [html_2_3_0.text " : "]
+      , syntaxToHtml viewConfig syntax
+      ]
+
+Term.TermSource.numLines : TermSource -> Nat
+Term.TermSource.numLines = cases
+  TermSource.Source _ syntax                   -> Syntax.numLines syntax
+  TermSource.Builtin (TermSignature signature) -> Syntax.numLines signature
+
+Term.TermSource.numSignatureLines : TermSource -> Nat
+Term.TermSource.numSignatureLines = cases
+  TermSource.Source (TermSignature signature) _ -> Syntax.numLines signature
+  TermSource.Builtin (TermSignature signature)  -> Syntax.numLines signature
+
+Term.TermSource.toHtml : ViewConfig -> FQN -> TermSource -> Html
+Term.TermSource.toHtml viewConfig termName source =
+  content = match source with
+    TermSource.Source _ syntax   -> syntaxToHtml viewConfig syntax
+    TermSource.Builtin signature -> toNamedHtml viewConfig termName signature
+  codeToHtml viewConfig content
+
+tests.docToHtml : '{IO, Exception} [Text]
+tests.docToHtml =
+  do
+    toHtml doc = html_2_3_0.toText (ShareDoc.toHtml NotLinked doc)
+    (Http.run do
+      fetchDoc
+        (ProjectRef "unison" "example-blog")
+        (BranchRef "main")
+        (NamespacePath ["posts", "helloWorld"]))
+      |> List.map toHtml
+
+tests.termToHtml : '{IO, Exception} [Text]
+tests.termToHtml =
+  do
+    toHtml = cases
+      Term.Term _ _ (TermSource.Source signature syntax) ->
+        html_2_3_0.toText (Syntax.toHtml NotLinked syntax)
+      _ -> "nope"
+    Http.run do
+      fetchTerm
+        (ProjectRef "unison" "example-blog")
+        (BranchRef "main")
+        (NamespacePath ["lib", "base", "data", "List", "map"])
+        |> List.map toHtml
+
+Type.decode : Hash -> '{Decoder} Type.Type
+Type.decode hash =
+  do
+    use Decoder text
+    use object at at!
+    tag = at! "typeDefinition" (at "tag" text)
+    category = match at! "defnTypeTag" text with
+      "Data"    -> DataType
+      "Ability" -> AbilityType
+      _         -> DataType
+    typeSource =
+      match tag with
+        "UserObject" ->
+          TypeSource.Source
+            (at! "typeDefinition" (at "contents" Syntax.decode))
+        "BuiltinObject" -> TypeSource.Builtin
+        _ -> Decoder.fail "Invalid Type"
+    Type.Type hash category typeSource
+
+Type.TypeSource.numLines : TypeSource -> Nat
+Type.TypeSource.numLines = cases
+  TypeSource.Source syntax -> Syntax.numLines syntax
+  TypeSource.Builtin       -> 1
+
+Type.TypeSource.toHtml : ViewConfig -> TypeSource -> Html
+Type.TypeSource.toHtml viewConfig source =
+  use Attribute class
+  use html_2_3_0 span text
+  content =
+    match source with
+      TypeSource.Source syntax -> syntaxToHtml viewConfig syntax
+      TypeSource.Builtin ->
+        span
+          []
+          [ span [class "data-type-modifier"] [text "builtin "]
+          , span [class "data-type-keyword"] [text "type"]
+          ]
+  codeToHtml viewConfig content
+
+up.html.Attribute.classList : [(Text, Boolean)] -> Attribute
+up.html.Attribute.classList classes =
+  use Text ++
+  f acc = cases
+    (className, include) -> if include then acc ++ " " ++ className else acc
+  Attribute "class" (List.foldLeft f "" classes)
+
+up.http.HttpResponse.Body.toText : Body ->{Exception} Text
+up.http.HttpResponse.Body.toText = Body.toBytes >> fromUtf8
+
+up.http.HttpResponse.bodyText : HttpResponse ->{Exception} Text
+up.http.HttpResponse.bodyText = HttpResponse.body >> Body.toBytes >> fromUtf8
+
+up.HttpResponse.ensureSuccess : HttpResponse ->{Exception} HttpResponse
+up.HttpResponse.ensureSuccess response =
+  expectSuccess response
+  response
+
+up.svg.toHtml : Svg -> Html
+up.svg.toHtml svg =
+  use List map
+  use Svg Svg
+  svgAttrToHtmlAttr = cases SvgAttribute name value -> Attribute name value
+  svgAttrsToHtmlAttrs attrs_ = map svgAttrToHtmlAttr attrs_
+  match svg with
+    Svg tagName attrs (svg_1_0_0.Element.TextElement t) ->
+      Html
+        tagName (svgAttrsToHtmlAttrs attrs) (html_2_3_0.Element.TextElement t)
+    Svg tagName attrs svg_1_0_0.Element.EmptyElement ->
+      Html tagName (svgAttrsToHtmlAttrs attrs) html_2_3_0.Element.EmptyElement
+    Svg tagName attrs (svg_1_0_0.Element.Element children) ->
+      Html
+        tagName
+        (svgAttrsToHtmlAttrs attrs)
+        (html_2_3_0.Element.Element (map up.svg.toHtml children))
+
+UserHandle.fromText : Text ->{Exception} UserHandle
+UserHandle.fromText raw =
+  Optional.toException
+    "Invalid UserHandle" (typeLink UserHandle) (UserHandle.tryFromText raw)
+
+UserHandle.fromText.doc : Doc
+UserHandle.fromText.doc =
+  {{
+  Create a {type UserHandle} from a {type Text}. Supports both an `@` prefixed
+  {type Text} as well as an unprefixed one.
+  }}
+
+UserHandle.isValidHandle : Text -> Boolean
+UserHandle.isValidHandle raw =
+  use Nat >
+  unprefixed = if startsWith "@" raw then raw |> Text.drop 1 else raw
+  if Text.size unprefixed > 39 then false
+  else
+    pattern =
+      Pattern.join
+        [ notChars "-"
+        , sepMany (literal "-") (some (patterns.char Class.alphanumeric))
+        , eof
+        ]
+    isMatch pattern unprefixed
+
+UserHandle.isValidHandle.doc : Doc
+UserHandle.isValidHandle.doc =
+  {{
+  Validates both an `@` prefixed {type Text} and unprefixed.
+
+  Modelled after the GitHub user handle requirements, since we're importing
+  their handles.
+
+  Requirements (via <https://github.com/shinnn/github-username-regex>):
+
+  * May only contain alphanumeric characters or hyphens.
+  * Can't have multiple consecutive hyphens.
+  * Can't begin or end with a hyphen.
+  * Maximum is 39 characters.
+  }}
+
+test> UserHandle.isValidHandle.tests.consecutiveDashesAreInvalid =
+  check
+    let
+      expected = false
+      result = isValidHandle "@unison---"
+      expected === result
+
+test> UserHandle.isValidHandle.tests.consecutiveDashesAreInvalid2 =
+  check
+    let
+      expected = false
+      result = isValidHandle "uni--son"
+      expected === result
+
+test> UserHandle.isValidHandle.tests.dashPrefixIsInvalid =
+  check
+    let
+      expected = false
+      result = isValidHandle "-unison"
+      expected === result
+
+test> UserHandle.isValidHandle.tests.nonAlphanumIsInvalid =
+  check
+    let
+      expected = false
+      result = isValidHandle "uni%son#"
+      expected === result
+
+test> UserHandle.isValidHandle.tests.numbersAreValid =
+  check (isValidHandle "unison1234")
+
+test> UserHandle.isValidHandle.tests.prefixedIsValid =
+  check (isValidHandle "@unison")
+
+test> UserHandle.isValidHandle.tests.singleDashesAreValid =
+  check (isValidHandle "uni-son")
+
+UserHandle.toText : UserHandle -> Text
+UserHandle.toText = cases UserHandle raw -> "@" Text.++ raw
+
+UserHandle.toText.doc : Doc
+UserHandle.toText.doc =
+  {{
+  Return a {type UserHandle} as an `@` prefixed {type Text}:
+
+  ```
+  UserHandle.toText (UserHandle "unison")
+  ```
+  }}
+
+UserHandle.toUnprefixedText : UserHandle -> Text
+UserHandle.toUnprefixedText = cases UserHandle h -> h
+
+UserHandle.toUnprefixedText.doc : Doc
+UserHandle.toUnprefixedText.doc =
+  {{
+  Return a {type UserHandle} as an unprefixed {type Text}:
+
+  ```
+  UserHandle.toText (UserHandle "unison")
+  ```
+  }}
+
+UserHandle.tryFromText : Text -> Optional UserHandle
+UserHandle.tryFromText raw =
+  unprefixed = if startsWith "@" raw then Text.drop 1 raw else raw
+  validate h = if isValidHandle h then Some h else None
+  unprefixed |> validate |> Optional.map UserHandle

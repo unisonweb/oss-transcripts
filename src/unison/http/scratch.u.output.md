@@ -951,3 +951,9 @@ This project contains functions for working with HTTP requests and responses. It
                                         -> '{IO, Exception} ()
                                         -> WebSocket
 ```
+
+## Code examples
+
+``` ucm
+@unison/http/main> edit 1-484
+```

@@ -1,0 +1,5891 @@
+
+type Cookie
+  = { name : Text,
+      value : Text,
+      expires : Optional OffsetDateTime,
+      maxAge : Optional time.Duration,
+      domain : Optional Text,
+      path : Optional Path,
+      secure : Boolean,
+      httpOnly : Boolean,
+      sameSite : Optional SameSite }
+
+type Cookie.SameSite
+  = Strict
+  | Lax
+  | NoneSameSite
+
+type failure.BadGateway
+  =
+
+type failure.BadRequest
+  =
+
+type failure.Conflict
+  =
+
+type failure.Forbidden
+  =
+
+type failure.FormDataParseError
+  =
+
+type failure.GatewayTimeout
+  =
+
+type failure.Gone
+  =
+
+type failure.HttpVersionNotSupported
+  =
+
+type failure.InsufficientStorage
+  =
+
+type failure.InternalServerError
+  =
+
+type failure.MethodDidntMatch
+  =
+
+type failure.MethodNotAllowed
+  =
+
+type failure.NetworkAuthenticationRequired
+  =
+
+type failure.NoRouteMatched
+  =
+
+type failure.NotAcceptable
+  =
+
+type failure.NotFound
+  =
+
+type failure.NotImplemented
+  =
+
+type failure.PathDidntMatch
+  =
+
+type failure.PayloadTooLarge
+  =
+
+type failure.RequestTimeout
+  =
+
+type failure.ServiceUnavailable
+  =
+
+type failure.TooManyRequests
+  =
+
+type failure.Unauthorized
+  =
+
+type failure.UnsupportedMediaType
+  =
+
+type failure.UriTooLong
+  =
+
+type HttpContext
+  = { requestMethod : Method,
+      requestVersion : unison_http_3_3_2.Version,
+      requestUri : URI,
+      requestQuery : Optional (Optional (Map Text [Text])),
+      requestHeaders : Map Text [Text],
+      responseStatus : HttpResponse.Status,
+      responseVersion : unison_http_3_3_2.Version,
+      responseHeaders : Map Text [Text] }
+
+ability OpenWebSocket where
+  openWebSocket : {OpenWebSocket} unison_cloud_18_0_6.websockets.WebSocket
+
+ability Route where
+  request.decodeBody : '{Decode, DecodeBits} a ->{Route} a
+  getHttpContext : {Route} HttpContext
+  skip : Failure ->{Route} x
+  setHttpContext : HttpContext ->{Route} ()
+  response.appendBody : Bytes ->{Route} ()
+
+type up.base.time.DayOfWeek
+  = Sat
+  | Sun
+  | Mon
+  | Tue
+  | Wed
+  | Thu
+  | Fri
+
+Cookie.cookie : Text -> Text -> Cookie
+Cookie.cookie name value =
+  Cookie name value None None None None false false None
+
+Cookie.cookie.doc : Doc
+Cookie.cookie.doc =
+  {{
+  Creates a new {type Cookie} with the given name and value.
+
+  # Examples
+
+    ```
+    cookie "foo" "bar"
+    ```
+  }}
+
+Cookie.domain : Cookie -> Optional Text
+Cookie.domain = cases Cookie _ _ _ _ domain _ _ _ _ -> domain
+
+Cookie.domain.modify :
+  (Optional Text ->{g} Optional Text) -> Cookie ->{g} Cookie
+Cookie.domain.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge (f domain) path secure httpOnly sameSite
+
+Cookie.domain.set : Optional Text -> Cookie -> Cookie
+Cookie.domain.set domain1 = cases
+  Cookie name value expires maxAge _ path secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain1 path secure httpOnly sameSite
+
+Cookie.expires : Cookie -> Optional OffsetDateTime
+Cookie.expires = cases Cookie _ _ expires _ _ _ _ _ _ -> expires
+
+Cookie.expires.modify :
+  (Optional OffsetDateTime ->{g} Optional OffsetDateTime)
+  -> Cookie
+  ->{g} Cookie
+Cookie.expires.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value (f expires) maxAge domain path secure httpOnly sameSite
+
+Cookie.expires.set : Optional OffsetDateTime -> Cookie -> Cookie
+Cookie.expires.set expires1 = cases
+  Cookie name value _ maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires1 maxAge domain path secure httpOnly sameSite
+
+Cookie.httpOnly : Cookie -> Boolean
+Cookie.httpOnly = cases Cookie _ _ _ _ _ _ _ httpOnly _ -> httpOnly
+
+Cookie.httpOnly.modify : (Boolean ->{g} Boolean) -> Cookie ->{g} Cookie
+Cookie.httpOnly.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain path secure (f httpOnly) sameSite
+
+Cookie.httpOnly.set : Boolean -> Cookie -> Cookie
+Cookie.httpOnly.set httpOnly1 = cases
+  Cookie name value expires maxAge domain path secure _ sameSite ->
+    Cookie name value expires maxAge domain path secure httpOnly1 sameSite
+
+Cookie.maxAge : Cookie -> Optional time.Duration
+Cookie.maxAge = cases Cookie _ _ _ maxAge _ _ _ _ _ -> maxAge
+
+Cookie.maxAge.modify :
+  (Optional time.Duration ->{g} Optional time.Duration) -> Cookie ->{g} Cookie
+Cookie.maxAge.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires (f maxAge) domain path secure httpOnly sameSite
+
+Cookie.maxAge.set : Optional time.Duration -> Cookie -> Cookie
+Cookie.maxAge.set maxAge1 = cases
+  Cookie name value expires _ domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge1 domain path secure httpOnly sameSite
+
+Cookie.name : Cookie -> Text
+Cookie.name = cases Cookie name _ _ _ _ _ _ _ _ -> name
+
+Cookie.name.modify : (Text ->{g} Text) -> Cookie ->{g} Cookie
+Cookie.name.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie (f name) value expires maxAge domain path secure httpOnly sameSite
+
+Cookie.name.set : Text -> Cookie -> Cookie
+Cookie.name.set name1 = cases
+  Cookie _ value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name1 value expires maxAge domain path secure httpOnly sameSite
+
+Cookie.path : Cookie -> Optional Path
+Cookie.path = cases Cookie _ _ _ _ _ path _ _ _ -> path
+
+Cookie.path.modify : (Optional Path ->{g} Optional Path) -> Cookie ->{g} Cookie
+Cookie.path.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain (f path) secure httpOnly sameSite
+
+Cookie.path.set : Optional Path -> Cookie -> Cookie
+Cookie.path.set path1 = cases
+  Cookie name value expires maxAge domain _ secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain path1 secure httpOnly sameSite
+
+Cookie.sameSite : Cookie -> Optional SameSite
+Cookie.sameSite = cases Cookie _ _ _ _ _ _ _ _ sameSite -> sameSite
+
+Cookie.sameSite.modify :
+  (Optional SameSite ->{g} Optional SameSite) -> Cookie ->{g} Cookie
+Cookie.sameSite.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain path secure httpOnly (f sameSite)
+
+Cookie.sameSite.set : Optional SameSite -> Cookie -> Cookie
+Cookie.sameSite.set sameSite1 = cases
+  Cookie name value expires maxAge domain path secure httpOnly _ ->
+    Cookie name value expires maxAge domain path secure httpOnly sameSite1
+
+Cookie.secure : Cookie -> Boolean
+Cookie.secure = cases Cookie _ _ _ _ _ _ secure _ _ -> secure
+
+Cookie.secure.modify : (Boolean ->{g} Boolean) -> Cookie ->{g} Cookie
+Cookie.secure.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value expires maxAge domain path (f secure) httpOnly sameSite
+
+Cookie.secure.set : Boolean -> Cookie -> Cookie
+Cookie.secure.set secure1 = cases
+  Cookie name value expires maxAge domain path _ httpOnly sameSite ->
+    Cookie name value expires maxAge domain path secure1 httpOnly sameSite
+
+Cookie.toText : Cookie -> Text
+Cookie.toText cookie =
+  use Optional map
+  use Text ++
+  nameValue = Some (Cookie.name cookie ++ "=" ++ Cookie.value cookie)
+  expires =
+    Cookie.expires cookie |> map (exp -> "expires=" ++ fromOffsetDateTime exp)
+  maxAge =
+    Cookie.maxAge cookie
+      |> map (age -> "max-age=" ++ Int.toText (countSeconds age))
+  domain = Cookie.domain cookie |> map (domain -> "domain=" ++ domain)
+  path = Cookie.path cookie |> map (path -> "path=" ++ Path.toText path)
+  secure = if Cookie.secure cookie then Some "secure" else None
+  httpOnly = if Cookie.httpOnly cookie then Some "HttpOnly" else None
+  sameSite = match Cookie.sameSite cookie with
+    Some NoneSameSite -> Some "SameSite=none"
+    Some Lax          -> Some "SameSite=lax"
+    Some Strict       -> Some "SameSite=strict"
+    None              -> None
+  Text.join
+    "; "
+    (List.somes
+      [nameValue, expires, maxAge, domain, path, secure, httpOnly, sameSite])
+
+Cookie.toText.doc : Doc
+Cookie.toText.doc =
+  {{
+  Converts a {type Cookie} to a {type Text} representation to be used in a
+  `Set-Cookie` HTTP header.
+
+  # Examples
+
+    ```
+    Cookie.toText (cookie "foo" "bar" |> maxAge.set (Some (days +400)))
+    ```
+  }}
+
+Cookie.value : Cookie -> Text
+Cookie.value = cases Cookie _ value _ _ _ _ _ _ _ -> value
+
+Cookie.value.modify : (Text ->{g} Text) -> Cookie ->{g} Cookie
+Cookie.value.modify f = cases
+  Cookie name value expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name (f value) expires maxAge domain path secure httpOnly sameSite
+
+Cookie.value.set : Text -> Cookie -> Cookie
+Cookie.value.set value1 = cases
+  Cookie name _ expires maxAge domain path secure httpOnly sameSite ->
+    Cookie name value1 expires maxAge domain path secure httpOnly sameSite
+
+examples.hello : HttpRequest ->{Exception} HttpResponse
+examples.hello =
+  use Parser /
+  use Route <|>
+  use Text ++
+  hi = do
+    name = route GET (s "hello" / Parser.text)
+    ok.text ("👋 hello " ++ name)
+  bye = do
+    name = route GET (s "goodbye" / Parser.text)
+    ok.text ("😢 goodbye " ++ name)
+  jsonEx = do
+    name = route GET (s "someJson" / Parser.text)
+    ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+  Route.run (hi <|> bye <|> jsonEx)
+
+examples.helloRoute : '{Route} ()
+examples.helloRoute =
+  use Parser /
+  use Route <|>
+  use Text ++
+  hi = do
+    name = route GET (s "hello" / Parser.text)
+    ok.text ("👋 hello " ++ name)
+  bye = do
+    name = route GET (s "goodbye" / Parser.text)
+    ok.text ("😢 goodbye " ++ name)
+  jsonEx = do
+    name = route GET (s "someJson" / Parser.text)
+    ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+  def = do respond.notFound (Text.toUtf8 "Nothing here")
+  hi <|> bye <|> jsonEx <|> def
+
+examples.websockets.cloudChatServer : '{IO, Exception} URI
+examples.websockets.cloudChatServer =
+  Cloud.main do
+    use Parser &
+    use Text ++
+    use WebSockets send
+    env = Environment.create "chatserverdemo"
+    db = Database.create "chatserverdemo"
+    Database.assign db env
+    hash =
+      Route.deployWebSocket env do
+        match route GET (s "chat" & (do ParseQuery.text "name")) with
+          Some name ->
+            wsTable = BTree.named db "websockets" Universal.ordering
+            ws = openWebSocket
+            sendSys msg = send ws (TextMessage ("*" ++ msg ++ "*"))
+            sendAll sender = cases
+              TextMessage msg ->
+                Stream.foreach
+                  (flip send (TextMessage (sender ++ ": " ++ msg)) << at2)
+                  (BTree.toStream wsTable)
+              BinaryMessage msg ->
+                sendAll sender (TextMessage (toBase32Hex.text msg))
+            let
+              (unison_cloud_18_0_6.websockets.WebSocket.WebSocket loc id) = ws
+              addFinalizer (_ -> BTree.delete wsTable id)
+              BTree.write wsTable id ws
+              send ws (TextMessage ("*Welcome to the chat, " ++ name ++ "*"))
+              sendSys (name ++ " has joined the chat")
+              forever do
+                message = WebSockets.receive ws
+                sendAll name message
+          None -> badRequest.text "You must provide a name query parameter"
+    ServiceName.assign (ServiceName.create "chatserverdemo") hash
+
+examples.websockets.cloudChatServer.doc : Doc
+examples.websockets.cloudChatServer.doc =
+  {{
+  A simple chat server that uses websockets to allow clients to send messages
+  to each other. This example runs on Unison Cloud.
+
+  The server listens for connections on the `/chat` route, which requires a
+  `name` query parameter.
+
+  When a client connects, the server sends a welcome message to the client and
+  broadcasts a message to all other clients that the new client has joined.
+
+  The server then listens for messages from the client and broadcasts them to
+  all other clients.
+
+  The server also sends a message to all clients when a client disconnects.
+
+  To test the server, you can use a websocket client like
+  [wscat](https://github.com/websockets/wscat) or write a client using
+  {{ shareSlug "@unison/http" }}.
+  }}
+
+examples.websockets.cloudEchoServer : '{IO, Exception} URI
+examples.websockets.cloudEchoServer = Cloud.main do
+  env = Environment.create "echoserverdemo"
+  hash = Route.deployWebSocket env do
+    Route.noCapture GET (s "echo")
+    ws = openWebSocket
+    forever do
+      msg = WebSockets.receive ws
+      WebSockets.send ws msg
+  ServiceName.assign (ServiceName.create "wsecho") hash
+
+examples.websockets.cloudEchoServer.doc : Doc
+examples.websockets.cloudEchoServer.doc =
+  {{
+  This example shows how to deploy a simple echo server that uses WebSockets.
+
+  The server listens for messages from a WebSocket client and echoes them back.
+  }}
+
+examples.websockets.echoServer : '{IO, Exception} ()
+examples.websockets.echoServer =
+  do
+    server : '{IO, Route, Exception, OpenWebSocket, WebSockets} ()
+    server =
+      use Route noCapture
+      wsRoute = do
+        noCapture GET (s "echo")
+        ws = openWebSocket
+        forever do
+          msg = WebSockets.receive ws
+          WebSockets.send ws msg
+      otherRoute = do
+        noCapture GET (s "test")
+        ok.text "Hello, world!"
+      Route.or wsRoute otherRoute
+    shutdown =
+      serveWebSocket
+        server (server.Config.Config None (Port "9191") maxNat None)
+    printLine "Echo server running on port 9191. Press Enter to shut down."
+    _ = readLine()
+    shutdown()
+
+failure.BadGateway.doc : Doc
+failure.BadGateway.doc =
+  {{
+  A {type Failure} marker type indicating that the server received an invalid
+  response from an upstream server.
+  }}
+
+failure.BadRequest.doc : Doc
+failure.BadRequest.doc =
+  {{
+  A {type Failure} marker type indicating that the request was malformed or
+  invalid.
+  }}
+
+failure.catchHttpErrors :
+  '{g, Exception} a ->{g, Exception} Either HttpResponse a
+failure.catchHttpErrors a =
+  match catchMany
+    [ typeLink DecodeError
+    , typeLink BadRequest
+    , typeLink Unauthorized
+    , typeLink Forbidden
+    , typeLink NotFound
+    , typeLink MethodNotAllowed
+    , typeLink NotAcceptable
+    , typeLink RequestTimeout
+    , typeLink Conflict
+    , typeLink Gone
+    , typeLink PayloadTooLarge
+    , typeLink UriTooLong
+    , typeLink UnsupportedMediaType
+    , typeLink TooManyRequests
+    , typeLink InternalServerError
+    , typeLink NotImplemented
+    , typeLink BadGateway
+    , typeLink ServiceUnavailable
+    , typeLink GatewayTimeout
+    , typeLink HttpVersionNotSupported
+    , typeLink InsufficientStorage
+    , typeLink NetworkAuthenticationRequired
+    ]
+    a with
+    Left (Failure t msg _) ->
+      status = pickStatus t
+      Left
+        (HttpResponse
+          status Version.http11 Headers.empty (Body (Text.toUtf8 msg)))
+    Right x -> Right x
+
+failure.catchHttpErrors.doc : Doc
+failure.catchHttpErrors.doc =
+  {{
+  Catch any of the standard HTTP errors that can be raised by a route and
+  convert them into a `HttpResponse` that can be returned to the client.
+  }}
+
+failure.Conflict.doc : Doc
+failure.Conflict.doc =
+  {{
+  A {type Failure} marker type indicating that the request conflicts with the
+  current state of the server.
+  }}
+
+failure.Forbidden.doc : Doc
+failure.Forbidden.doc =
+  {{ A {type Failure} marker type indicating that the request is forbidden. }}
+
+failure.FormDataParseError.doc : Doc
+failure.FormDataParseError.doc =
+  {{
+  An error that occurs when attempting to parse form data from an HTTP request
+  body. This error is raised by {getFormData} when the body of the request is
+  not a valid query string.
+  }}
+
+failure.GatewayTimeout.doc : Doc
+failure.GatewayTimeout.doc =
+  {{
+  A {type Failure} marker type indicating that the server timed out while
+  waiting for a response from an upstream server.
+  }}
+
+failure.Gone.doc : Doc
+failure.Gone.doc =
+  {{
+  A {type Failure} marker type indicating that the requested resource is no
+  longer available.
+  }}
+
+failure.HttpVersionNotSupported.doc : Doc
+failure.HttpVersionNotSupported.doc =
+  {{
+  A {type Failure} marker type indicating that the server does not support the
+  HTTP version used in the request.
+  }}
+
+failure.InsufficientStorage.doc : Doc
+failure.InsufficientStorage.doc =
+  {{
+  A {type Failure} marker type indicating that the server has insufficient
+  storage to process the request.
+  }}
+
+failure.InternalServerError.doc : Doc
+failure.InternalServerError.doc =
+  {{
+  A {type Failure} marker type indicating that the server encountered an
+  internal error.
+  }}
+
+failure.methodDidntMatch : m1 -> m2 -> Failure
+failure.methodDidntMatch m1 m2 =
+  Failure (typeLink MethodDidntMatch) "method did not match" (Any (m1, m2))
+
+failure.methodDidntMatch.doc : Doc
+failure.methodDidntMatch.doc =
+  {{
+  Creates a {type Failure} indicating that the method specified by the route
+  didn't match the method in the HTTP request. The first argument is the
+  expected method, and the second is the method that was actually requested.
+  }}
+
+failure.MethodDidntMatch.doc : Doc
+failure.MethodDidntMatch.doc =
+  {{
+  A {type Failure} marker type indicating that the HTTP method specified by the
+  route didn't match the method in the HTTP request.
+  }}
+
+failure.MethodNotAllowed.doc : Doc
+failure.MethodNotAllowed.doc =
+  {{
+  A {type Failure} marker type indicating that the request method is not
+  allowed.
+  }}
+
+failure.NetworkAuthenticationRequired.doc : Doc
+failure.NetworkAuthenticationRequired.doc =
+  {{
+  A {type Failure} marker type indicating that the client needs to authenticate
+  to access the network.
+  }}
+
+failure.noRouteMatched : '{Route} a
+failure.noRouteMatched =
+  do
+    Route.skip
+      (Failure
+        (typeLink NoRouteMatched)
+        "No route matched the request."
+        (Any (request.method(), URI.toText request.uri())))
+
+failure.NoRouteMatched.doc : Doc
+failure.NoRouteMatched.doc =
+  {{
+  A {type Failure} marker type indicating that no route matched the request.
+  }}
+
+failure.noRouteMatched.doc : Doc
+failure.noRouteMatched.doc =
+  {{
+  A {type Route} that calls {Route.skip} with a {type NoRouteMatched} failure
+  containing the method and URI of the request.
+  }}
+
+failure.NotAcceptable.doc : Doc
+failure.NotAcceptable.doc =
+  {{
+  A {type Failure} marker type indicating that the server cannot produce a
+  response that is acceptable to the client.
+  }}
+
+failure.NotFound.doc : Doc
+failure.NotFound.doc =
+  {{
+  A {type Failure} marker type indicating that the requested resource was not
+  found.
+  }}
+
+failure.NotImplemented.doc : Doc
+failure.NotImplemented.doc =
+  {{
+  A {type Failure} marker type indicating that the server does not support the
+  functionality required to fulfill the request.
+  }}
+
+failure.pathDidntMatch : Failure
+failure.pathDidntMatch =
+  Failure (typeLink PathDidntMatch) "path parser did not match" (Any ())
+
+failure.PathDidntMatch.doc : Doc
+failure.PathDidntMatch.doc =
+  {{
+  A {type Failure} marker type indicating that the path specified by the route
+  didn't match the path in the HTTP request.
+  }}
+
+failure.pathDidntMatch.doc : Doc
+failure.pathDidntMatch.doc =
+  {{
+  Creates a {type Failure} indicating that the path specified by the route
+  didn't match the path in the HTTP request.
+  }}
+
+failure.PayloadTooLarge.doc : Doc
+failure.PayloadTooLarge.doc =
+  {{
+  A {type Failure} marker type indicating that the request payload is too
+  large.
+  }}
+
+failure.pickStatus : Type -> HttpResponse.Status
+failure.pickStatus = cases
+  t
+    | t === typeLink DecodeError                    -> Status 400 "Bad Request"
+    | t === typeLink BadRequest                     -> Status 400 "Bad Request"
+    | t === typeLink Unauthorized                   ->
+      Status 401 "Unauthorized"
+    | t === typeLink Forbidden                      -> Status 403 "Forbidden"
+    | t === typeLink NotFound                       -> Status 404 "Not Found"
+    | t === typeLink MethodNotAllowed               ->
+      Status 405 "Method Not Allowed"
+    | t === typeLink NotAcceptable                  ->
+      Status 406 "Not Acceptable"
+    | t === typeLink RequestTimeout                 ->
+      Status 408 "Request Timeout"
+    | t === typeLink Conflict                       -> Status 409 "Conflict"
+    | t === typeLink Gone                           -> Status 410 "Gone"
+    | t === typeLink PayloadTooLarge                ->
+      Status 413 "Payload Too Large"
+    | t === typeLink UriTooLong                     ->
+      Status 414 "URI Too Long"
+    | t === typeLink UnsupportedMediaType           ->
+      Status 415 "Unsupported Media Type"
+    | t === typeLink TooManyRequests                ->
+      Status 429 "Too Many Requests"
+    | t === typeLink InternalServerError            ->
+      Status 500 "Internal Server Error"
+    | t === typeLink NotImplemented                 ->
+      Status 501 "Not Implemented"
+    | t === typeLink BadGateway                     -> Status 502 "Bad Gateway"
+    | t === typeLink ServiceUnavailable             ->
+      Status 503 "Service Unavailable"
+    | t === typeLink GatewayTimeout                 ->
+      Status 504 "Gateway Timeout"
+    | t === typeLink HttpVersionNotSupported        ->
+      Status 505 "HTTP Version Not Supported"
+    | t === typeLink InsufficientStorage            ->
+      Status 507 "Insufficient Storage"
+    | t === typeLink NetworkAuthenticationRequired  ->
+      Status 511 "Network Authentication Required"
+    | otherwise                                     ->
+      Status 500 "Internal Server Error"
+
+failure.pickStatus.doc : Doc
+failure.pickStatus.doc =
+  {{
+  Generates a {type HttpResponse.Status} for a given marker type. This is used
+  to determine the status code of the response when a route raises a
+  {type Failure}.
+
+  The supported marker types are:
+
+  {{
+  docTable
+    [ [{{ HTTP Status }}, {{ Marker type }}, {{ raise with }}]
+    , [{{ 400 Bad Request }}, {{ {type BadRequest} }}, {{ {raiseBadRequest} }}]
+    , [ {{
+        401 Unauthorized
+        }}
+      , {{
+        {type Unauthorized}
+        }}
+      , {{
+        {raiseUnauthorized}
+        }}
+      ]
+    , [{{ 403 Forbidden }}, {{ {type Forbidden} }}, {{ {raiseForbidden} }}]
+    , [{{ 404 Not Found }}, {{ {type NotFound} }}, {{ {raiseNotFound} }}]
+    , [ {{
+        405 Method Not Allowed
+        }}
+      , {{
+        {type MethodNotAllowed}
+        }}
+      , {{
+        {raiseMethodNotAllowed}
+        }}
+      ]
+    , [ {{
+        406 Not Acceptable
+        }}
+      , {{
+        {type NotAcceptable}
+        }}
+      , {{
+        {raiseNotAcceptable}
+        }}
+      ]
+    , [ {{
+        408 Request Timeout
+        }}
+      , {{
+        {type RequestTimeout}
+        }}
+      , {{
+        {raiseRequestTimeout}
+        }}
+      ]
+    , [{{ 409 Conflict }}, {{ {type Conflict} }}, {{ {raiseConflict} }}]
+    , [{{ 410 Gone }}, {{ {type Gone} }}, {{ {raiseGone} }}]
+    , [ {{
+        413 Payload Too Large
+        }}
+      , {{
+        {type PayloadTooLarge}
+        }}
+      , {{
+        {raisePayloadTooLarge}
+        }}
+      ]
+    , [ {{
+        414 URI Too Long
+        }}
+      , {{
+        {type UriTooLong}
+        }}
+      , {{
+        {raiseUriTooLong}
+        }}
+      ]
+    , [ {{
+        415 Unsupported Media Type
+        }}
+      , {{
+        {type UnsupportedMediaType}
+        }}
+      , {{
+        {raiseUnsupportedMediaType}
+        }}
+      ]
+    , [ {{
+        429 Too Many Requests
+        }}
+      , {{
+        {type TooManyRequests}
+        }}
+      , {{
+        {raiseTooManyRequests}
+        }}
+      ]
+    , [ {{
+        500 Internal Server Error
+        }}
+      , {{
+        {type InternalServerError}
+        }}
+      , {{
+        {raiseInternalServerError}
+        }}
+      ]
+    , [ {{
+        501 Not Implemented
+        }}
+      , {{
+        {type NotImplemented}
+        }}
+      , {{
+        {raiseNotImplemented}
+        }}
+      ]
+    , [{{ 502 Bad Gateway }}, {{ {type BadGateway} }}, {{ {raiseBadGateway} }}]
+    , [ {{
+        503 Service Unavailable
+        }}
+      , {{
+        {type ServiceUnavailable}
+        }}
+      , {{
+        {raiseServiceUnavailable}
+        }}
+      ]
+    , [ {{
+        504 Gateway Timeout
+        }}
+      , {{
+        {type GatewayTimeout}
+        }}
+      , {{
+        {raiseGatewayTimeout}
+        }}
+      ]
+    , [ {{
+        505 HTTP Version Not Supported
+        }}
+      , {{
+        {type HttpVersionNotSupported}
+        }}
+      , {{
+        {raiseHttpVersionNotSupported}
+        }}
+      ]
+    , [ {{
+        507 Insufficient Storage
+        }}
+      , {{
+        {type InsufficientStorage}
+        }}
+      , {{
+        {raiseInsufficientStorage}
+        }}
+      ]
+    , [ {{
+        511 Network Authentication Required
+        }}
+      , {{
+        {type NetworkAuthenticationRequired}
+        }}
+      , {{
+        {raiseNetworkAuthenticationRequired}
+        }}
+      ]
+    ] }}
+  }}
+
+failure.raiseBadGateway : Text -> a ->{Exception} b
+failure.raiseBadGateway msg data =
+  Exception.raise (Failure (typeLink BadGateway) msg (Any data))
+
+failure.raiseBadGateway.doc : Doc
+failure.raiseBadGateway.doc =
+  {{
+  Raises an {type Exception} with a {type BadGateway} marker type. The
+  {Route.run} function will catch this exception and produce a 502 Bad Gateway
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the server receives an invalid response from an
+  upstream server. For example, the server tries to fetch data from another
+  server and receives an error response.
+  }}
+
+failure.raiseBadRequest : Text -> a ->{Exception} b
+failure.raiseBadRequest msg data =
+  Exception.raise (Failure (typeLink BadRequest) msg (Any data))
+
+failure.raiseBadRequest.doc : Doc
+failure.raiseBadRequest.doc =
+  {{
+  Raises an {type Exception} with a {type BadRequest} marker type. The
+  {Route.run} function will catch this exception and produce a 400 Bad Request
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the request body is malformed or the request
+  parameters are invalid, so the server cannot process the request.
+  }}
+
+failure.raiseConflict : Text -> a ->{Exception} b
+failure.raiseConflict msg data =
+  Exception.raise (Failure (typeLink Conflict) msg (Any data))
+
+failure.raiseConflict.doc : Doc
+failure.raiseConflict.doc =
+  {{
+  Raises an {type Exception} with a {type Conflict} marker type. The
+  {Route.run} function will catch this exception and produce a 409 Conflict
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the request cannot be completed because it
+  conflicts with the current state of the server. For example, trying to create
+  a resource that already exists.
+  }}
+
+failure.raiseForbidden : Text -> a ->{Exception} b
+failure.raiseForbidden msg data =
+  Exception.raise (Failure (typeLink Forbidden) msg (Any data))
+
+failure.raiseForbidden.doc : Doc
+failure.raiseForbidden.doc =
+  {{
+  Raises an {type Exception} with a {type Forbidden} marker type. The
+  {Route.run} function will catch this exception and produce a 403 Forbidden
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the client is not allowed to access the requested
+  resource.
+  }}
+
+failure.raiseGatewayTimeout : Text -> a ->{Exception} b
+failure.raiseGatewayTimeout msg data =
+  Exception.raise (Failure (typeLink GatewayTimeout) msg (Any data))
+
+failure.raiseGatewayTimeout.doc : Doc
+failure.raiseGatewayTimeout.doc =
+  {{
+  Raises an {type Exception} with a {type GatewayTimeout} marker type. The
+  {Route.run} function will catch this exception and produce a 504 Gateway
+  Timeout response. The message will be included in the response, but the data
+  is just for debugging purposes.
+
+  This is typically used when the server times out while waiting for a response
+  from an upstream server. For example, the server tries to fetch data from
+  another server and the other server takes too long to respond.
+  }}
+
+failure.raiseGone : Text -> a ->{Exception} b
+failure.raiseGone msg data =
+  Exception.raise (Failure (typeLink Gone) msg (Any data))
+
+failure.raiseGone.doc : Doc
+failure.raiseGone.doc =
+  {{
+  Raises an {type Exception} with a {type Gone} marker type. The {Route.run}
+  function will catch this exception and produce a 410 Gone response. The
+  message will be included in the response, but the data is just for debugging
+  purposes.
+
+  This is typically used when the requested resource is no longer available.
+  }}
+
+failure.raiseHttpVersionNotSupported : Text -> a ->{Exception} b
+failure.raiseHttpVersionNotSupported msg data =
+  Exception.raise (Failure (typeLink HttpVersionNotSupported) msg (Any data))
+
+failure.raiseHttpVersionNotSupported.doc : Doc
+failure.raiseHttpVersionNotSupported.doc =
+  {{
+  Raises an {type Exception} with a {type HttpVersionNotSupported} marker type.
+  The {Route.run} function will catch this exception and produce a 505 HTTP
+  Version Not Supported response. The message will be included in the response,
+  but the data is just for debugging purposes.
+
+  This is typically used when the server does not support the HTTP version used
+  in the request. For example, the client sends an HTTP/2 request but the
+  server only supports HTTP/1.1.
+  }}
+
+failure.raiseInsufficientStorage : Text -> a ->{Exception} b
+failure.raiseInsufficientStorage msg data =
+  Exception.raise (Failure (typeLink InsufficientStorage) msg (Any data))
+
+failure.raiseInsufficientStorage.doc : Doc
+failure.raiseInsufficientStorage.doc =
+  {{
+  Raises an {type Exception} with an {type InsufficientStorage} marker type.
+  The {Route.run} function will catch this exception and produce a 507
+  Insufficient Storage response. The message will be included in the response,
+  but the data is just for debugging purposes.
+
+  This is typically used when the server has insufficient storage to process
+  the request. For example, the server tries to save a file but the disk is
+  full.
+  }}
+
+failure.raiseInternalServerError : Text -> a ->{Exception} b
+failure.raiseInternalServerError msg data =
+  Exception.raise (Failure (typeLink InternalServerError) msg (Any data))
+
+failure.raiseInternalServerError.doc : Doc
+failure.raiseInternalServerError.doc =
+  {{
+  Raises an {type Exception} with an {type InternalServerError} marker type.
+  The {Route.run} function will catch this exception and produce a 500 Internal
+  Server Error response. The message will be included in the response, but the
+  data is just for debugging purposes.
+
+  This is typically used when the server encounters an unexpected error while
+  processing the request.
+  }}
+
+failure.raiseMethodNotAllowed : Text -> a ->{Exception} b
+failure.raiseMethodNotAllowed msg data =
+  Exception.raise (Failure (typeLink MethodNotAllowed) msg (Any data))
+
+failure.raiseMethodNotAllowed.doc : Doc
+failure.raiseMethodNotAllowed.doc =
+  {{
+  Raises an {type Exception} with a {type MethodNotAllowed} marker type. The
+  {Route.run} function will catch this exception and produce a 405 Method Not
+  Allowed response. The message will be included in the response, but the data
+  is just for debugging purposes.
+
+  This is typically used when the client tries to use an HTTP method that is
+  not allowed for the requested resource. For example, trying to use POST on a
+  resource that only supports GET.
+  }}
+
+failure.raiseNetworkAuthenticationRequired : Text -> a ->{Exception} b
+failure.raiseNetworkAuthenticationRequired msg data =
+  Exception.raise
+    (Failure (typeLink NetworkAuthenticationRequired) msg (Any data))
+
+failure.raiseNetworkAuthenticationRequired.doc : Doc
+failure.raiseNetworkAuthenticationRequired.doc =
+  {{
+  Raises an {type Exception} with a {type NetworkAuthenticationRequired} marker
+  type. The {Route.run} function will catch this exception and produce a 511
+  Network Authentication Required response. The message will be included in the
+  response, but the data is just for debugging purposes.
+
+  This is typically used when the server is acting as a gateway or proxy and
+  requires the client to authenticate to access the network.
+  }}
+
+failure.raiseNotAcceptable : Text -> a ->{Exception} b
+failure.raiseNotAcceptable msg data =
+  Exception.raise (Failure (typeLink NotAcceptable) msg (Any data))
+
+failure.raiseNotAcceptable.doc : Doc
+failure.raiseNotAcceptable.doc =
+  {{
+  Raises an {type Exception} with a {type NotAcceptable} marker type. The
+  {Route.run} function will catch this exception and produce a 406 Not
+  Acceptable response. The message will be included in the response, but the
+  data is just for debugging purposes.
+
+  This is typically used when the client sends an `Accept` header that the
+  server cannot satisfy. For example, the client requests JSON but the server
+  can only produce XML.
+  }}
+
+failure.raiseNotFound : Text -> a ->{Exception} b
+failure.raiseNotFound msg data =
+  Exception.raise (Failure (typeLink NotFound) msg (Any data))
+
+failure.raiseNotFound.doc : Doc
+failure.raiseNotFound.doc =
+  {{
+  Raises an {type Exception} with a {type NotFound} marker type. The
+  {Route.run} function will catch this exception and produce a 404 Not Found
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the requested resource does not exist.
+  }}
+
+failure.raiseNotImplemented : Text -> a ->{Exception} b
+failure.raiseNotImplemented msg data =
+  Exception.raise (Failure (typeLink NotImplemented) msg (Any data))
+
+failure.raiseNotImplemented.doc : Doc
+failure.raiseNotImplemented.doc =
+  {{
+  Raises an {type Exception} with a {type NotImplemented} marker type. The
+  {Route.run} function will catch this exception and produce a 501 Not
+  Implemented response. The message will be included in the response, but the
+  data is just for debugging purposes.
+
+  This is typically used when the server does not support the functionality
+  required to fulfill the request. For example, the client requests a PATCH
+  method but the server only supports GET and POST. This differs from
+  {type MethodNotAllowed} in that the server does not support the functionality
+  at all, not just for the requested resource.
+  }}
+
+failure.raisePayloadTooLarge : Text -> a ->{Exception} b
+failure.raisePayloadTooLarge msg data =
+  Exception.raise (Failure (typeLink PayloadTooLarge) msg (Any data))
+
+failure.raisePayloadTooLarge.doc : Doc
+failure.raisePayloadTooLarge.doc =
+  {{
+  Raises an {type Exception} with a {type PayloadTooLarge} marker type. The
+  {Route.run} function will catch this exception and produce a 413 Payload Too
+  Large response. The message will be included in the response, but the data is
+  just for debugging purposes.
+
+  This is typically used when the request payload is too large for the server
+  to process.
+  }}
+
+failure.raiseRequestTimeout : Text -> a ->{Exception} b
+failure.raiseRequestTimeout msg data =
+  Exception.raise (Failure (typeLink RequestTimeout) msg (Any data))
+
+failure.raiseRequestTimeout.doc : Doc
+failure.raiseRequestTimeout.doc =
+  {{
+  Raises an {type Exception} with a {type RequestTimeout} marker type. The
+  {Route.run} function will catch this exception and produce a 408 Request
+  Timeout response. The message will be included in the response, but the data
+  is just for debugging purposes.
+
+  This is typically used when the server takes too long to process the request.
+  }}
+
+failure.raiseServiceUnavailable : Text -> a ->{Exception} b
+failure.raiseServiceUnavailable msg data =
+  Exception.raise (Failure (typeLink ServiceUnavailable) msg (Any data))
+
+failure.raiseServiceUnavailable.doc : Doc
+failure.raiseServiceUnavailable.doc =
+  {{
+  Raises an {type Exception} with a {type ServiceUnavailable} marker type. The
+  {Route.run} function will catch this exception and produce a 503 Service
+  Unavailable response. The message will be included in the response, but the
+  data is just for debugging purposes.
+
+  This is typically used when the server is temporarily unavailable, for
+  example, due to maintenance or overload.
+  }}
+
+failure.raiseTooManyRequests : Text -> a ->{Exception} b
+failure.raiseTooManyRequests msg data =
+  Exception.raise (Failure (typeLink TooManyRequests) msg (Any data))
+
+failure.raiseTooManyRequests.doc : Doc
+failure.raiseTooManyRequests.doc =
+  {{
+  Raises an {type Exception} with a {type TooManyRequests} marker type. The
+  {Route.run} function will catch this exception and produce a 429 Too Many
+  Requests response. The message will be included in the response, but the data
+  is just for debugging purposes.
+
+  This is typically used when the client has sent too many requests in a given
+  amount of time, and the server is rate-limiting the client.
+  }}
+
+failure.raiseUnauthorized : Text -> a ->{Exception} b
+failure.raiseUnauthorized msg data =
+  Exception.raise (Failure (typeLink Unauthorized) msg (Any data))
+
+failure.raiseUnauthorized.doc : Doc
+failure.raiseUnauthorized.doc =
+  {{
+  Raises an {type Exception} with an {type Unauthorized} marker type. The
+  {Route.run} function will catch this exception and produce a 401 Unauthorized
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the request requires authentication, but the
+  client has not provided valid credentials.
+  }}
+
+failure.raiseUnsupportedMediaType : Text -> a ->{Exception} b
+failure.raiseUnsupportedMediaType msg data =
+  Exception.raise (Failure (typeLink UnsupportedMediaType) msg (Any data))
+
+failure.raiseUnsupportedMediaType.doc : Doc
+failure.raiseUnsupportedMediaType.doc =
+  {{
+  Raises an {type Exception} with an {type UnsupportedMediaType} marker type.
+  The {Route.run} function will catch this exception and produce a 415
+  Unsupported Media Type response. The message will be included in the
+  response, but the data is just for debugging purposes.
+
+  This is typically used when the server cannot process the request because the
+  media type is not supported. For example, the client sends a request with a
+  `Content-Type` header that the server does not recognize.
+  }}
+
+failure.raiseUriTooLong : Text -> a ->{Exception} b
+failure.raiseUriTooLong msg data =
+  Exception.raise (Failure (typeLink UriTooLong) msg (Any data))
+
+failure.raiseUriTooLong.doc : Doc
+failure.raiseUriTooLong.doc =
+  {{
+  Raises an {type Exception} with a {type UriTooLong} marker type. The
+  {Route.run} function will catch this exception and produce a 414 URI Too Long
+  response. The message will be included in the response, but the data is just
+  for debugging purposes.
+
+  This is typically used when the URI of the request is too long for the server
+  to process.
+  }}
+
+failure.RequestTimeout.doc : Doc
+failure.RequestTimeout.doc =
+  {{
+  A {type Failure} marker type indicating that the server took too long to
+  process the request.
+  }}
+
+failure.ServiceUnavailable.doc : Doc
+failure.ServiceUnavailable.doc =
+  {{
+  A {type Failure} marker type indicating that the server is temporarily
+  unavailable.
+  }}
+
+test> failure.tests.shortCircuit =
+  use Parser /
+  hi = do
+    name = route GET (s "hello" / Parser.text)
+    raiseNotImplemented "Not implemented yet" ()
+  bye = do
+    use Text ++
+    name = route GET (s "goodbye" / Parser.text)
+    ok.text ("goodbye " ++ name)
+  server = Route.routes [hi, bye]
+  client = do
+    use Nat ==
+    hello = Http.get (parseOrBug "http://example.com/hello/Unison")
+    check (code (HttpResponse.status hello) == 501)
+  unsafeRun! do harness server client
+
+failure.TooManyRequests.doc : Doc
+failure.TooManyRequests.doc =
+  {{
+  A {type Failure} marker type indicating that the client has sent too many
+  requests in a given amount of time.
+  }}
+
+failure.Unauthorized.doc : Doc
+failure.Unauthorized.doc =
+  {{
+  A {type Failure} marker type indicating that the request requires
+  authentication.
+  }}
+
+failure.UnsupportedMediaType.doc : Doc
+failure.UnsupportedMediaType.doc =
+  {{
+  A {type Failure} marker type indicating that the server cannot process the
+  request because the media type is not supported.
+  }}
+
+failure.uriParseFailure : UriParseFailure -> Failure
+failure.uriParseFailure e =
+  Failure (typeLink UriParseFailure) (UriParseFailure.toText e) (Any e)
+
+failure.UriTooLong.doc : Doc
+failure.UriTooLong.doc =
+  {{
+  A {type Failure} marker type indicating that the URI of the request is too
+  long.
+  }}
+
+HttpContext.fromRequest : HttpRequest -> HttpContext
+HttpContext.fromRequest req =
+  (Headers h) = HttpRequest.headers req
+  HttpContext
+    (HttpRequest.method req)
+    (HttpRequest.version req)
+    (HttpRequest.uri req)
+    None
+    h
+    (Status 204 "No Content")
+    Version.http11
+    Map.empty
+
+HttpContext.fromRequest.doc : Doc
+HttpContext.fromRequest.doc =
+  {{
+  Convert an {type HttpRequest} into an {type HttpContext} populated with the
+  request's method, version, URI, headers, and an initial response status of
+  `204 No Content`.
+  }}
+
+HttpContext.requestHeaders : HttpContext -> Map Text [Text]
+HttpContext.requestHeaders = cases
+  HttpContext _ _ _ _ requestHeaders _ _ _ -> requestHeaders
+
+HttpContext.requestHeaders.modify :
+  (Map Text [Text] ->{g} Map Text [Text]) -> HttpContext ->{g} HttpContext
+HttpContext.requestHeaders.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      (f requestHeaders)
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestHeaders.set : Map Text [Text] -> HttpContext -> HttpContext
+HttpContext.requestHeaders.set requestHeaders1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    _
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders1
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestMethod : HttpContext -> Method
+HttpContext.requestMethod = cases
+  HttpContext requestMethod _ _ _ _ _ _ _ -> requestMethod
+
+HttpContext.requestMethod.modify :
+  (Method ->{g} Method) -> HttpContext ->{g} HttpContext
+HttpContext.requestMethod.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      (f requestMethod)
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestMethod.set : Method -> HttpContext -> HttpContext
+HttpContext.requestMethod.set requestMethod1 = cases
+  HttpContext
+    _
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod1
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestQuery : HttpContext -> Optional (Optional (Map Text [Text]))
+HttpContext.requestQuery = cases
+  HttpContext _ _ _ requestQuery _ _ _ _ -> requestQuery
+
+HttpContext.requestQuery.modify :
+  (Optional (Optional (Map Text [Text]))
+  ->{g} Optional (Optional (Map Text [Text])))
+  -> HttpContext
+  ->{g} HttpContext
+HttpContext.requestQuery.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      (f requestQuery)
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestQuery.set :
+  Optional (Optional (Map Text [Text])) -> HttpContext -> HttpContext
+HttpContext.requestQuery.set requestQuery1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    _
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery1
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestUri : HttpContext -> URI
+HttpContext.requestUri = cases
+  HttpContext _ _ requestUri _ _ _ _ _ -> requestUri
+
+HttpContext.requestUri.modify :
+  (URI ->{g} URI) -> HttpContext ->{g} HttpContext
+HttpContext.requestUri.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      (f requestUri)
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestUri.set : URI -> HttpContext -> HttpContext
+HttpContext.requestUri.set requestUri1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    _
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri1
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestVersion : HttpContext -> unison_http_3_3_2.Version
+HttpContext.requestVersion = cases
+  HttpContext _ requestVersion _ _ _ _ _ _ -> requestVersion
+
+HttpContext.requestVersion.modify :
+  (unison_http_3_3_2.Version ->{g} unison_http_3_3_2.Version)
+  -> HttpContext
+  ->{g} HttpContext
+HttpContext.requestVersion.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      (f requestVersion)
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.requestVersion.set :
+  unison_http_3_3_2.Version -> HttpContext -> HttpContext
+HttpContext.requestVersion.set requestVersion1 = cases
+  HttpContext
+    requestMethod
+    _
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion1
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders
+
+HttpContext.responseHeaders : HttpContext -> Map Text [Text]
+HttpContext.responseHeaders = cases
+  HttpContext _ _ _ _ _ _ _ responseHeaders -> responseHeaders
+
+HttpContext.responseHeaders.modify :
+  (Map Text [Text] ->{g} Map Text [Text]) -> HttpContext ->{g} HttpContext
+HttpContext.responseHeaders.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      (f responseHeaders)
+
+HttpContext.responseHeaders.set : Map Text [Text] -> HttpContext -> HttpContext
+HttpContext.responseHeaders.set responseHeaders1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    _ ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion
+      responseHeaders1
+
+HttpContext.responseStatus : HttpContext -> HttpResponse.Status
+HttpContext.responseStatus = cases
+  HttpContext _ _ _ _ _ responseStatus _ _ -> responseStatus
+
+HttpContext.responseStatus.modify :
+  (HttpResponse.Status ->{g} HttpResponse.Status)
+  -> HttpContext
+  ->{g} HttpContext
+HttpContext.responseStatus.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      (f responseStatus)
+      responseVersion
+      responseHeaders
+
+HttpContext.responseStatus.set :
+  HttpResponse.Status -> HttpContext -> HttpContext
+HttpContext.responseStatus.set responseStatus1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    _
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus1
+      responseVersion
+      responseHeaders
+
+HttpContext.responseVersion : HttpContext -> unison_http_3_3_2.Version
+HttpContext.responseVersion = cases
+  HttpContext _ _ _ _ _ _ responseVersion _ -> responseVersion
+
+HttpContext.responseVersion.modify :
+  (unison_http_3_3_2.Version ->{g} unison_http_3_3_2.Version)
+  -> HttpContext
+  ->{g} HttpContext
+HttpContext.responseVersion.modify f = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    responseVersion
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      (f responseVersion)
+      responseHeaders
+
+HttpContext.responseVersion.set :
+  unison_http_3_3_2.Version -> HttpContext -> HttpContext
+HttpContext.responseVersion.set responseVersion1 = cases
+  HttpContext
+    requestMethod
+    requestVersion
+    requestUri
+    requestQuery
+    requestHeaders
+    responseStatus
+    _
+    responseHeaders ->
+    HttpContext
+      requestMethod
+      requestVersion
+      requestUri
+      requestQuery
+      requestHeaders
+      responseStatus
+      responseVersion1
+      responseHeaders
+
+HttpContext.toResponse : HttpContext -> HttpResponse
+HttpContext.toResponse = cases
+  HttpContext rm rv ru qp rh s v h -> HttpResponse s v (Headers h) (Body 0xs)
+
+HttpContext.toResponse.doc : Doc
+HttpContext.toResponse.doc =
+  {{
+  Convert an {type HttpContext} into an {type HttpResponse} by extracting the
+  response status and headers.
+  }}
+
+OpenWebSocket.doc : Doc
+OpenWebSocket.doc =
+  {{
+  The ability to open a WebSocket connection to a client. It provides a single
+  operation, {openWebSocket}, which opens a WebSocket connection and returns a
+  {type unison_cloud_18_0_6.websockets.WebSocket} that can be used to send and
+  receive messages using the {type WebSockets} ability.
+  }}
+
+README : Doc
+README =
+  use Body toBytes
+  use Multimap lookup
+  use Parser required
+  use Path root
+  use Route <|> noCapture or routes
+  use Text ++ == toUtf8
+  use base.Float sum
+  use cloud simple
+  use fromList impl
+  use headers add remove
+  use request decodeBody
+  use respond notFound
+  use response headers.set status.set
+  use test ensureEqual verify
+  {{
+  # Routes
+
+    ## High-level HTTP server library for Unison
+
+       This library provides simple yet flexible interface for writing
+       HTTP/HTTPS servers in Unison, defining routes, handling HTTP requests,
+       and handling WebSockets.
+
+       It also allows for straightforward creation of middleware to handle
+       things like authentication, logging, etc.
+
+       It uses the {{ shareSlug "@unison/http" }} library to handle the
+       low-level details of the HTTP protocol.
+
+    ## Introduction
+
+       Here is a complete program that runs a simple server:
+
+       @typecheck ```
+       use Parser /
+       hi = do
+         name = Route.route GET (s "hello" / Parser.text)
+         ok.text ("👋 hello " ++ name)
+       bye = do
+         name = Route.route GET (s "goodbye" / Parser.text)
+         ok.text ("😢 goodbye " ++ name)
+       hiJson = do
+         name = Route.route GET (s "someJson" / Parser.text)
+         ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+       stop = serveSimple (hi <|> bye <|> hiJson) 8081
+       printLine "Server running on port 8081. Press <enter> to stop."
+       _ = readLine()
+       stop()
+       ```
+
+       This program defines three routes using the {type Route} ability. Each
+       matches a particular pattern of requests using the {Route.route}
+       function, and returns a `200 OK` HTTP response. The routes are combined
+       using the {or} function and passed to {serveSimple} to start a server.
+
+       The call to {serveSimple} starts a server on port 8081 and returns a
+       `stop` action that can be used to stop the server.
+
+       The program then prints a message and waits for the user to press the
+       Enter key, at which point it stops the server.
+
+    ## Defining Routes
+
+       The {Route.route} function takes an HTTP {type Method} and a
+       {type Parser}, and returns a value using the {type Route} ability:
+
+           @signature{Route.route}
+
+       The {type Parser} parses the path of the request URI. If the path
+       matches the {type Parser} and the {type Method}, the route returns the
+       result of parsing the path. If the method or path don't match, the route
+       is skipped ( see {Route.skip} ). If the parser fails with
+       {type UriParseFailure}, the route fails in such a way that functions
+       like {or} won't try other routes. The {Route.run}function will catch
+       this failure and return a `404 Not Found` response. You can override
+       this behavior by using {tryRoute} instead of {Route.route}.
+
+       The {Route.route} function can be used to define routes that take
+       parameters from the {type Path} of the request {type URI} or its
+       {type URI.Query} parameters. For example, the following route matches a
+       request for `GET /hello/<name>` and responds with a greeting:
+
+       @typecheck ```
+       use Parser /
+       name = Route.route GET (s "hello" / Parser.text)
+       ok.text ("👋 hello " ++ name)
+       ```
+
+       If you need to match on the URI and {type Method}, but don't want to
+       capture any parameters, you can use {noCapture}:
+
+       @typecheck ```
+       noCapture GET (s "hello")
+       ok.text "👋 hello, World!"
+       ```
+
+       If you want to match on the URI regardless of the method, use
+       {Route.uri}:
+
+       @typecheck ```
+       use Parser /
+       name = Route.uri (s "hello" / Parser.text)
+       ok.text ("👋 hello " ++ name)
+       ```
+
+       See {type Parser} for more on matching on the components of the request
+       URI.
+
+    ## Combining routes
+
+       Routes can be combined using the {or} function, also named {<|>}:
+
+           @signature{or}     @signature{<|>}
+
+       This takes two routes and return a new route that tries the first route,
+       and if it fails, tries the second route. If both routes fail, the
+       combined route fails.
+
+       You can also use the {routes} function to run a list of routes in order,
+       skipping each if it fails, and returning the first successful route:
+
+           @signature{routes}
+
+       With these functions you can define a set of routes that are handled by
+       the same server:
+
+       @typecheck ```
+       use Parser /
+       hi = do
+         name = Route.route GET (s "hello" / Parser.text)
+         ok.text ("👋 hello " ++ name)
+       bye = do
+         name = Route.route GET (s "goodbye" / Parser.text)
+         ok.text ("😢 goodbye " ++ name)
+       serveSimple (hi <|> bye) 8081
+       ```
+
+       Or you can define a single route that tries different things:
+
+       @typecheck ```
+       use Parser /
+       hello = do Route.route GET (s "hello" / Parser.text)
+       hi = do Route.route GET (s "hi" / Parser.text)
+       greet = do
+         name = routes [hello, hi]
+         ok.text ("👋 hello " ++ name())
+       serveSimple greet 8081
+       ```
+
+    ## Handling URI parsing failures
+
+       If the {type Parser} fails in a {required} parser, the route will fail
+       with {type UriParseFailure}. This will cause the {Route.run} function to
+       return a `400 Bad Request` response. You can override this behavior by
+       using {tryRoute} instead of {Route.route} if you want to handle the
+       error yourself:
+
+       @typecheck ```
+       use Parser /
+       name = toEither do tryRoute GET (s "post" / required Parser.nat)
+       match name with
+         Left _ -> respond.badRequest (toUtf8 "You must provide a post number")
+         Right name -> ok.text ("You requested post #" ++ Nat.toText name)
+       ```
+
+    ## Raising errors in routes
+
+       If you want to short-circuit the route matching process and return a
+       response without trying other routes, you can {Exception.raise} a
+       {type Failure} with a specific marker type. The {Route.run} function
+       will catch this exception and return the appropriate response.
+
+       For example, to return a `400 Bad Request` response if the request is
+       missing a required parameter, you can raise a {type BadRequest} failure:
+
+       @typecheck ```
+       use Parser /
+       name = Route.route GET (s "hello" / required Parser.text)
+       if name == "Bingo" then
+         raiseBadRequest "Your name-o must not be Bingo" ()
+       else ok.text ("👋 hello " ++ name)
+       ```
+
+       This is equivalent to the following code:
+
+       @typecheck ```
+       use Parser /
+       name = Route.route GET (s "hello" / required Parser.text)
+       if name == "Bingo" then badRequest.text "Your name-o must not be Bingo"
+       else ok.text ("👋 hello " ++ name)
+       ```
+
+       The supported {type Failure} marker types are listed in the docs for
+       {pickStatus}.
+
+    ## Inspecting the HTTP request
+
+       The {type Route} ability provides access to the components of the
+       {type HttpRequest}. This can be used to inspect the request and decide
+       how to respond to it.
+
+       You can access the {type Method} of the request using {request.method}:
+
+       @typecheck ```
+       method = request.method()
+       if method === GET then ok.text "Hi" else notFound 0xs
+       ```
+
+       You can access the {type URI} of the request using {request.uri}:
+
+       @typecheck ```
+       use Path /
+       uri = request.uri()
+       if URI.path uri === root / "hello" then ok.text "Hi" else notFound 0xs
+       ```
+
+       ### Getting the components of the URI
+
+           Get the {type Path} of the request using {request.path}:
+
+           @typecheck ```
+           use Path /
+           path = request.path()
+           if path === root / "hello" then ok.text "Hi" else notFound 0xs
+           ```
+
+           Access the query parameters of the request using {request.query}.
+           This returns a multimap which is a {type Map} where each parameter
+           name is associated with a {type List} of values.
+
+           @typecheck ```
+           query = request.query()
+           if lookup "name" query === ["Sam"] then ok.text "Hi Sam"
+           else notFound 0xs
+           ```
+
+           You can also directly get the values of a particular query parameter
+           using {queryParameter}:
+
+           @typecheck ```
+           if queryParameter "name" === ["Sam"] then ok.text "Hi Sam"
+           else notFound 0xs
+           ```
+
+       ### Getting Request Headers
+
+           Get the headers of the request as a {type Map} using
+           {request.headers}. Each header name is associated with a list of
+           values for that header:
+
+           @typecheck ```
+           headers = request.headers()
+           if lookup "X-My-Header" headers === ["Sam"] then ok.text "Hi Sam"
+           else notFound 0xs
+           ```
+
+           You can also directly get the values of a particular header using
+           {request.header}:
+
+           @typecheck ```
+           if request.header "X-My-Header" === ["Sam"] then ok.text "Hi Sam"
+           else notFound 0xs
+           ```
+
+       ### Getting the Request Body
+
+           Get the body of the request as {type Bytes} using {request.body}:
+
+           @typecheck ```
+           body = request.body()
+           ok.text ("You sent " ++ Nat.toText (Bytes.size body) ++ " bytes")
+           ```
+
+           You can also get the body as a Unicode {type Text} using {bodyUtf8}:
+
+           @typecheck ```
+           body = bodyUtf8()
+           ok.text
+             ("You sent " ++ Nat.toText (Text.size body) ++ " characters")
+           ```
+
+           If the request body is encoded as JSON, you can supply a
+           {type Decoder} to {decodeJson} in order to convert it to a Unison
+           data type:
+
+           @typecheck ```
+           numbers = decodeJson (Decoder.array Decoder.float)
+           ok.text ("The sum of the numbers is " ++ Float.toText (sum numbers))
+           ```
+
+           If the body is binary data, you can supply a binary decoder that
+           uses the {type Decode} ability, with {decodeBody}:
+
+           @typecheck ```
+           numbers = decodeBody do
+             length = Decode.nat32be()
+             Decode.list length float32be
+           ok.text ("The sum of the numbers is " ++ Float.toText (sum numbers))
+           ```
+
+       ### Getting Request Cookies
+
+           Get the cookies of the request as a {type Map} using {cookies}. Each
+           cookie name is associated with the value for that cookie:
+
+           @typecheck ```
+           if Map.get "userName" cookies() === Some "Sam" then ok.text "Hi Sam"
+           else unauthorized (toUtf8 "Hey, you're not Sam!")
+           ```
+
+           You can also directly get the value of a particular cookie using
+           {getCookie}:
+
+           @typecheck ```
+           if getCookie "name" === Some "Sam" then ok.text "Hi Sam"
+           else unauthorized (toUtf8 "Hey, you're not Sam!")
+           ```
+
+    ## Responding to the request
+
+       The {type Route} ability provides a number of functions for responding
+       to the request.
+
+       ### Setting the status code
+
+           Use {status.set} to directly set the status code of the response:
+
+           @typecheck ```
+           status.set (Status 200 "OK")
+           ```
+
+           #### Helpers for returning 200 OK
+
+                A number of helper functions exist to set the status code and
+                add some data to the response body at the same time. These also
+                set the `Content-Type` header to the appropriate type.
+
+                Respond with some text:
+
+                @typecheck ```
+                ok.text "Hello"
+                ```
+
+                Respond with some JSON:
+
+                @typecheck ```
+                ok.json (Json.object [("name", Json.text "Sam")])
+                ```
+
+                Return some binary data:
+
+                @typecheck ```
+                ok.octetStream 0xsfeedbeef
+                ```
+
+                Return some html:
+
+                @typecheck ```
+                ok.html "<html><body>Hello</body></html>"
+                ```
+
+                You can also return arbitrary bytes and set the `Content-Type`
+                yourself:
+
+                @typecheck ```
+                respond.ok 0xsb0cab0ca
+                add ContentType textUtf8
+                ```
+
+           #### Helpers for other status codes
+
+                There are also helpers for returning other status codes. This
+                example calls some of them:
+
+                @typecheck ```
+                notFound.text "Not found"
+                unauthorized.json (Json.text "Not found")
+                forbidden.octetStream
+                ```
+
+       ### Setting response headers
+
+           Use {add} to add a header to the response:
+
+           @typecheck ```
+           add "X-My-Header" "Sam"
+           ```
+
+           Use {headers.set} to set the full response headers map:
+
+           @typecheck ```
+           headers.set
+             (Map.fromList
+               [ ("X-My-Header", ["Sam"])
+               , ("Content-Type", ["application/json"])
+               ])
+           ```
+
+           Use {remove} to clear all response headers with the given name:
+
+           @typecheck ```
+           remove "Set-Cookie"
+           ```
+
+       ### Setting response cookies
+
+           Use {setCookie} to send a cookie with the response headers:
+
+           @typecheck ```
+           setCookie
+             (cookie "session" "abc123" |> maxAge.set (Some (days +400)))
+           ```
+
+           Ask the client to delete a cookie:
+
+           @typecheck ```
+           deleteCookie (cookie "session" "abc123")
+           ```
+
+    ## WebSockets
+
+       The {type OpenWebSocket} ability provides the ability to open a
+       WebSocket connection to a client. It provides a single operation,
+       {openWebSocket}, which opens a WebSocket connection and returns a
+       {type unison_cloud_18_0_6.websockets.WebSocket} that can be used to send
+       and receive messages using the {type WebSockets} ability.
+
+       There are two ways to run a WebSocket server:
+
+       1. On Unison Cloud, using {Route.deployWebSocket}. You can also use
+          {runWebSocketCloud} to get an HTTP function you can deploy yourself
+          with {deployHttpWebSocket}. For even more control, use
+          {streamingAndWebSocketCloud} or {streamingAndWebSocketRemote}.
+          2. On your own server, using {serveWebSocket}. You can also use
+             {runWebSocketIO} for finer control over the server, or
+             {streamingAndWebSocketIO} for combining streaming and WebSocket
+             routes.
+
+       ### Examples
+
+           Here's an example of a simple WebSocket echo server that runs on
+           Unison Cloud:
+
+               @source{cloudEchoServer}
+
+           A more complex example, of a simple chat server that runs on Unison
+           Cloud is shown in {cloudChatServer}.
+
+           Here's an example of a simple WebSocket echo server that runs on
+           your own server:
+
+               @source{websockets.echoServer}
+
+    ## Middleware
+
+       Middleware is defined as a {type Route} computation that takes another
+       {type Route} computation as an argument. The middleware manipulates the
+       HTTP context either before or after the given route (or both), or it can
+       even fully intercept actions taken by the route.
+
+       Examples of things you can do with middleware:
+
+       * Logging
+       * Adding CORS headers
+       * Adding security headers
+       * Redirecting to an authentication provider
+       * Pre-processing the request body (e.g. translating between encodings)
+       * Post-processing the response body (e.g. custom encryption)
+
+       Here's an example of a simple middleware that logs the request headers,
+       and a server that uses that middleware:
+
+       @typecheck ```
+       logHeaders : '{g, Route} a ->{g, IO, Route, Exception} a
+       logHeaders route =
+         headers = Map.toList request.headers()
+         Each.run do
+           (header, values) = each headers
+           value = each values
+           printLine (header ++ ": " ++ value)
+         route()
+       Route.serve do logHeaders do noCapture GET (s "hello")
+       ```
+
+    ## Testing routes
+
+       The {harness} function can be used to test routes. It takes a server and
+       a client, and returns the result from the client. The client is used to
+       make requests to the server, and the server is run with the requests
+       made by the client. The harness returns the result from the client.
+
+       Here is an example that tests a simple server that replies with a hello
+       message:
+
+       ```
+       verify do
+         exampleClient =
+           do
+             Http.get (parseOrBug "https://www.example.org/Unison")
+               |> HttpResponse.body
+               |> toBytes
+               |> fromUtf8
+         exampleServer = do
+           name = Route.route GET Parser.text
+           ok.text ("Hello, " ++ name ++ "!")
+         response = catch do harness exampleServer exampleClient
+         ensureEqual response (Right "Hello, Unison!")
+       ```
+
+    ## Testing Unison Cloud routes
+
+       Similar to the {harness} function, the {simple} function can be used to
+       test routes that run on Unison Cloud. The main difference is that the
+       server is allowed to use abilities that require the cloud environment,
+       and the {simple} function will run the server in a simulated cloud
+       environment.
+
+       This example tests a simple server that uses the
+       {type unison_cloud_18_0_6.State} ability:
+
+       @typecheck ```
+       myTest = do
+         verify do
+           setup = Database.default
+           server db =
+             use Nat +
+             noCapture GET (s "increment")
+             cell = Cell.named db "counter" 0
+             Cell.modify cell (n -> (n + 1, ()))
+             ok.text (Nat.toText (Cell.read cell))
+           client db =
+             use Http get
+             url = parseOrBug "https://www.example.org/increment"
+             unison_base_3_17_0.ignore (get url)
+             get url |> HttpResponse.body |> toBytes |> fromUtf8
+           response = catch do simple setup server client
+           ensureEqual response (Right "2")
+       myTest()
+       ```
+
+       Then in UCM you can use the `io.test` command to run your test:
+
+       ``` ucm
+       @me/myProject/main> io.test myTest
+       ```
+
+       Or use `io.test.all` to run all such tests in your project:
+
+       ``` ucm
+       @me/myProject/main> io.test.all
+       ```
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  * Adds helper functions for constructing http responses for more content
+    types
+    * @inlineSignature{ok.css}
+    * @inlineSignature{ok.js}
+    * @inlineSignature{ok.svg}
+  }}
+
+(Route.<|>) : '{g, Route} a -> '{g1, Route} a -> '{g, g1, Route} a
+(Route.<|>) = Route.or
+
+Route.constants.ContentType : Text
+Route.constants.ContentType = "Content-Type"
+
+Route.constants.ContentType.doc : Doc
+Route.constants.ContentType.doc =
+  {{
+  The constant `"Content-Type"`, used for selecting the Content-Type header
+  from an HTTP request or response.
+  }}
+
+Route.contentTypes.formUrlEncoded : Text
+Route.contentTypes.formUrlEncoded = "application/x-www-form-urlencoded"
+
+Route.contentTypes.formUrlEncoded.doc : Doc
+Route.contentTypes.formUrlEncoded.doc =
+  {{
+  The content type `"application/x-www-form-urlencoded"`, used for sending and
+  receiving form data encoded in URL-encoded format.
+  }}
+
+Route.contentTypes.htmlUtf8 : Text
+Route.contentTypes.htmlUtf8 = "text/html;charset=UTF-8"
+
+Route.contentTypes.htmlUtf8.doc : Doc
+Route.contentTypes.htmlUtf8.doc =
+  {{
+  The content type `"text/html;charset=UTF-8"`, used for sending and receiving
+  HTML data encoded in UTF-8.
+  }}
+
+Route.contentTypes.jsonUtf8 : Text
+Route.contentTypes.jsonUtf8 = "application/json;charset=UTF-8"
+
+Route.contentTypes.jsonUtf8.doc : Doc
+Route.contentTypes.jsonUtf8.doc =
+  {{
+  The content type `"application/json;charset=UTF-8"`, used for sending and
+  receiving JSON data encoded in UTF-8.
+  }}
+
+Route.contentTypes.multipartFormData : Text
+Route.contentTypes.multipartFormData = "multipart/form-data"
+
+Route.contentTypes.multipartFormData.doc : Doc
+Route.contentTypes.multipartFormData.doc =
+  {{
+  The content type `"multipart/form-data"`, used for sending and receiving form
+  data encoded in multipart format.
+  }}
+
+Route.contentTypes.octetStream : Text
+Route.contentTypes.octetStream = "application/octet-stream"
+
+Route.contentTypes.octetStream.doc : Doc
+Route.contentTypes.octetStream.doc =
+  {{
+  The content type `"application/octet-stream"`, used for sending and receiving
+  binary data.
+  }}
+
+Route.contentTypes.plainUtf8.doc : Doc
+Route.contentTypes.plainUtf8.doc =
+  {{
+  The content type `"text/plain;charset=UTF-8"`, used for sending and receiving
+  plain text data encoded in UTF-8.
+  }}
+
+Route.contentTypes.textUtf8 : Text
+Route.contentTypes.textUtf8 = "text/plain;charset=UTF-8"
+
+Route.deploy :
+  Environment
+  -> '{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} ()
+  ->{Exception, Cloud} ServiceHash HttpRequest HttpResponse
+Route.deploy env r = deployHttp env (Route.run r)
+
+Route.deploy.doc : Doc
+Route.deploy.doc =
+  {{
+  Deploy a {type Route} to the cloud. This function takes an environment and a
+  route and returns a {type ServiceHash} for the deployed service.
+
+  The server is allowed to use the standard Cloud abilities, such as
+  {type Log}, {type unison_cloud_18_0_6.State}, and {type Http}.
+  }}
+
+Route.deployWebSocket :
+  Environment
+  -> '{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  OpenWebSocket,
+  Services,
+  Remote,
+  WebSockets,
+  Random,
+  Log,
+  Scratch} ()
+  ->{Exception, Cloud} ServiceHash
+    HttpRequest
+    (Either
+      HttpResponse
+      (unison_cloud_18_0_6.websockets.WebSocket ->{Remote, WebSockets} ()))
+Route.deployWebSocket env r = deployHttpWebSocket env (runWebSocketCloud r)
+
+Route.deployWebSocket.doc : Doc
+Route.deployWebSocket.doc =
+  {{
+  Deploy a {type Route} that uses WebSockets to the cloud. This function takes
+  an environment and a route and returns a {type ServiceHash} for the deployed
+  service.
+
+  The server is allowed to use the standard Cloud abilities, such as
+  {type Log}, {type unison_cloud_18_0_6.State}, and {type Http}, as well as the
+  {type WebSockets} and {type OpenWebSocket} abilities.
+
+  # Example
+
+    This example shows how to deploy a echo server that uses WebSockets:
+
+        @source{cloudEchoServer}
+  }}
+
+Route.doc : Doc
+Route.doc =
+  {{
+  The {type Route} ability provides an abstract interface for writing HTTP
+  servers.
+
+  # Common usage
+
+        @source{hello}
+
+    The above example defines three routes. The server will try matching each
+    against the requested path and run the first one that matches.
+  }}
+
+Route.internal.stripWebSockets : '{g, WebSockets} a ->{g, Exception} a
+Route.internal.stripWebSockets c =
+  handle c()
+  with cases
+    { tryReceive ws -> k } ->
+      raiseInternalServerError
+        "Routes cannot receive WebSocket messages from sockets it didn't open."
+        ()
+    { trySend ws m -> k } ->
+      raiseInternalServerError
+        "Routes cannot send WebSocket messages to sockets it didn't open." ()
+    { tryClose ws -> k } ->
+      raiseInternalServerError
+        "Routes cannot close websockets it didn't open." ()
+    { a } -> a
+
+Route.modifyContext : (HttpContext -> HttpContext) ->{Route} ()
+Route.modifyContext f =
+  ctx = getHttpContext
+  setHttpContext (f ctx)
+
+Route.modifyContext.doc : Doc
+Route.modifyContext.doc =
+  {{ Modifies the current {type HttpContext} with a given function. }}
+
+Route.noCapture : Method -> Parser () b ->{Route} b
+Route.noCapture m p = route m (Parser.noCapture p)
+
+Route.noCapture.doc : Doc
+Route.noCapture.doc =
+  {{
+  Matches a request with the given method and path parser, but doesn't capture
+  any parameters from the URI.
+
+  # Example
+
+    This responds to a GET request to `/hello` with the text `👋 Hello!`:
+
+    @typecheck ```
+    do
+      Route.noCapture GET (s "hello")
+      ok.text "👋 Hello!"
+    ```
+
+  # See also
+
+    * {route} - captures the path parameters.
+  }}
+
+Route.or : '{g, Route} a -> '{g, Route} a -> '{g, Route} a
+Route.or r1 r2 = do match Route.try r1 with
+  Left f@(Failure t msg e) | t === typeLink UriParseFailure -> Route.skip f
+  Left e                   -> r2()
+  Right a                  -> a
+
+Route.or.doc : Doc
+Route.or.doc =
+  use Parser /
+  use Route <|> run skip
+  use Text ++
+  {{
+  Combines two routes or HTTP servers into a single one that tries them both.
+  The second one will only be tried if the first one fails by calling {skip}.
+  If both fail, the combined route fails.
+
+  Special case: if the first route fails with a {type UriParseFailure}, the
+  second route is not tried and the combined route fails with the same
+  {type UriParseFailure}, since this indicates a problem with the URI itself
+  and the client should be informed of this. {run}, {Route.serve}, etc. will
+  automatically handle this case by returning a `400 Bad Request` response.
+
+  # Example
+
+    This checks if the request was for `/hello/name` or `goodbye/name` and
+    responds appropriately. The {route} function calls {skip} if the requested
+    path doesn't match the {Parser} it's given.
+
+    @typecheck ```
+    hi = do
+      name = route GET (s "hello" / Parser.text)
+      ok.text ("👋 hello " ++ name)
+    bye = do
+      name = route GET (s "goodbye" / Parser.text)
+      ok.text ("😢 goodbye " ++ name)
+    server = Route.or hi bye
+    run server
+    ```
+
+  # See also
+
+    * {<|>} - the infix version of this.
+  }}
+
+Route.request.body : '{Route} Bytes
+Route.request.body = do request.decodeBody Decode.remainder
+
+Route.request.body.decodeJson : '{g, Decoder} a ->{g, Route, Exception} a
+Route.request.body.decodeJson d = Decoder.run d bodyUtf8()
+
+Route.request.body.decodeJson.doc : Doc
+Route.request.body.decodeJson.doc =
+  use Text ++
+  {{
+  Decodes the request body as JSON using the given {type Decoder}.
+
+  # Example
+
+    This responds to a POST request to `/hello`, expecting the request body to
+    contain a JSON object with a `"name"` field.
+
+    @typecheck ```
+    do
+      Route.noCapture POST (s "hello")
+      name = decodeJson (object.at "name" Decoder.text)
+      ok.text ("👋 " ++ name)
+    ```
+
+  # See also
+
+    * {bodyUtf8} - decodes the request body as text.
+    * {request.body} - returns the raw bytes of the body.
+  }}
+
+Route.request.body.doc : Doc
+Route.request.body.doc =
+  use Text ++
+  {{
+  Returns the request body as raw {type Bytes}.
+
+  # Example
+
+    This responds to a POST request to `/hello`, expecting the request body to
+    contain some UTF-8 bytes.
+
+    @typecheck ```
+    do
+      Route.noCapture POST (s "hello")
+      bytes = request.body()
+      ok.text ("👋 Hello, " ++ fromUtf8 bytes)
+    ```
+
+  # See also
+
+    * {request.decodeBody} - decodes the bytes of the body using a binary
+      decoder.
+    * {bodyUtf8} - returns the body as text.
+    * {decodeJson} - decodes the request body as JSON.
+  }}
+
+Route.request.bodyUtf8 : '{Route, Exception} Text
+Route.request.bodyUtf8 = do fromUtf8 request.body()
+
+Route.request.bodyUtf8.doc : Doc
+Route.request.bodyUtf8.doc =
+  use Text ++
+  {{
+  Returns the request body as {type Text}.
+
+  # Example
+
+    This responds to a POST request to `/hello`, expecting the request body to
+    contain some text.
+
+    @typecheck ```
+    do
+      Route.noCapture POST (s "hello")
+      name = bodyUtf8()
+      ok.text ("👋 Hello, " ++ name)
+    ```
+
+  # See also
+
+    * {request.body} - returns the raw bytes of the body.
+    * {decodeJson} - decodes the request body as JSON.
+  }}
+
+Route.request.cookies : '{Route} Map Text Text
+Route.request.cookies =
+  do
+    Map.fromList
+      (List.reverse
+        (Each.toList do
+          use Char ==
+          use Class +
+          use Pattern many
+          use Text trim
+          cookie = Text.join "; " (header "Cookie")
+          p =
+            sepMany
+              (Pattern.join [many space, literal ";", many space])
+              (Pattern.capture
+                (Pattern.some (patterns.char (Class.not (in ";" + whitespace)))))
+          pair = eachCapture p cookie
+          let
+            (k, v) = break (c -> c == ?=) pair
+            (trim k, trim (Text.drop 1 v))))
+
+Route.request.cookies.doc : Doc
+Route.request.cookies.doc =
+  {{ Returns a {type Map} of cookies sent with the request. }}
+
+Route.request.deleteCookie.doc : Doc
+Route.request.deleteCookie.doc =
+  {{
+  Instructs the client to delete the given {type Cookie}. This is done by
+  setting its expiration to a date in the past.
+  }}
+
+Route.request.getCookie : Text ->{Route} Optional Text
+Route.request.getCookie c = Map.get c cookies()
+
+Route.request.getCookie.doc : Doc
+Route.request.getCookie.doc =
+  {{ Returns the value of the cookie with the given name, if it exists. }}
+
+Route.request.getFormData : '{Route, Exception} Map Text [Text]
+Route.request.getFormData =
+  do
+    match fromRawQuery (RawQuery bodyUtf8()) with
+      Some (Query m) -> m
+      None ->
+        Exception.raise
+          (Failure
+            (typeLink FormDataParseError)
+            "Failed to parse form data"
+            (Any bodyUtf8()))
+
+Route.request.getFormData.doc : Doc
+Route.request.getFormData.doc =
+  {{
+  Extracts form-encoded data from an HTTP request. It takes the body of the
+  request as a UTF-8 encoded {type Text} value and returns a {type Map} from
+  {type Text} (the form field name) to lists of {type Text} (the form field
+  values). If the body of the request is not a valid query string, this
+  function will raise a {type FormDataParseError}.
+  }}
+
+Route.request.header : Text ->{Route} [Text]
+Route.request.header h = Multimap.lookup h request.headers()
+
+Route.request.header.doc : Doc
+Route.request.header.doc =
+  {{
+  Returns the values of the given HTTP request header. Note that a header can
+  have multiple values.
+  }}
+
+Route.request.headers : '{Route} Map Text [Text]
+Route.request.headers = do
+  (HttpContext _ _ _ _ headers _ _ _) = getHttpContext
+  headers
+
+Route.request.headers.doc : Doc
+Route.request.headers.doc =
+  {{
+  Gets the request headers as a {type Map}. Note that a given header can have
+  multiple values, so each value in the map is a {type List}.
+  }}
+
+Route.request.headers.get.doc : Doc
+Route.request.headers.get.doc =
+  {{ Gets the {type Method} of the HTTP request. }}
+
+Route.request.headers.set : Map Text [Text] ->{Route} ()
+Route.request.headers.set headers = modifyContext (requestHeaders.set headers)
+
+Route.request.headers.set.doc : Doc
+Route.request.headers.set.doc =
+  {{
+  Replaces the headers of the request with the given {type Map}. Note that a
+  given header can have multiple values, so each value in the map is a
+  {type List}.
+
+  Subsequent code that gets the request headers, e.g. {request.headers}, will
+  receive these headers.
+  }}
+
+Route.request.method : '{Route} Method
+Route.request.method = do
+  (HttpContext method _ _ _ _ _ _ _) = getHttpContext
+  method
+
+Route.request.method.set : Method ->{Route} ()
+Route.request.method.set method =
+  modifyContext (HttpContext.requestMethod.set method)
+
+Route.request.method.set.doc : Doc
+Route.request.method.set.doc =
+  {{
+  Sets the {type Method} of the HTTP request for subsequent code that that uses
+  e.g. {request.method}.
+  }}
+
+Route.request.path : '{Route} Path
+Route.request.path = do request.uri() |> URI.path
+
+Route.request.path.doc : Doc
+Route.request.path.doc = {{ Returns the {type Path} of the request. }}
+
+Route.request.query : '{Route} Map Text [Text]
+Route.request.query = do
+  (HttpContext _ _ uri query _ _ _ _) = getHttpContext
+  Optional.getOrElse Map.empty <| (match query with
+    None   -> fromRawQuery (URI.query uri) |> (Optional.map cases Query q -> q)
+    Some q -> q)
+
+Route.request.query.doc : Doc
+Route.request.query.doc =
+  {{
+  Gets the query parameters of the request as a {type Map}. Note that a given
+  parameter can have multiple values, so each value in the map is a
+  {type List}.
+  }}
+
+Route.request.query.set : Map Text [Text] ->{Route} ()
+Route.request.query.set query =
+  modifyContext (requestQuery.set (Some (Some query)))
+
+Route.request.query.set.doc : Doc
+Route.request.query.set.doc =
+  {{
+  Sets the query parameters of the HTTP request, for subsequent code that uses
+  e.g. {request.query}.
+  }}
+
+Route.request.queryParameter : Text ->{Route} [Text]
+Route.request.queryParameter k = Multimap.lookup k request.query()
+
+Route.request.queryParameter.doc : Doc
+Route.request.queryParameter.doc =
+  {{
+  Returns the values of the given HTTP request query parameter. Note that a
+  parameter can have multiple values.
+  }}
+
+Route.request.uri : '{Route} URI
+Route.request.uri = do
+  (HttpContext _ _ uri _ _ _ _ _) = getHttpContext
+  uri
+
+Route.request.uri.doc : Doc
+Route.request.uri.doc = {{ Gets the {type URI} of the HTTP request. }}
+
+Route.request.uri.set : URI ->{Route} ()
+Route.request.uri.set uri = modifyContext (HttpContext.requestUri.set uri)
+
+Route.request.uri.set.doc : Doc
+Route.request.uri.set.doc =
+  {{
+  Sets the {type URI} of the HTTP request, for subsequent code that uses e.g.
+  {request.uri}.
+  }}
+
+Route.request.version : '{Route} unison_http_3_3_2.Version
+Route.request.version = do
+  (HttpContext _ version _ _ _ _ _ _) = getHttpContext
+  version
+
+Route.request.version.doc : Doc
+Route.request.version.doc =
+  {{ Gets the {type unison_http_3_3_2.Version} of the HTTP request. }}
+
+Route.request.version.set : unison_http_3_3_2.Version ->{Route} ()
+Route.request.version.set version =
+  modifyContext (HttpContext.requestVersion.set version)
+
+Route.request.version.set.doc : Doc
+Route.request.version.set.doc =
+  {{
+  Sets the {type unison_http_3_3_2.Version} of the HTTP request for subsequent
+  code that uses e.g. {request.version}.
+  }}
+
+Route.respond.badRequest : Bytes ->{Route} ()
+Route.respond.badRequest body = respond.status (Status 400 "Bad Request") body
+
+Route.respond.badRequest.doc : Doc
+Route.respond.badRequest.doc =
+  {{
+  Sets the response status code to 400 "Bad Request" and appends the given
+  {type Bytes} to the response body.
+  }}
+
+Route.respond.badRequest.html : Text ->{Route} ()
+Route.respond.badRequest.html t = status.html (Status 400 "Bad Request") t
+
+Route.respond.badRequest.html.doc : Doc
+Route.respond.badRequest.html.doc =
+  {{
+  Sets the response status code to 400 "Bad Request" and appends the given HTML
+  {type Text} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{htmlUtf8}.
+  }}
+
+Route.respond.badRequest.json : Json ->{Route} ()
+Route.respond.badRequest.json j = status.json (Status 400 "Bad Request") j
+
+Route.respond.badRequest.json.doc : Doc
+Route.respond.badRequest.json.doc =
+  {{
+  Sets the response status code to 400 "Bad Request" and appends the given
+  {type Json} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{jsonUtf8}.
+  }}
+
+Route.respond.badRequest.octetStream : Bytes ->{Route} ()
+Route.respond.badRequest.octetStream b =
+  status.octetStream (Status 400 "Bad Request") b
+
+Route.respond.badRequest.octetStream.doc : Doc
+Route.respond.badRequest.octetStream.doc =
+  {{
+  Sets the response status code to 400 "Bad Request" and appends the given
+  {type Bytes} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{contentTypes.octetStream}.
+  }}
+
+Route.respond.badRequest.text : Text ->{Route} ()
+Route.respond.badRequest.text t = status.text (Status 400 "Bad Request") t
+
+Route.respond.badRequest.text.doc : Doc
+Route.respond.badRequest.text.doc =
+  {{
+  Sets the response status code to 400 "Bad Request" and appends the given
+  {type Text} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{textUtf8}.
+  }}
+
+Route.respond.bytes : Nat -> Text -> Bytes ->{Route} ()
+Route.respond.bytes statusCode msg body =
+  response.status.set (Status statusCode msg)
+  appendBody body
+
+Route.respond.bytes.doc : Doc
+Route.respond.bytes.doc =
+  {{
+  Sets the response status code to the given {type Nat}, with the given status
+  message {type Text}, and appends the given {type Bytes} to the response body.
+  }}
+
+Route.respond.forbidden : Bytes ->{Route} ()
+Route.respond.forbidden body = respond.status (Status 403 "Forbidden") body
+
+Route.respond.forbidden.doc : Doc
+Route.respond.forbidden.doc =
+  {{
+  Responds to the request with a 403 Forbidden status code and the given body.
+  }}
+
+Route.respond.forbidden.html : Text ->{Route} ()
+Route.respond.forbidden.html t = status.html (Status 403 "Forbidden") t
+
+Route.respond.forbidden.html.doc : Doc
+Route.respond.forbidden.html.doc =
+  {{
+  Responds to the request with a 403 Forbidden status code and the given HTML
+  body. Also sets the @eval{ ContentType } header to @eval{htmlUtf8}.
+  }}
+
+Route.respond.forbidden.json : Json ->{Route} ()
+Route.respond.forbidden.json j = status.json (Status 403 "Forbidden") j
+
+Route.respond.forbidden.json.doc : Doc
+Route.respond.forbidden.json.doc =
+  {{
+  Responds to the request with a 403 Forbidden status code and the given JSON
+  body (encoded as UTF-8). Also sets the @eval{ ContentType } header to
+  @eval{jsonUtf8}.
+  }}
+
+Route.respond.forbidden.octetStream : Bytes ->{Route} ()
+Route.respond.forbidden.octetStream b =
+  status.octetStream (Status 403 "Forbidden") b
+
+Route.respond.forbidden.octetStream.doc : Doc
+Route.respond.forbidden.octetStream.doc =
+  {{
+  Responds to the request with a 403 Forbidden status code and the given body.
+  Also sets the @eval{ ContentType } header to @eval{contentTypes.octetStream}.
+  }}
+
+Route.respond.forbidden.text : Text ->{Route} ()
+Route.respond.forbidden.text t = status.text (Status 403 "Forbidden") t
+
+Route.respond.forbidden.text.doc : Doc
+Route.respond.forbidden.text.doc =
+  {{
+  Responds to the request with a 403 Forbidden status code and the given body
+  (encoded as UTF-8). Also sets the @eval{ ContentType } header to
+  @eval{textUtf8}.
+  }}
+
+Route.respond.notFound : Bytes ->{Route} ()
+Route.respond.notFound body = respond.status (Status 404 "Not Found") body
+
+Route.respond.notFound.doc : Doc
+Route.respond.notFound.doc =
+  {{
+  Sets the response status code to 404 "Not Found" and appends the given
+  {type Bytes} to the response body.
+
+  # Example
+
+    @typecheck ```
+    do respond.notFound (Text.toUtf8 "Nothing here")
+    ```
+  }}
+
+Route.respond.notFound.html : Text ->{Route} ()
+Route.respond.notFound.html t = status.html (Status 404 "Not Found") t
+
+Route.respond.notFound.html.doc : Doc
+Route.respond.notFound.html.doc =
+  {{
+  Sets the response status code to 404 "Not Found" and appends the given HTML
+  {type Text} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{htmlUtf8}.
+
+  # Example
+
+    @typecheck ```
+    do notFound.html "<html><body>Nothing here</body></html>"
+    ```
+  }}
+
+Route.respond.notFound.json : Json ->{Route} ()
+Route.respond.notFound.json j = status.json (Status 404 "Not Found") j
+
+Route.respond.notFound.json.doc : Doc
+Route.respond.notFound.json.doc =
+  {{
+  Sets the response status code to 404 "Not Found" and appends the given
+  {type Json} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{jsonUtf8}.
+
+  # Example
+
+    @typecheck ```
+    do notFound.json (Json.object [("error", Json.text "Nothing here")])
+    ```
+  }}
+
+Route.respond.notFound.octetStream : Bytes ->{Route} ()
+Route.respond.notFound.octetStream b =
+  status.octetStream (Status 404 "Not Found") b
+
+Route.respond.notFound.octetStream.doc : Doc
+Route.respond.notFound.octetStream.doc =
+  {{
+  Sets the response status code to 404 "Not Found" and appends the given
+  {type Bytes} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{contentTypes.octetStream}.
+
+  # Example
+
+    @typecheck ```
+    do notFound.octetStream (Text.toUtf8 "Nothing here")
+    ```
+  }}
+
+Route.respond.notFound.text : Text ->{Route} ()
+Route.respond.notFound.text t = status.text (Status 404 "Not Found") t
+
+Route.respond.notFound.text.doc : Doc
+Route.respond.notFound.text.doc =
+  {{
+  Sets the response status code to 404 "Not Found" and appends the given
+  {type Text} to the response body. Also sets the @eval{ ContentType } header
+  to @eval{textUtf8}.
+
+  # Example
+
+    @typecheck ```
+    do notFound.text "Nothing here"
+    ```
+  }}
+
+Route.respond.ok : Bytes ->{Route} ()
+Route.respond.ok body = respond.status (Status 200 "OK") body
+
+Route.respond.ok.css : Text ->{Route} ()
+Route.respond.ok.css css = status.css (Status 200 "OK") css
+
+Route.respond.ok.css.doc : Doc
+Route.respond.ok.css.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given css text.
+  Sets the content type to "text/css".
+  }}
+
+Route.respond.ok.doc : Doc
+Route.respond.ok.doc =
+  {{ Responds to the request with a 200 OK status code and the given body. }}
+
+Route.respond.ok.html : Text ->{Route} ()
+Route.respond.ok.html t = status.html (Status 200 "OK") t
+
+Route.respond.ok.html.doc : Doc
+Route.respond.ok.html.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given HTML body.
+  Also sets the @eval{ ContentType } header to @eval{htmlUtf8}.
+  }}
+
+Route.respond.ok.js : Text ->{Route} ()
+Route.respond.ok.js js = status.js (Status 200 "OK") js
+
+Route.respond.ok.js.doc : Doc
+Route.respond.ok.js.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given javascript
+  text. Sets the content type to "text/javascript".
+  }}
+
+Route.respond.ok.json : Json ->{Route} ()
+Route.respond.ok.json j = status.json (Status 200 "OK") j
+
+Route.respond.ok.json.doc : Doc
+Route.respond.ok.json.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given JSON body
+  (encoded as UTF-8). Also sets the @eval{ ContentType } header to
+  @eval{jsonUtf8}.
+  }}
+
+Route.respond.ok.octetStream : Bytes ->{Route} ()
+Route.respond.ok.octetStream b = status.octetStream (Status 200 "OK") b
+
+Route.respond.ok.octetStream.doc : Doc
+Route.respond.ok.octetStream.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given body. Also
+  sets the @eval{ ContentType } header to @eval{contentTypes.octetStream}.
+  }}
+
+Route.respond.ok.svg : Text ->{Route} ()
+Route.respond.ok.svg t = status.svg (Status 200 "OK") t
+
+Route.respond.ok.svg.doc : Doc
+Route.respond.ok.svg.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given svg text.
+  Sets the content type to "image/svg+xml".
+  }}
+
+Route.respond.ok.text : Text ->{Route} ()
+Route.respond.ok.text t = status.text (Status 200 "OK") t
+
+Route.respond.ok.text.doc : Doc
+Route.respond.ok.text.doc =
+  {{
+  Responds to the request with a 200 OK status code and the given body (encoded
+  as UTF-8). Also sets the @eval{ ContentType } header to @eval{textUtf8}.
+  }}
+
+Route.respond.status : HttpResponse.Status -> Bytes ->{Route} ()
+Route.respond.status status body =
+  response.status.set status
+  appendBody body
+
+Route.respond.status.css : HttpResponse.Status -> Text ->{Route} ()
+Route.respond.status.css status css =
+  response.status.set status
+  headers.add ContentType "text/css"
+  appendText css
+
+Route.respond.status.doc : Doc
+Route.respond.status.doc =
+  {{ Responds to the request with the given status code and body. }}
+
+Route.respond.status.html : HttpResponse.Status -> Text ->{Route} ()
+Route.respond.status.html status t =
+  response.status.set status
+  headers.add ContentType htmlUtf8
+  appendText t
+
+Route.respond.status.html.doc : Doc
+Route.respond.status.html.doc =
+  {{
+  Responds to the request with the given status code and HTML body. Also sets
+  the @eval{ ContentType } header to @eval{htmlUtf8}.
+  }}
+
+Route.respond.status.js : HttpResponse.Status -> Text ->{Route} ()
+Route.respond.status.js status js =
+  response.status.set status
+  headers.add ContentType "text/javascript"
+  appendText js
+
+Route.respond.status.json : HttpResponse.Status -> Json ->{Route} ()
+Route.respond.status.json status j =
+  response.status.set status
+  headers.add ContentType jsonUtf8
+  appendText (Json.toText j)
+
+Route.respond.status.json.doc : Doc
+Route.respond.status.json.doc =
+  {{
+  Responds to the request with the given status code and JSON body (encoded as
+  UTF-8). Also sets the @eval{ ContentType } header to @eval{jsonUtf8}.
+  }}
+
+Route.respond.status.octetStream : HttpResponse.Status -> Bytes ->{Route} ()
+Route.respond.status.octetStream status b =
+  response.status.set status
+  headers.add ContentType contentTypes.octetStream
+  appendBody b
+
+Route.respond.status.octetStream.doc : Doc
+Route.respond.status.octetStream.doc =
+  {{
+  Responds to the request with the given status code and body. Also sets the
+  @eval{ ContentType } header to @eval{contentTypes.octetStream}.
+  }}
+
+Route.respond.status.svg : HttpResponse.Status -> Text ->{Route} ()
+Route.respond.status.svg status t =
+  response.status.set status
+  headers.add ContentType "image/svg+xml"
+  appendText t
+
+Route.respond.status.text : HttpResponse.Status -> Text ->{Route} ()
+Route.respond.status.text status t =
+  response.status.set status
+  headers.add ContentType textUtf8
+  appendText t
+
+Route.respond.status.text.doc : Doc
+Route.respond.status.text.doc =
+  {{
+  Responds to the request with the given status code and body (encoded as
+  UTF-8). Also sets the @eval{ ContentType } header to @eval{textUtf8}.
+  }}
+
+Route.respond.unauthorized : Bytes ->{Route} ()
+Route.respond.unauthorized body =
+  respond.status (Status 401 "Unauthorized") body
+
+Route.respond.unauthorized.doc : Doc
+Route.respond.unauthorized.doc =
+  {{
+  Responds to the request with a 401 Unauthorized status code and the given
+  body.
+  }}
+
+Route.respond.unauthorized.html : Text ->{Route} ()
+Route.respond.unauthorized.html t = status.html (Status 401 "Unauthorized") t
+
+Route.respond.unauthorized.html.doc : Doc
+Route.respond.unauthorized.html.doc =
+  {{
+  Responds to the request with a 401 Unauthorized status code and the given
+  HTML body. Also sets the @eval{ ContentType } header to @eval{htmlUtf8}.
+  }}
+
+Route.respond.unauthorized.json : Json ->{Route} ()
+Route.respond.unauthorized.json j = status.json (Status 401 "Unauthorized") j
+
+Route.respond.unauthorized.json.doc : Doc
+Route.respond.unauthorized.json.doc =
+  {{
+  Responds to the request with a 401 Unauthorized status code and the given
+  JSON body (encoded as UTF-8). Also sets the @eval{ ContentType } header to
+  @eval{jsonUtf8}.
+  }}
+
+Route.respond.unauthorized.octetStream : Bytes ->{Route} ()
+Route.respond.unauthorized.octetStream b =
+  status.octetStream (Status 401 "Unauthorized") b
+
+Route.respond.unauthorized.octetStream.doc : Doc
+Route.respond.unauthorized.octetStream.doc =
+  {{
+  Responds to the request with a 401 Unauthorized status code and the given
+  body. Also sets the @eval{ ContentType } header to
+  @eval{contentTypes.octetStream}.
+  }}
+
+Route.respond.unauthorized.text : Text ->{Route} ()
+Route.respond.unauthorized.text t = status.text (Status 401 "Unauthorized") t
+
+Route.respond.unauthorized.text.doc : Doc
+Route.respond.unauthorized.text.doc =
+  {{
+  Responds to the request with a 401 Unauthorized status code and the given
+  body (encoded as UTF-8). Also sets the @eval{ ContentType } header to
+  @eval{textUtf8}.
+  }}
+
+Route.response.appendJson : Json ->{Route} ()
+Route.response.appendJson j = appendText (Json.toText j)
+
+Route.response.appendJson.doc : Doc
+Route.response.appendJson.doc =
+  {{
+  Appends the given {type Json} to the response body, encoded as UTF-8. Note
+  that this does not change the @eval{ ContentType } header, which must be set
+  separately to @eval{jsonUtf8}.
+
+  # See also
+
+    * {ok.json} for a shortcut that sets the status code to 200 "OK" and the
+      @eval{ ContentType } header to @eval{jsonUtf8}.
+    * {status.json} for a shortcut that sets the @eval{ ContentType } header to
+      @eval{ jsonUtf8 } and the status code to the given
+      {type HttpResponse.Status}.
+  }}
+
+Route.response.appendText : Text ->{Route} ()
+Route.response.appendText txt = appendBody (Text.toUtf8 txt)
+
+Route.response.appendText.doc : Doc
+Route.response.appendText.doc =
+  {{
+  Appends the given {type Text} to the response body, encoded as UTF-8. Note
+  that this does not change the @eval{ ContentType } header, which must be set
+  separately to @eval{textUtf8}.
+
+  # See also
+
+    * {ok.text} for a shortcut that sets the status code to 200 "OK" and the
+      @eval{ ContentType } header to @eval{textUtf8}.
+    * {status.text} for a shortcut that sets the @eval{ ContentType } header to
+      @eval{ textUtf8 } and the status code to the given
+      {type HttpResponse.Status}.
+  }}
+
+Route.response.deleteCookie : Cookie ->{Route} ()
+Route.response.deleteCookie cookie =
+  setCookie (expires.set (Some (atUTC epoch)) cookie)
+
+Route.response.headers : '{Route} Map Text [Text]
+Route.response.headers = do
+  (HttpContext _ _ _ _ _ _ _ headers) = getHttpContext
+  headers
+
+Route.response.headers.add : Text -> Text ->{Route} ()
+Route.response.headers.add key value =
+  headers = response.headers()
+  response.headers.set (Multimap.insert key value headers)
+
+Route.response.headers.add.doc : Doc
+Route.response.headers.add.doc =
+  use headers add
+  {{
+  `` add k v `` adds the a header `k` to the response headers, with the value
+  `v`. If a header already exists with that name, this does not replace it, but
+  adds a a new header with the same name.
+
+  # Examples
+
+    Set the `Last-Modified` header to the current time:
+
+    @typecheck ```
+    do add "Last-Modified" (HttpDate.fromInstant now())
+    ```
+
+    This example adds multiple 'Set-Cookie' headers:
+
+    @typecheck ```
+    do
+      add "Set-Cookie" "session=abc123"
+      add "Set-Cookie" "tracking=xyz456"
+    ```
+  }}
+
+Route.response.headers.doc : Doc
+Route.response.headers.doc =
+  {{
+  Returns the response headers as a {type Map}. The map will reflect headers
+  set by preceding code in the route. Note that the value for a given header is
+  a {type List}.
+  }}
+
+Route.response.headers.get : Text ->{Route} Optional [Text]
+Route.response.headers.get key =
+  headers = response.headers()
+  Map.get key headers
+
+Route.response.headers.get.doc : Doc
+Route.response.headers.get.doc =
+  {{
+  Returns the values of the response headers with the given name, as set by
+  preceding code in the route. If no header with that name has been set,
+  returns {None}.
+  }}
+
+Route.response.headers.remove : Text ->{Route} ()
+Route.response.headers.remove key =
+  headers = response.headers()
+  response.headers.set (Map.delete key headers)
+
+Route.response.headers.remove.doc : Doc
+Route.response.headers.remove.doc =
+  {{ Removes all response headers with the given name. }}
+
+Route.response.headers.set : Map Text [Text] ->{Route} ()
+Route.response.headers.set headers =
+  modifyContext (responseHeaders.set headers)
+
+Route.response.headers.set.doc : Doc
+Route.response.headers.set.doc =
+  {{
+  Sets the response headers to the given {type Map}. This replaces any existing
+  response headers.
+  }}
+
+Route.response.setCookie : Cookie ->{Route} ()
+Route.response.setCookie cookie =
+  headers.add "Set-Cookie" (Cookie.toText cookie)
+
+Route.response.setCookie.doc : Doc
+Route.response.setCookie.doc =
+  {{ Sets a cookie to be sent with the response. }}
+
+Route.response.status : '{Route} HttpResponse.Status
+Route.response.status = do
+  (HttpContext _ _ _ _ _ status _ _) = getHttpContext
+  status
+
+Route.response.status.doc : Doc
+Route.response.status.doc =
+  {{
+  Returns the response status code as a {type HttpResponse.Status}. The status
+  code will reflect any status code set by preceding code in the route.
+  }}
+
+Route.response.status.set : HttpResponse.Status ->{Route} ()
+Route.response.status.set status = modifyContext (responseStatus.set status)
+
+Route.response.status.set.doc : Doc
+Route.response.status.set.doc =
+  {{
+  Sets the response status of the {type HttpResponse} to the given
+  {type HttpResponse.Status}.
+
+  # Example
+
+    @typecheck ```
+    do response.status.set (Status 200 "OK")
+    ```
+  }}
+
+Route.response.version : '{Route} unison_http_3_3_2.Version
+Route.response.version = do
+  (HttpContext _ _ _ _ _ _ version _) = getHttpContext
+  version
+
+Route.response.version.doc : Doc
+Route.response.version.doc =
+  {{
+  Returns the HTTP version of the response as a
+  {type unison_http_3_3_2.Version}. The version will reflect any version set by
+  preceding code in the route.
+  }}
+
+Route.response.version.set : unison_http_3_3_2.Version ->{Route} ()
+Route.response.version.set version =
+  modifyContext (responseVersion.set version)
+
+Route.response.version.set.doc : Doc
+Route.response.version.set.doc =
+  {{
+  Sets the HTTP version of the response to the given
+  {type unison_http_3_3_2.Version}.
+  }}
+
+Route.route : Method -> Parser (a ->{g} a) a ->{Route} a
+Route.route m p = catchWith (Route.skip << uriParseFailure) do tryRoute m p
+
+Route.route.doc : Doc
+Route.route.doc =
+  use Nat toText
+  use Parser & /
+  use Route noCapture uri
+  use Text ++
+  {{
+  `` route m p `` parses the request URI using the given {type Parser}, and if
+  successful, returns the result of the parser.
+
+  If the request method does not match the given method, the route is skipped,
+  as in the case of {Route.skip}. If the parser does not match, the route is
+  skipped as well.
+
+  See {type Parser} for more on matching on the components of the request URI,
+  but a few examples are given below.
+
+  # Capturing a single path component
+
+    This route matches a request for `GET /hello/<name>` and responds with a
+    greeting:
+
+    @typecheck ```
+    do
+      name = route GET (s "hello" / Parser.text)
+      ok.text ("👋 Hello, " ++ name ++ "!")
+    ```
+
+  # Capturing multiple path components
+
+    This route matches a request for `GET /hello/<name>/<age>`, captures them
+    as a pair, and responds with a greeting:
+
+    @typecheck ```
+    do
+      (name, age) =
+        route GET (s "hello" / Parser.text / Parser.nat => Tuple.pair)
+      ok.text
+        ("👋 Hello, " ++ name ++ "! You are " ++ toText age ++ " years old.")
+    ```
+
+  # Capturing query parameters
+
+    This route matches a request for `GET /hello?name=<name>&age=<age>`,
+    captures them as a pair, and responds with a greeting. The `age` parameter
+    is optional, and if it is not provided, the route will still match. The
+    `name` parameter is required, and if it is not provided, the route will
+    fail with a `400 Bad Request` response:
+
+    @typecheck ```
+    do
+      (name, age) =
+        route
+          GET (s "hello" & (do
+            name = ParseQuery.required ParseQuery.text "name"
+            age = ParseQuery.nat "age"
+            (name, age)))
+      ok.text
+        ("👋 Hello, " ++ name ++ "!" ++ (match age with
+          Some n -> " You are " ++ toText n ++ " years old."
+          None   -> ""))
+    ```
+
+  # Matching on the URI regardless of the method
+
+    To match on the URI regardless of the method, use {uri} instead of {route}:
+
+    @typecheck ```
+    do
+      name = uri (s "hello" / Parser.text)
+      ok.text ("👋 Hello, " ++ name ++ "!")
+    ```
+
+  # Matching on the URI and method without capturing anything
+
+    If you want to match on the URI and method, but don't want to capture any
+    parameters, you can use {noCapture}:
+
+    @typecheck ```
+    do
+      noCapture GET (s "hello")
+      ok.text "👋 Hello, World!"
+    ```
+
+  # Marking URL components as required
+
+    You can use {Parser.required} or {ParseQuery.required} to mark a path
+    segment or query parameter, respectively, as required. If the parser does
+    not match those components, the route will fail with a `400 Bad Request`
+    response:
+
+    @typecheck ```
+    do
+      name = route GET (s "hello" / Parser.required Parser.text)
+      ok.text ("👋 Hello, " ++ name ++ "!")
+    ```
+
+    You can override this behavior by using {tryRoute} instead of {route} if
+    you want to handle the error yourself:
+
+    @typecheck ```
+    do
+      name = toEither do tryRoute GET (s "post" / Parser.required Parser.nat)
+      match name with
+        Left _ ->
+          respond.badRequest (Text.toUtf8 "You must provide a post number")
+        Right name -> ok.text ("You requested post #" ++ toText name)
+    ```
+  }}
+
+Route.route.pair : Method -> Parser (a ->{f} c ->{g} (a, c)) b ->{Route} b
+Route.route.pair method p = route method (p => (a b -> (a, b)))
+
+Route.route.pair.doc : Doc
+Route.route.pair.doc =
+  use Nat toText
+  use Parser / nat required
+  use Text ++
+  {{
+  Creates a route that matches on the given method and parser, returning the
+  pair of parsed values.
+
+  # Example
+
+    @typecheck ```
+    blog =
+      (user, post) =
+        route.pair GET (s "user" / required nat / s "blog" / required nat)
+      ok.text ("user " ++ toText user ++ ", post " ++ toText post)
+    ```
+  }}
+
+Route.route.tuple3 :
+  Method -> Parser (a ->{f} c ->{g} d ->{h} (a, c, d)) b ->{Route} b
+Route.route.tuple3 method p = route method (p => (a b c -> (a, b, c)))
+
+Route.route.tuple3.doc : Doc
+Route.route.tuple3.doc =
+  use Nat toText
+  use Parser / nat required
+  use Text ++
+  {{
+  Creates a route that matches on the given method and parser, returning the
+  triple of parsed values.
+
+  # Example
+
+    @typecheck ```
+    blog =
+      (user, post, comment) =
+        tuple3
+          GET
+          (s "user"
+            / required nat
+            / s "blog"
+            / required nat
+            / s "comment"
+            / required nat)
+      ok.text
+        ("user "
+          ++ toText user
+          ++ ", post "
+          ++ toText post
+          ++ ", comment "
+          ++ toText comment)
+    ```
+  }}
+
+Route.routes : ['{g, Route} a] -> '{g, Route} a
+Route.routes =
+  use Route <|>
+  List.foldRight (<|>) noRouteMatched
+
+Route.routes.doc : Doc
+Route.routes.doc =
+  use Parser /
+  use Route routes
+  use Text ++
+  {{
+  `` routes rs `` runs each of the given routes in order, skipping each one
+  until one of them succeeds.
+
+  # Example
+
+    @typecheck ```
+    do
+      hi : '{Route} ()
+      hi = do
+        name = route GET (s "hello" / Parser.text)
+        ok.text ("👋 hello " ++ name)
+      bye : '{Route} ()
+      bye = do
+        name = route GET (s "goodbye" / Parser.text)
+        ok.text ("😢 goodbye " ++ name)
+      hiJson : '{Route} ()
+      hiJson = do
+        name = route GET (s "someJson" / Parser.text)
+        ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+      stop = serveSimple (routes [hi, bye, hiJson]) 8080
+      printLine "Server running on port 8080. Press <enter> to stop."
+      _ = readLine
+      stop()
+    ```
+  }}
+
+test> Route.routes.test =
+  use Parser /
+  use Text ++
+  client =
+    do
+      use Body toBytes
+      use Http get
+      use HttpResponse body
+      hello =
+        get (parseOrBug "http://example.com/hello/Unison")
+          |> body
+          |> toBytes
+          |> fromUtf8
+      goodbye =
+        get (parseOrBug "http://example.com/goodbye/Unison")
+          |> body
+          |> toBytes
+          |> fromUtf8
+      notFound = get (parseOrBug "http://example.com/notfound/Unison")
+      check
+        (hello Text.== "hello Unison" && goodbye Text.== "goodbye Unison"
+          && code (HttpResponse.status notFound) Nat.== 404)
+  hi = do
+    name = route GET (s "hello" / Parser.text)
+    ok.text ("hello " ++ name)
+  bye = do
+    name = route GET (s "goodbye" / Parser.text)
+    ok.text ("goodbye " ++ name)
+  server = Route.routes [hi, bye]
+  unsafeRun! do harness server client
+
+Route.run :
+  '{g, Route, Exception} () -> HttpRequest ->{g, Exception} HttpResponse
+Route.run r =
+  use Route <|>
+  run.impl (r <|> (do respond.notFound 0xs))
+
+Route.run.doc : Doc
+Route.run.doc =
+  {{
+  Runs the given route with the given {type HttpRequest} and returns the
+  {type HttpResponse}.
+
+  Note that this can't do streaming requests or responses. Use {streaming} for
+  streaming applications.
+  }}
+
+Route.run.impl : '{g, Route} () -> HttpRequest ->{g, Exception} HttpResponse
+Route.run.impl r req =
+  at1 (streaming r (do emit (Body.toBytes (HttpRequest.body req))) req)
+
+Route.runWebSocketCloud :
+  '{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  OpenWebSocket,
+  Services,
+  Remote,
+  WebSockets,
+  Random,
+  Log,
+  Scratch} ()
+  -> HttpRequest
+  ->{unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} Either
+    HttpResponse
+    (unison_cloud_18_0_6.websockets.WebSocket
+    ->{Exception, Remote, WebSockets} ())
+Route.runWebSocketCloud r req =
+  use Route <|>
+  Either.mapLeft
+    at1
+    (streamingAndWebSocketCloud
+      (r <|> (do respond.notFound 0xs))
+      (do emit (Body.toBytes (HttpRequest.body req)))
+      req)
+
+Route.runWebSocketCloud.doc : Doc
+Route.runWebSocketCloud.doc =
+  {{
+  A lower-level function for running a WebSocket server on Unison Cloud. This
+  function takes a {type Route} that uses the {type OpenWebSocket} and
+  {type WebSockets} abilities, in addition to the standard Cloud abilities, and
+  returns the server as a function from {type HttpRequest} to {type Either} a
+  {type HttpResponse} or a websocket handler. The server can then be deployed
+  using {deployHttpWebSocket}.
+
+  # See also
+
+    * {Route.deployWebSocket} - calls this function and deploys the server on
+      Unison Cloud.
+  }}
+
+Route.runWebSocketIO :
+  '{g, Route, OpenWebSocket, WebSockets} ()
+  -> HttpRequest
+  ->{g, IO, Exception} Either
+    HttpResponse
+    (unison_cloud_18_0_6.websockets.WebSocket
+    ->{g, IO, Exception, WebSockets} ())
+Route.runWebSocketIO r req =
+  use Route <|>
+  Either.mapLeft
+    at1
+    (streamingAndWebSocketIO
+      (r <|> (do respond.notFound 0xs))
+      (do emit (Body.toBytes (HttpRequest.body req)))
+      req)
+
+Route.runWebSocketIO.doc : Doc
+Route.runWebSocketIO.doc =
+  {{
+  A lower-level function for running a WebSocket server in {type IO}. This
+  function takes a {type Route} that uses the {type OpenWebSocket} and
+  {type WebSockets} abilities, and returns the server as a function from
+  {type HttpRequest} to {type Either} a {type HttpResponse} or a websocket
+  handler.
+
+  See {serveWebSocket} for a higher-level function that uses this function to
+  run a WebSocket server.
+  }}
+
+Route.serve :
+  '{IO, Route, Exception} ()
+  -> server.Config
+  ->{IO, Exception} '{IO, Exception} ()
+Route.serve server config =
+  routes : Routes IO
+  routes =
+    Routes
+      []
+      (req ->
+        Exception.handleFailure (flip default500 req) do Route.run server req)
+      default500
+  Config.serve routes config
+
+Route.serve.doc : Doc
+Route.serve.doc =
+  use Parser /
+  use Route <|>
+  use Text ++
+  {{
+  Serves the given {type Route} using the given {type server.Config}, which
+  specifies the host name, port, maximum concurrent connections, and TLS
+  options (if any).
+
+  Returns a computation which, when forced, stops the server.
+
+  # Example
+
+    @typecheck ```
+    do
+      hi = do
+        name = route GET (s "hello" / Parser.text)
+        ok.text ("👋 hello " ++ name)
+      bye = do
+        name = route GET (s "goodbye" / Parser.text)
+        ok.text ("😢 goodbye " ++ name)
+      hiJson = do
+        name = route GET (s "someJson" / Parser.text)
+        ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+      stop =
+        Route.serve
+          (hi <|> bye <|> hiJson)
+          (server.Config.Config None (Port "8080") maxNat None)
+      printLine "Server running on port 8080. Press <enter> to stop."
+      _ = readLine
+      stop()
+    ```
+  }}
+
+Route.serveSimple :
+  '{IO, Route, Exception} () -> Nat ->{IO, Exception} '{IO, Exception} ()
+Route.serveSimple server port =
+  Route.serve
+    server (server.Config.Config None (Port (Nat.toText port)) maxNat None)
+
+Route.serveSimple.doc : Doc
+Route.serveSimple.doc =
+  use Parser /
+  use Route <|>
+  use Text ++
+  {{
+  Serves the given {type Route} on the given port, binding any available host
+  name, with no limit on the number of concurrent connections.
+
+  Returns a computation which, when forced, stops the server.
+
+  # Example
+
+    This starts a simple HTTP server on `localhost:8080`:
+
+    @typecheck ```
+    do
+      hi = do
+        name = route GET (s "hello" / Parser.text)
+        ok.text ("👋 hello " ++ name)
+      bye = do
+        name = route GET (s "goodbye" / Parser.text)
+        ok.text ("😢 goodbye " ++ name)
+      hiJson = do
+        name = route GET (s "someJson" / Parser.text)
+        ok.json (Json.array [Json.text "🤖 hello", Json.text name])
+      stop = serveSimple (hi <|> bye <|> hiJson) 8080
+      printLine "Server running on port 8080. Press <enter> to stop."
+      _ = readLine
+      stop()
+    ```
+  }}
+
+Route.serveWebSocket :
+  '{IO, Route, Exception, OpenWebSocket, WebSockets} ()
+  -> server.Config
+  ->{IO, Exception} '{IO, Exception} ()
+Route.serveWebSocket server config =
+  use WebSocket.Id Id
+  use systemfw_concurrent_2_2_0.Map lookup
+  use unison_cloud_18_0_6.websockets.WebSocket WebSocket
+  socketMap = systemfw_concurrent_2_2_0.Map.empty()
+  nextSocketId = IO.ref 0
+  extractId = cases WebSocket _ (Id id) -> id
+  lookupSocket s = lookup socketMap (extractId s)
+  forkServer
+    config
+    (req ->
+      (match runWebSocketIO server req with
+        Left response -> Left response
+        Right h ->
+          Right
+            (WebSocketHandler cases
+              httpws, addFinalizer ->
+                socketId =
+                  encodeNat64be
+                    (Ref.atomically nextSocketId (id -> (Nat.increment id, id)))
+                fakeSocket =
+                  WebSocket (LocationId (UID 0xs010ca1)) (Id socketId)
+                systemfw_concurrent_2_2_0.Map.put socketMap socketId httpws
+                addFinalizer
+                  (_ -> systemfw_concurrent_2_2_0.Map.delete socketMap socketId)
+                handler : '{IO, Exception, WebSockets} () ->{IO, Exception} ()
+                handler thunk =
+                  handle thunk()
+                  with cases
+                    { tryReceive cloudWS -> k } ->
+                      lookup socketMap (extractId cloudWS)
+                        |> (cases
+                          Some ws ->
+                            handler do k (catch do WebSocket.receive ws)
+                          None ->
+                            raiseGeneric
+                              "Tried to read from a closed websocket" ())
+                    { tryClose cloudWS -> k } ->
+                      lookup socketMap (extractId cloudWS) |> (cases
+                        Some ws -> handler do k (catch do WebSocket.close ws)
+                        None    -> ())
+                    { trySend cloudWS msg -> k } ->
+                      lookup socketMap (extractId cloudWS)
+                        |> (cases
+                          Some ws ->
+                            handler do k (catch do WebSocket.send ws msg)
+                          None -> ())
+                    { a } -> a
+                handler do h fakeSocket)))
+
+Route.streaming :
+  '{g, Route} ()
+  -> '{g, Stream Bytes} ()
+  -> HttpRequest
+  ->{g, Exception} (HttpResponse, '{g, Stream Bytes} ())
+Route.streaming r inputStream req =
+  use Bytes ++
+  use Route <|>
+  (Headers h) = HttpRequest.headers req
+  ctx =
+    HttpContext
+      (HttpRequest.method req)
+      (HttpRequest.version req)
+      (HttpRequest.uri req)
+      None
+      h
+      (Status 204 "No Content")
+      Version.http11
+      Map.empty
+  (catchHttpErrors do
+    streaming.impl (r <|> (do respond.notFound Bytes.empty)) inputStream ctx)
+    |> (cases
+      Left response -> (response, do ())
+      Right (HttpContext rm rv ru qp rh s v h, out) ->
+        if List.contains "chunked" (Map.getOrElse [] "Transfer-Encoding" h) then
+          (HttpResponse s v (Headers h) (Body 0xs), out)
+        else
+          ( HttpResponse
+              s v (Headers h) (Stream.foldRight (++) 0xs out |> Body)
+          , do ()
+          ))
+
+Route.streaming.doc : Doc
+Route.streaming.doc =
+  {{
+  Runs a {type Route} computation in a streaming fashion. Takes:
+
+  1. A {type Route} computation that describes how to decode the request body
+     (whether streaming or not) and may append to the response body.
+  2. The request body as a {type Stream} of {type Bytes}.
+  3. The {type HttpRequest} containing the fields of the request.
+
+  Returns the modified {type HttpResponse} after running the {type Route}, and
+  the modified response body, as a {type Stream}.
+
+  This is used internally by {Route.serve}.
+  }}
+
+Route.streaming.impl :
+  '{g, Route} ()
+  -> '{g, Stream Bytes} ()
+  -> HttpContext
+  ->{g, Exception} (HttpContext, '{g, Stream Bytes} ())
+Route.streaming.impl r inputStream ctx =
+  go :
+    '{g, Stream Bytes} ()
+    -> '{g, Stream Bytes} ()
+    -> HttpContext
+    -> Request Route a
+    ->{g, Exception} (HttpContext, '{g, Stream Bytes} ())
+  go inputStream outputStream ctx = cases
+    { _ } -> (ctx, outputStream)
+    { appendBody bytes -> k } ->
+      out = do
+        outputStream()
+        emit bytes
+      handle k() with go inputStream out ctx
+    { Route.skip e -> k } ->
+      match e with
+        Failure typ msg inner| typ === typeLink UriParseFailure  ->
+          handle badRequest.text msg with go inputStream outputStream ctx
+        _ -> Exception.raise e
+    { getHttpContext -> k } ->
+      handle k ctx with go inputStream outputStream ctx
+    { setHttpContext c -> k } -> handle k() with go inputStream outputStream c
+    { request.decodeBody d -> k } ->
+      (x, residue) =
+        Throw.toException codec.DecodeError.toFailure do
+          codec.Decode.fromStreamPartial d inputStream
+      handle k x with go residue outputStream ctx
+  handle r() with go inputStream (do ()) ctx
+
+Route.streaming.impl.doc : Doc
+Route.streaming.impl.doc =
+  {{
+  Internal implementation of a streaming {type Route} handler. Takes:
+
+  1. A {type Route} computation that also describes how to decode the request
+     body
+
+  (whether streaming or not) and may {appendBody} to the response body. 2. The
+  request body as a {type Stream} of {type Bytes}. 3. The {type HttpContext}
+  containing the fields of the request and response.
+
+  Returns the modified {type HttpContext} after running the {type Route}, and
+  the modified response body, as a {type Stream}.
+  }}
+
+Route.streamingAndWebSocketCloud :
+  '{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  OpenWebSocket,
+  Services,
+  Remote,
+  WebSockets,
+  Random,
+  Log,
+  Scratch} ()
+  -> '{Remote, Stream Bytes} ()
+  -> HttpRequest
+  ->{unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} Either
+    (HttpResponse, '{Remote, Stream Bytes} ())
+    (unison_cloud_18_0_6.websockets.WebSocket
+    ->{Exception, Remote, WebSockets} ())
+Route.streamingAndWebSocketCloud r inputStream req =
+  use Bytes ++
+  ctx = fromRequest req
+  match streamingAndWebSocketRemote.impl r inputStream ctx with
+    Right f -> Right (pool.wrap f)
+    Left (ctx@(HttpContext rm rv ru qp rh s v h), out) ->
+      if List.contains "chunked" (Map.getOrElse [] "Transfer-Encoding" h) then
+        Left (toResponse ctx, out)
+      else
+        Left
+          ( HttpResponse
+              s v (Headers h) (Stream.foldRight (++) 0xs out |> Body)
+          , do ()
+          )
+
+Route.streamingAndWebSocketCloud.doc : Doc
+Route.streamingAndWebSocketCloud.doc =
+  {{
+  Combines a streaming route with a WebSocket route. This function takes a
+  streaming route, a stream of bytes, and an HTTP request, and returns either
+  an {type HttpResponse} and a stream of bytes, or a function that can be used
+  to handle a WebSocket connection.
+
+  Use this function for services that can handle both HTTP streaming and
+  WebSocket connections. If you only need to handle WebSockets, use
+  {runWebSocketCloud} or {Route.deployWebSocket} instead.
+  }}
+
+Route.streamingAndWebSocketIO :
+  '{g, IO, Route, Exception, OpenWebSocket, WebSockets} ()
+  -> '{g, IO, Stream Bytes} ()
+  -> HttpRequest
+  ->{g, IO, Exception} Either
+    (HttpResponse, '{g, IO, Stream Bytes} ())
+    (unison_cloud_18_0_6.websockets.WebSocket
+    ->{g, IO, Exception, WebSockets} ())
+Route.streamingAndWebSocketIO r inputStream req =
+  use Bytes ++
+  use Route <|>
+  (Headers h) = HttpRequest.headers req
+  ctx = fromRequest req
+  match catchHttpErrors do
+    streamingAndWebSocketIO.impl
+      (r <|> (do respond.notFound Bytes.empty)) inputStream ctx with
+    Left response -> Left (response, do ())
+    Right (Left (HttpContext rm rv ru qp rh s v h, out)) ->
+      if List.contains "chunked" (Map.getOrElse [] "Transfer-Encoding" h) then
+        Left (HttpResponse s v (Headers h) (Body 0xs), out)
+      else
+        Left
+          ( HttpResponse
+              s v (Headers h) (Stream.foldRight (++) 0xs out |> Body)
+          , do ()
+          )
+    Right (Right x) -> Right x
+
+Route.streamingAndWebSocketIO.impl :
+  '{g, IO, Route, Exception, OpenWebSocket, WebSockets} ()
+  -> '{g, IO, Stream Bytes} ()
+  -> HttpContext
+  ->{g, IO, Exception} Either
+    (HttpContext, '{g, IO, Stream Bytes} ())
+    (unison_cloud_18_0_6.websockets.WebSocket ->{g, IO, Exception} ())
+Route.streamingAndWebSocketIO.impl r inputStream ctx =
+  ensureNotWebSocket message = cases
+    Some true -> raiseInternalServerError message ()
+    _         -> ()
+  go :
+    '{g, IO, Stream Bytes} ()
+    -> '{g, IO, Stream Bytes} ()
+    -> HttpContext
+    -> Optional Boolean
+    -> Request {Route, OpenWebSocket} a
+    ->{g, IO, Exception} Either
+      (HttpContext, '{g, IO, Stream Bytes} ())
+      (unison_cloud_18_0_6.websockets.WebSocket ->{g, IO, Exception} ())
+  go inputStream outputStream ctx isWS = cases
+    { openWebSocket -> k } ->
+      if isWS === Some false then
+        raiseInternalServerError
+          "Cannot upgrade to WebSocket after HTTP response has been sent" ()
+      else
+        Right
+          (ws ->
+            unison_base_3_17_0.ignore
+              (handle k ws with go inputStream outputStream ctx (Some true)))
+    { appendBody bytes -> k } ->
+      ensureNotWebSocket
+        "Tried to append response body after upgrading to WebSocket" isWS
+      out = do
+        outputStream()
+        emit bytes
+      handle k() with go inputStream out ctx (Some false)
+    { Route.skip e -> k } ->
+      match e with
+        Failure typ msg inner| typ === typeLink UriParseFailure  ->
+          handle badRequest.text msg with go inputStream outputStream ctx isWS
+        _ -> Exception.raise e
+    { getHttpContext -> k } ->
+      handle k ctx with go inputStream outputStream ctx isWS
+    { setHttpContext c -> k } ->
+      ensureNotWebSocket
+        "Tried to modify HTTP context after upgrading to WebSocket" isWS
+      handle k() with go inputStream outputStream c (Some false)
+    { request.decodeBody d -> k } ->
+      (x, residue) =
+        Throw.toException codec.DecodeError.toFailure do
+          codec.Decode.fromStreamPartial d inputStream
+      handle k x with go residue outputStream ctx isWS
+    { a } -> Left (ctx, outputStream)
+  stripWebSockets do handle r() with go inputStream (do ()) ctx None
+
+Route.streamingAndWebSocketRemote :
+  '{Route, Exception, OpenWebSocket, Remote, WebSockets} ()
+  -> '{Remote, Stream Bytes} ()
+  -> HttpRequest
+  ->{Exception, Remote} Either
+    (HttpResponse, '{Remote, Stream Bytes} ())
+    (unison_cloud_18_0_6.websockets.WebSocket
+    ->{Exception, Remote, WebSockets} ())
+Route.streamingAndWebSocketRemote r inputStream req =
+  use Bytes ++
+  use Route <|>
+  (Headers h) = HttpRequest.headers req
+  ctx = fromRequest req
+  match catchHttpErrors do
+    streamingAndWebSocketRemote.impl
+      (r <|> (do respond.notFound Bytes.empty)) inputStream ctx with
+    Left response -> Left (response, do ())
+    Right (Left (HttpContext rm rv ru qp rh s v h, out)) ->
+      if List.contains "chunked" (Map.getOrElse [] "Transfer-Encoding" h) then
+        Left (HttpResponse s v (Headers h) (Body 0xs), out)
+      else
+        Left
+          ( HttpResponse
+              s v (Headers h) (Stream.foldRight (++) 0xs out |> Body)
+          , do ()
+          )
+    Right (Right x) -> Right x
+
+Route.streamingAndWebSocketRemote.doc : Doc
+Route.streamingAndWebSocketRemote.doc =
+  {{
+  Combines a streaming route with a WebSocket route. This function takes a
+  streaming route, a stream of bytes, and an HTTP request, and returns either
+  an {type HttpResponse} and a stream of bytes, or a function that can be used
+  to handle a WebSocket connection.
+
+  This is a low-level function that is used to implement the higher-level
+  functions {streamingAndWebSocketCloud}, {runWebSocketCloud}, and
+  {Route.deployWebSocket}. Use this function if you need more control over the
+  behavior of how your service interacts with the {type Remote} ability.
+  }}
+
+Route.streamingAndWebSocketRemote.impl :
+  '{g, Route, Exception, OpenWebSocket, Remote, WebSockets} ()
+  -> '{Remote, Stream Bytes} ()
+  -> HttpContext
+  ->{g, Exception, Remote} Either
+    (HttpContext, '{Remote, Stream Bytes} ())
+    (unison_cloud_18_0_6.websockets.WebSocket ->{g, Exception, Remote} ())
+Route.streamingAndWebSocketRemote.impl r inputStream ctx =
+  ensureNotWebSocket message = cases
+    Some true -> raiseInternalServerError message ()
+    _         -> ()
+  go :
+    '{Remote, Stream Bytes} ()
+    -> '{Remote, Stream Bytes} ()
+    -> HttpContext
+    -> Optional Boolean
+    -> Request {Route, OpenWebSocket} a
+    ->{g, Exception, Remote} Either
+      (HttpContext, '{Remote, Stream Bytes} ())
+      (unison_cloud_18_0_6.websockets.WebSocket ->{g, Exception, Remote} ())
+  go inputStream outputStream ctx isWS = cases
+    { openWebSocket -> k } ->
+      if isWS === Some false then
+        raiseInternalServerError
+          "Cannot upgrade to WebSocket after HTTP response has been sent" ()
+      else
+        Right
+          (ws ->
+            unison_base_3_17_0.ignore
+              (handle k ws with go inputStream outputStream ctx (Some true)))
+    { appendBody bytes -> k } ->
+      ensureNotWebSocket
+        "Tried to append response body after upgrading to WebSocket" isWS
+      out = do
+        outputStream()
+        emit bytes
+      handle k() with go inputStream out ctx (Some false)
+    { Route.skip e -> k } ->
+      match e with
+        Failure typ msg inner| typ === typeLink UriParseFailure  ->
+          handle badRequest.text msg with go inputStream outputStream ctx isWS
+        _ -> Exception.raise e
+    { getHttpContext -> k } ->
+      handle k ctx with go inputStream outputStream ctx isWS
+    { setHttpContext c -> k } ->
+      ensureNotWebSocket
+        "Tried to modify HTTP context after upgrading to WebSocket" isWS
+      handle k() with go inputStream outputStream c (Some false)
+    { request.decodeBody d -> k } ->
+      (x, residue) =
+        Throw.toException codec.DecodeError.toFailure do
+          codec.Decode.fromStreamPartial d inputStream
+      handle k x with go residue outputStream ctx isWS
+    { a } -> Left (ctx, outputStream)
+  stripWebSockets do handle r() with go inputStream (do ()) ctx None
+
+Route.symbolic.or.doc : Doc
+Route.symbolic.or.doc =
+  use Parser /
+  use Route <|> skip
+  use Text ++
+  {{
+  Combines two routes or HTTP servers into a single one that tries them both.
+  The second one will only be tried if the first one calls {skip}.
+
+  # Example
+
+    This checks if the request was for `/hello/name` or `goodbye/name` and
+    responds appropriately. The {route} function calls {skip} if the requested
+    path doesn't match the {Parser} it's given.
+
+    @typecheck ```
+    hi = do
+      name = route GET (s "hello" / Parser.text)
+      ok.text ("👋 hello " ++ name)
+    bye = do
+      name = route GET (s "goodbye" / Parser.text)
+      ok.text ("😢 goodbye " ++ name)
+    server = hi <|> bye
+    Route.run server
+    ```
+
+  # See also
+
+    * {Route.or} - the prefix version of this.
+  }}
+
+Route.test.harness : '{g, Route} () -> '{f, Http} b ->{f, g, Exception} b
+Route.test.harness server client =
+  makeRequest r = catch do Route.run server r
+  h = cases
+    { tryRequest req -> k } -> handle k (makeRequest req) with h
+    { a }                   -> a
+  handle client() with h
+
+Route.test.harness.cloud :
+  '{IO, Exception, Cloud} s
+  -> (s
+  ->{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} ())
+  -> (s
+  ->{unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} b)
+  -> (b ->{IO, Exception, Each, Random, Cloud, Label} ())
+  ->{IO, Exception} [Result]
+Route.test.harness.cloud setup server client test = Cloud.run.local do
+  s = setup()
+  env = Environment.default()
+  b = Cloud.submit env do harness (do server s) do client s
+  test.verify do test b
+
+Route.test.harness.cloud.doc : Doc
+Route.test.harness.cloud.doc =
+  use Http get
+  use test ensureEqual
+  use unison_base_3_17_0 ignore
+  {{
+  A test harness for testing routes that run on Unison Cloud. Takes a setup, a
+  server, a client, and a test. The client is used to make requests to the
+  server, and the server is run with the requests made by the client. The
+  harness returns the list of {type Result} values generated by the test.
+
+  # Argument 1: The Setup
+
+    The setup is alloed to use the {type IO}, {type Exception}, and
+    {type Cloud} abilities to set up any shared context that the server and
+    client need. The setup is run once before the server and client are run.
+
+  # Argument 2: The Server
+
+    The server is a function that takes the value returned by the setup. The
+    server is allowed to use the {type Route},
+    {type unison_cloud_18_0_6.Config}, {type Exception},
+    {type unison_cloud_18_0_6.State}, {type Http}, {type Services},
+    {type Remote}, {type Random}, {type Log}, and {type Scratch} abilities. The
+    harness runs the server and makes requests to it using the client.
+
+  # Argument 3: The Client
+
+    The client is a function that takes the value returned by the setup. The
+    client is allowed to use the {type unison_cloud_18_0_6.Config},
+    {type Exception}, {type unison_cloud_18_0_6.State}, {type Http},
+    {type Services}, {type Remote}, {type Random}, {type Log}, and
+    {type Scratch} abilities. The harness uses the client to make requests to
+    the server.
+
+  # Argument 4: The Test
+
+    The test is a function that takes the value returned by the client. The
+    test is allowed to use the {type Cloud}, {type IO}, {type Exception},
+    {type Each}, {type Random}, and {type Label} abilities. The test is run
+    after the server and client have been run.
+
+  # Example 1
+
+    The following example tests a simple server that uses the
+    {type unison_cloud_18_0_6.State} ability. The shared setup is a database,
+    and the server increments a counter in the database when it receives a
+    request to the `/increment` endpoint:
+
+    @typecheck ```
+    myTest = do
+      setup = Database.default
+      server db =
+        use Nat +
+        Route.noCapture GET (s "increment")
+        cell = Cell.named db "counter" 0
+        Cell.modify cell (n -> (n + 1, ()))
+        ok.text (Nat.toText (Cell.read cell))
+      client _ =
+        url = parseOrBug "https://www.example.org/increment"
+        ignore (get url)
+        get url |> HttpResponse.body |> Body.toBytes |> fromUtf8
+      test response = ensureEqual response "1"
+      cloud setup server client test
+    myTest()
+    ```
+
+    Then in UCM you can use the `io.test` command to run your test:
+
+    ``` ucm
+    @me/myProject/main> io.test myTest
+    ```
+
+    Or use `io.test.all` to run all such tests in your project:
+
+    ``` ucm
+    @me/myProject/main> io.test.all
+    ```
+
+  # Example 2
+
+    The following example tests a simple server that uses the {type Log}
+    ability. The server logs the name of the person it greets when it receives
+    a request to the `/hello` endpoint. The test verifies that the log contains
+    the name of the person it greets. This uses an empty setup, but takes
+    advantage of the fact that the `test` argument can use the {type Log}
+    ability:
+
+    @typecheck ```
+    helloWorldRoute : '{Route, Log} ()
+    helloWorldRoute = do
+      use Text ++
+      name = route GET Parser.text
+      info "request for greeting" [("name", name)]
+      ok.text ("👋 hello " ++ name ++ "\n")
+    logTest =
+      do
+        setup = do ()
+        server = helloWorldRoute
+        client = do ignore (get (parseOrBug "/world"))
+        test =
+          do
+            use Json text
+            logs = Cloud.logs QueryOptions.default
+            ensureEqual
+              logs
+              [ Json.object
+                  [ ("name", text "world")
+                  , ("level", text "info")
+                  , ("message", text "request for greeting")
+                  ]
+              ]
+        cloud setup server client test
+    logTest()
+    ```
+
+    Use the `io.test` or `io.test.all` commands in UCM to run the test, as
+    shown in the previous example.
+  }}
+
+Route.test.harness.cloud.simple :
+  '{IO, Exception, Cloud} s
+  -> (s
+  ->{Route,
+  unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} ())
+  -> (s
+  ->{unison_cloud_18_0_6.Config,
+  Exception,
+  unison_cloud_18_0_6.State,
+  Http,
+  Services,
+  Remote,
+  Random,
+  Log,
+  Scratch} b)
+  ->{IO, Exception} b
+Route.test.harness.cloud.simple setup server client = Cloud.run.local do
+  s = setup()
+  Cloud.submit Environment.default() do harness (do server s) do client s
+
+Route.test.harness.cloud.simple.doc : Doc
+Route.test.harness.cloud.simple.doc =
+  {{
+  A test harness for testing routes that run on Unison Cloud. Takes a setup, a
+  server, and a client. The client is used to make requests to the server, and
+  the server is run with the requests made by the client. The harness returns
+  the result from the client.
+
+  The server and the client both take an argument, which is the value returned
+  from the setup. This allows the test to set up any necessary state before
+  running the server and client.
+
+  # Example
+
+    This example tests a simple server that uses the
+    {type unison_cloud_18_0_6.State} ability. The shared setup is a database,
+    and the server increments a counter in the database when it receives a
+    request to the `/increment` endpoint:
+
+    @typecheck ```
+    myTest = do
+      test.verify do
+        setup = Database.default
+        server db =
+          use Nat +
+          Route.noCapture GET (s "increment")
+          cell = Cell.named db "counter" 0
+          Cell.modify cell (n -> (n + 1, ()))
+          ok.text (Nat.toText (Cell.read cell))
+        client db =
+          use Http get
+          url = parseOrBug "https://www.example.org/increment"
+          unison_base_3_17_0.ignore (get url)
+          get url |> HttpResponse.body |> Body.toBytes |> fromUtf8
+        response = catch do cloud.simple setup server client
+        test.ensureEqual response (Right "2")
+    myTest()
+    ```
+
+    Then in UCM you can use the `io.test` command to run your test:
+
+    ``` ucm
+    @me/myProject/main> io.test myTest
+    ```
+
+    Or use `io.test.all` to run all such tests in your project:
+
+    ``` ucm
+    @me/myProject/main> io.test.all
+    ```
+  }}
+
+Route.test.harness.cloud.simple.example : '{IO} [Result]
+Route.test.harness.cloud.simple.example = do
+  test.verify do
+    setup = Database.default
+    server db =
+      use Nat +
+      Route.noCapture GET (s "increment")
+      cell = Cell.named db "counter" 0
+      Cell.modify cell (n -> (n + 1, ()))
+      ok.text (Nat.toText (Cell.read cell))
+    client db =
+      use Http get
+      url = parseOrBug "https://www.example.org/increment"
+      unison_base_3_17_0.ignore (get url)
+      get url |> HttpResponse.body |> Body.toBytes |> fromUtf8
+    response = catch do cloud.simple setup server client
+    test.ensureEqual response (Right "2")
+
+Route.test.harness.doc : Doc
+Route.test.harness.doc =
+  {{
+  A test harness for testing Unison Cloud services. Takes a setup, a server,
+  and a client. The client is used to make requests to the server, and the
+  server is run with the requests made by the client. The harness returns the
+  result from the client.
+
+  The server and the client both take an argument, which is the value returned
+  from the setup. This allows the test to set up any necessary state before
+  running the server and client.
+
+  # Example
+
+    This example tests a simple server that replies with a hello message. The
+    shared setup is a database, and the server increments a counter in the
+    database when it receives a request to the `/increment` endpoint:
+
+    ```
+    test.verify do
+      exampleClient =
+        do
+          Http.get (parseOrBug "https://www.example.org/Unison")
+            |> HttpResponse.body
+            |> Body.toBytes
+            |> fromUtf8
+      exampleServer = do
+        use Text ++
+        name = route GET Parser.text
+        ok.text ("Hello, " ++ name ++ "!")
+      response = catch do harness exampleServer exampleClient
+      test.ensureEqual response (Right "Hello, Unison!")
+    ```
+  }}
+
+Route.try : '{g, Route} a ->{g, Route} Either Failure a
+Route.try r =
+  use request decodeBody
+  go = cases
+    { a }                     -> Right a
+    { Route.skip e -> _ }     -> Left e
+    { getHttpContext -> k }   ->
+      ctx = getHttpContext
+      handle k ctx with go
+    { setHttpContext c -> k } ->
+      setHttpContext c
+      handle k() with go
+    { appendBody bs -> k }    ->
+      appendBody bs
+      handle k() with go
+    { decodeBody d -> k }     ->
+      v = decodeBody d
+      handle k v with go
+  handle r() with go
+
+Route.try.doc : Doc
+Route.try.doc =
+  {{
+  Runs a {type Route} computation, returning the result or a {type Failure} if
+  the route calls {Route.skip}.
+
+  # See also
+
+    * {Route.or} - tries one route and falls back to another if the first one
+      skips.
+  }}
+
+Route.tryRoute :
+  Method -> Parser (a ->{g} a) a ->{Route, Throw UriParseFailure} a
+Route.tryRoute m p =
+  m2 = request.method()
+  if m2 === m then tryUri p else Route.skip (methodDidntMatch m m2)
+
+Route.tryRoute.doc : Doc
+Route.tryRoute.doc =
+  use Parser /
+  use Text ++
+  {{
+  `` tryRoute m p `` parses the request URI using the given {type Parser}, and
+  if successful, returns the result of the parser.
+
+  If the request method does not match the given method, the route is skipped.
+
+  If the parser fails with a {type UriParseFailure}, the failure is thrown with
+  {throw} so you can handle it e.g. by responding with {respond.badRequest}.
+
+  See also {route} which rethrows the {type UriParseFailure} into a default
+  handler which responds with a 400 Bad Request status code.
+
+  # Example
+
+    @typecheck ```
+    do
+      name = tryRoute GET (s "hello" / Parser.text)
+      ok.text ("👋 Hello, " ++ name ++ "!")
+    ```
+  }}
+
+Route.tryUri : Parser (a ->{g} a) a ->{Route, Throw UriParseFailure} a
+Route.tryUri p = match tryParse p request.uri() with
+  Left (BadPath []) -> Route.skip pathDidntMatch
+  Left e            -> throw e
+  Right a           -> a
+
+Route.uri : Parser (a ->{g} a) a ->{Route} a
+Route.uri p = catchWith (Route.skip << uriParseFailure) do tryUri p
+
+Route.uri.doc : Doc
+Route.uri.doc =
+  use Parser /
+  use Route uri
+  use Text ++
+  {{
+  `` uri p `` parses the request URI using the given {type Parser}, and if
+  successful, returns the result of the parser. If the parser fails, the route
+  is skipped.
+
+  # Example
+
+    @typecheck ```
+    do
+      name = uri (s "hello" / Parser.text)
+      ok.text ("👋 Hello, " ++ name ++ "!")
+    ```
+
+  # See also
+
+    * {route} - also matches on the {type Method} of the request.
+    * {Route.noCapture} - matches on the {type URI} and {type Method} but
+      doesn't return a result.
+  }}
+
+up.base.abilities.Exception.handleFailure :
+  (Failure ->{e} a) -> '{g, Exception} a ->{e, g} a
+up.base.abilities.Exception.handleFailure handler c = match catch c with
+  Left e  -> handler e
+  Right x -> x
+
+up.base.data.Multimap.fromList : [(k, v)] -> Map k [v]
+up.base.data.Multimap.fromList kvs =
+  List.foldLeft (cases m, (k, v) -> Multimap.insert k v m) Map.empty kvs
+
+up.base.data.Multimap.fromList.doc : Doc
+up.base.data.Multimap.fromList.doc =
+  {{
+  Converts a list of key-value pairs into a {type Map} from keys to lists of
+  values.
+
+  # Example
+
+    ```
+    Map.toList (Multimap.fromList [(1, "a"), (1, "b"), (2, "c")])
+    ```
+  }}
+
+up.base.Float.fromHalfPrecision : Nat -> Float
+up.base.Float.fromHalfPrecision half =
+  use Nat + - == and or shiftLeft shiftRight
+  s = and 1 (shiftRight half 15)
+  e = shiftRight half 10 |> and 31
+  m = and half 1023
+  let
+    (e', m') =
+      if e == 0 then
+        if m == 0 then (0, 0)
+        else
+          lz = Nat.leadingZeros m - 54
+          newM = and 1023 (shiftLeft m (lz + 1))
+          (1008 - lz, shiftLeft newM 42)
+      else
+        if e == 31 then (2047, shiftLeft m 42) else (1008 + e, shiftLeft m 42)
+    signBit = shiftLeft s 63
+    exponentBits = shiftLeft e' 52
+    significandBits = m'
+    double = or signBit (or exponentBits significandBits)
+    Float.fromRepresentation double
+
+up.base.Float.fromHalfPrecision.doc : Doc
+up.base.Float.fromHalfPrecision.doc =
+  use base.Float fromHalfPrecision
+  {{
+  Converts a 16-bit half-precision floating point number encoded in the low 16
+  bits of a {type Nat}, to a 64-bit double-precision floating point number.
+
+  # Examples
+
+    ```
+    fromHalfPrecision 15360
+    ```
+
+    ```
+    fromHalfPrecision 1023
+    ```
+
+    ```
+    fromHalfPrecision 31744
+    ```
+  }}
+
+test> up.base.Float.fromHalfPrecision.tests.largestSubnormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 1023)
+      == 4544123227923808256)
+
+test> up.base.Float.fromHalfPrecision.tests.maxHalf =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 31743)
+      == 4679235614791434240)
+
+test> up.base.Float.fromHalfPrecision.tests.negativeOne =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 48128)
+      == 13830554455654793216)
+
+test> up.base.Float.fromHalfPrecision.tests.negativeZero =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 32768)
+      == 9223372036854775808)
+
+test> up.base.Float.fromHalfPrecision.tests.normal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 20902)
+      == 4631556392564555776)
+
+test> up.base.Float.fromHalfPrecision.tests.notANumber =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 32256)
+      == 9221120237041090560)
+
+test> up.base.Float.fromHalfPrecision.tests.positiveOne =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 15360)
+      == 4607182418800017408)
+
+test> up.base.Float.fromHalfPrecision.tests.positiveZero =
+  use Nat ==
+  check (Float.toRepresentation (base.Float.fromHalfPrecision 0) == 0)
+
+test> up.base.Float.fromHalfPrecision.tests.smallestNormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 1024)
+      == 4544132024016830464)
+
+test> up.base.Float.fromHalfPrecision.tests.subnormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromHalfPrecision 422)
+      == 4538045127645462528)
+
+up.base.Float.fromSinglePrecision : Nat -> Float
+up.base.Float.fromSinglePrecision n =
+  use Nat + - == and or shiftLeft shiftRight
+  s = and 1 (shiftRight n 31)
+  e = shiftRight n 23 |> and 255
+  m = and n 8388607
+  let
+    (e', m') =
+      if e == 0 then
+        if m == 0 then (0, 0)
+        else
+          lz = Nat.leadingZeros m - 41
+          newM = and 8388607 (shiftLeft m (lz + 1))
+          (896 - lz, shiftLeft newM 29)
+      else
+        if e == 255 then (2047, shiftLeft m 29) else (896 + e, shiftLeft m 29)
+    signBit = shiftLeft s 63
+    exponentBits = shiftLeft e' 52
+    significandBits = m'
+    double = or signBit (or exponentBits significandBits)
+    Float.fromRepresentation double
+
+up.base.Float.fromSinglePrecision.doc : Doc
+up.base.Float.fromSinglePrecision.doc =
+  use base.Float fromSinglePrecision
+  {{
+  Converts a 32-bit single-precision floating point number encoded in the low
+  32 bits of a {type Nat}, to a 64-bit double-precision floating point number.
+
+  # Examples
+
+    ```
+    fromSinglePrecision 1065353216
+    ```
+
+    ```
+    fromSinglePrecision 1056964608
+    ```
+
+    ```
+    fromSinglePrecision 1048576000
+    ```
+  }}
+
+test> up.base.Float.fromSinglePrecision.tests.largestSubnormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 8388607)
+      == 4039728864677593088)
+
+test> up.base.Float.fromSinglePrecision.tests.maxSingle =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 2139095039)
+      == 5183643170566569984)
+
+test> up.base.Float.fromSinglePrecision.tests.negativeOne =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 3212836864)
+      == 13830554455654793216)
+
+test> up.base.Float.fromSinglePrecision.tests.negativeZero =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 2147483648)
+      == 9223372036854775808)
+
+test> up.base.Float.fromSinglePrecision.tests.normal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 1089469440)
+      == 4620129717972893696)
+
+test> up.base.Float.fromSinglePrecision.tests.notANumber =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 2139095040)
+      == 9218868437227405312)
+
+test> up.base.Float.fromSinglePrecision.tests.positiveOne =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 1065353216)
+      == 4607182418800017408)
+
+test> up.base.Float.fromSinglePrecision.tests.positiveZero =
+  use Nat ==
+  check (Float.toRepresentation (base.Float.fromSinglePrecision 0) == 0)
+
+test> up.base.Float.fromSinglePrecision.tests.smallestNormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 8388608)
+      == 4039728865751334912)
+
+test> up.base.Float.fromSinglePrecision.tests.subnormal =
+  use Nat ==
+  check
+    (Float.toRepresentation (base.Float.fromSinglePrecision 5119746)
+      == 4036218951905050624)
+
+up.base.Float.product : [Float] -> Float
+up.base.Float.product =
+  use Float *
+  List.foldLeft (*) 1.0
+
+up.base.Float.product.doc : Doc
+up.base.Float.product.doc =
+  use base.Float product
+  {{
+  `` product ns `` returns the product of all the values in `ns`. If `ns` is
+  empty, returns ``1.0``.
+
+  # Examples
+
+    ```
+    product [1.0, 0.2, 30.0, 1.2]
+    ```
+
+    ```
+    product [12.0]
+    ```
+
+    ```
+    product []
+    ```
+  }}
+
+up.base.Float.sum : [Float] -> Float
+up.base.Float.sum =
+  use Float +
+  List.foldLeft (+) 0.0
+
+up.base.Float.sum.doc : Doc
+up.base.Float.sum.doc =
+  use base.Float sum
+  {{
+  `` sum ns `` returns the sum of all the values in `ns`. If `ns` is empty,
+  returns ``0.0``.
+
+  # Examples
+
+    ```
+    sum [1.0, 0.2, 3.0e-2, 4.0e-3]
+    ```
+
+    ```
+    sum [12.0]
+    ```
+
+    ```
+    sum []
+    ```
+  }}
+
+up.base.Float.toHalfPrecision : Float -> Nat
+up.base.Float.toHalfPrecision n =
+  use Int - < > abs
+  use Nat != + == and or shiftLeft shiftRight
+  double = Float.toRepresentation n
+  sign = shiftRight double 63
+  exp = and (shiftRight double 52) 2047
+  fraction = and double 4503599627370495
+  let
+    (halfExp, halfFraction) =
+      if exp == 0
+        && fraction == 0 then (0, 0)
+      else
+        if exp == 2047 then
+          (shiftLeft 31 10, and (shiftRight fraction 42) 1023)
+        else
+          normExp = Nat.toInt exp - +1008
+          if normExp > +30 then (shiftLeft 31 10, 0)
+          else
+            if normExp < -10 then (0, 0)
+            else
+              if normExp < +1 then
+                shift = abs (+1 - normExp)
+                ( 0
+                , shiftRight
+                    (or 1024 (and (shiftRight fraction 42) 1023)) shift
+                )
+              else
+                (shiftLeft (abs normExp) 10, and (shiftRight fraction 42) 1023)
+    roundingBit = isSetBit 41 fraction
+    lastMantissa = isSetBit 42 fraction
+    restOfMantissa = dropBits 23 fraction != 0
+    mantissa =
+      if (restOfMantissa || lastMantissa) && roundingBit then halfFraction + 1
+      else halfFraction
+    halfSign = shiftLeft sign 15
+    or halfSign (or halfExp mantissa)
+
+up.base.Float.toHalfPrecision.doc : Doc
+up.base.Float.toHalfPrecision.doc =
+  use base.Float toHalfPrecision
+  {{
+  Converts a 64-bit double-precision floating point number to a 16-bit
+  half-precision floating point number encoded in the low 16 bits of a
+  {type Nat}.
+
+  # Examples
+
+    ```
+    toHalfPrecision 1.0
+    ```
+
+    ```
+    toHalfPrecision 0.5
+    ```
+
+    ```
+    toHalfPrecision 0.25
+    ```
+  }}
+
+test> up.base.Float.toHalfPrecision.monotonic = test.verify do
+  use Float <=
+  use Random float
+  use base.Float fromHalfPrecision toHalfPrecision
+  Each.repeat 1000
+  n = float()
+  m = float()
+  halfn = toHalfPrecision n
+  halfm = toHalfPrecision m
+  doublen = fromHalfPrecision halfn
+  doublem = fromHalfPrecision halfm
+  ensure (iff (n <= m) (doublen <= doublem))
+
+test> up.base.Float.toHalfPrecision.tests.largestSubnormal =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4544123227923808256)
+      == 1023)
+
+test> up.base.Float.toHalfPrecision.tests.maxHalf =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4679235614791434240)
+      == 31743)
+
+test> up.base.Float.toHalfPrecision.tests.negativeOne =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 13830554455654793216)
+      == 48128)
+
+test> up.base.Float.toHalfPrecision.tests.negativeZero =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 9223372036854775808)
+      == 32768)
+
+test> up.base.Float.toHalfPrecision.tests.normal =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4631556392564555776)
+      == 20902)
+
+test> up.base.Float.toHalfPrecision.tests.notANumber =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 9221120237041090560)
+      == 32256)
+
+test> up.base.Float.toHalfPrecision.tests.positiveOne =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4607182418800017408)
+      == 15360)
+
+test> up.base.Float.toHalfPrecision.tests.positiveZero =
+  use Nat ==
+  check (base.Float.toHalfPrecision (Float.fromRepresentation 0) == 0)
+
+test> up.base.Float.toHalfPrecision.tests.smallestNormal =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4544132024016830464)
+      == 1024)
+
+test> up.base.Float.toHalfPrecision.tests.subnormal =
+  use Nat ==
+  check
+    (base.Float.toHalfPrecision (Float.fromRepresentation 4538045127645462528)
+      == 422)
+
+up.base.Float.toSinglePrecision : Float -> Nat
+up.base.Float.toSinglePrecision n =
+  use Int - < > abs
+  use Nat != == and or shiftLeft shiftRight
+  double = Float.toRepresentation n
+  sign = shiftRight double 63
+  exp = and (shiftRight double 52) 2047
+  fraction = and double 4503599627370495
+  let
+    (singleExp, singleFraction) =
+      if exp == 0
+        && fraction == 0 then (0, 0)
+      else
+        if exp == 2047 then
+          (shiftLeft 255 23, and (shiftRight fraction 29) 8388607)
+        else
+          use Int +
+          unbiasedExp = Nat.toInt exp - +1023
+          normExp = unbiasedExp + +127
+          if unbiasedExp > +127 then (shiftLeft 255 23, 0)
+          else
+            if unbiasedExp < -149 then (0, 0)
+            else
+              if unbiasedExp < -126 then
+                shift = abs (+1 - normExp)
+                ( 0
+                , shiftRight
+                    (or 8388608 (and (shiftRight fraction 29) 8388607)) shift
+                )
+              else
+                ( shiftLeft (abs normExp) 23
+                , and (shiftRight fraction 29) 8388607
+                )
+    use Nat +
+    roundingBit = isSetBit 28 fraction
+    lastMantissa = isSetBit 29 fraction
+    restOfMantissa = dropBits 38 fraction != 0
+    mantissa =
+      if (restOfMantissa || lastMantissa) && roundingBit then
+        singleFraction + 1
+      else singleFraction
+    singleSign = shiftLeft sign 31
+    or singleSign (or singleExp mantissa)
+
+up.base.Float.toSinglePrecision.doc : Doc
+up.base.Float.toSinglePrecision.doc =
+  use base.Float toSinglePrecision
+  {{
+  Converts a 64-bit double-precision floating point number to a 32-bit
+  single-precision floating point number encoded in the low 32 bits of a
+  {type Nat}.
+
+  # Examples
+
+    ```
+    toSinglePrecision 1.0
+    ```
+
+    ```
+    toSinglePrecision 0.5
+    ```
+
+    ```
+    toSinglePrecision 0.25
+    ```
+  }}
+
+test> up.base.Float.toSinglePrecision.monotonic = test.verify do
+  use Float <=
+  use Random float
+  use base.Float fromSinglePrecision toSinglePrecision
+  Each.repeat 1000
+  n = float()
+  m = float()
+  singlen = toSinglePrecision n
+  singlem = toSinglePrecision m
+  doublen = fromSinglePrecision singlen
+  doublem = fromSinglePrecision singlem
+  ensure (iff (n <= m) (doublen <= doublem))
+
+test> up.base.Float.toSinglePrecision.tests.largestSubnormal =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 4039728864677593088)
+      == 8388607)
+
+test> up.base.Float.toSinglePrecision.tests.maxSingle =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 5183643170566569984)
+      == 2139095039)
+
+test> up.base.Float.toSinglePrecision.tests.negativeOne =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 13830554455654793216)
+      == 3212836864)
+
+test> up.base.Float.toSinglePrecision.tests.negativeZero =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 9223372036854775808)
+      == 2147483648)
+
+test> up.base.Float.toSinglePrecision.tests.normal =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 4620129717972893696)
+      == 1089469440)
+
+test> up.base.Float.toSinglePrecision.tests.notANumber =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 9218868437227405312)
+      == 2139095040)
+
+test> up.base.Float.toSinglePrecision.tests.positiveOne =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 4607182418800017408)
+      == 1065353216)
+
+test> up.base.Float.toSinglePrecision.tests.positiveZero =
+  use Nat ==
+  check (base.Float.toSinglePrecision (Float.fromRepresentation 0) == 0)
+
+test> up.base.Float.toSinglePrecision.tests.smallestNormal =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 4039728865751334912)
+      == 8388608)
+
+test> up.base.Float.toSinglePrecision.tests.subnormal =
+  use Nat ==
+  check
+    (base.Float.toSinglePrecision
+      (Float.fromRepresentation 4036218951905050624)
+      == 5119746)
+
+up.base.Int.product : [Int] -> Int
+up.base.Int.product =
+  use Int *
+  List.foldLeft (*) +1
+
+up.base.Int.product.doc : Doc
+up.base.Int.product.doc =
+  use base.Int product
+  {{
+  `` product ns `` returns the product of all the values in `ns`. If `ns` is
+  empty, returns ``1``.
+
+  # Examples
+
+    ```
+    product [-1, +2, -3, +4]
+    ```
+
+    ```
+    product [+12]
+    ```
+
+    ```
+    product []
+    ```
+  }}
+
+up.base.Int.sum : [Int] -> Int
+up.base.Int.sum =
+  use Int +
+  List.foldLeft (+) +0
+
+up.base.Int.sum.doc : Doc
+up.base.Int.sum.doc =
+  use base.Int sum
+  {{
+  `` sum ns `` returns the sum of all the values in `ns`. If `ns` is empty,
+  returns ``0``.
+
+  # Examples
+
+    ```
+    sum [+1, +2, +3, -4]
+    ```
+
+    ```
+    sum [+12]
+    ```
+
+    ```
+    sum []
+    ```
+  }}
+
+up.base.time.DayOfWeek.daysSinceSat : base.time.DayOfWeek -> Nat
+up.base.time.DayOfWeek.daysSinceSat = cases
+  base.time.DayOfWeek.Sat -> 0
+  base.time.DayOfWeek.Sun -> 1
+  base.time.DayOfWeek.Mon -> 2
+  base.time.DayOfWeek.Tue -> 3
+  base.time.DayOfWeek.Wed -> 4
+  base.time.DayOfWeek.Thu -> 5
+  base.time.DayOfWeek.Fri -> 6
+
+up.base.time.DayOfWeek.daysSinceSat.doc : Doc
+up.base.time.DayOfWeek.daysSinceSat.doc =
+  use base.time.DayOfWeek daysSinceSat
+  {{
+  Returns the number of days since Saturday for the given day of the week. This
+  is a way of converting a {type base.time.DayOfWeek} to a {type Nat}.
+
+  # Examples
+
+    ```
+    daysSinceSat base.time.DayOfWeek.Mon
+    ```
+
+    ```
+    daysSinceSat base.time.DayOfWeek.Sat
+    ```
+  }}
+
+up.base.time.DayOfWeek.doc : Doc
+up.base.time.DayOfWeek.doc =
+  use base.time OffsetDateTime.dayOfWeek
+  use base.time.DayOfWeek Fri Mon Sat Sun Thu Tue Wed
+  {{
+  Represents a day of the week in the civil calendar.
+
+  # Construction
+
+    Use the {type base.time.DayOfWeek} constructors directly:
+
+    ```
+    [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+
+    You can also use a {type Nat} representing the number of days since
+    Saturday:
+
+    ```
+    List.map base.time.DayOfWeek.number (Nat.range 0 7)
+    ```
+
+    Parse an English name for a day of the week, or any unambiguous
+    abbreviation:
+
+    ```
+    List.filterMap base.time.DayOfWeek.fromName ["Mon", "Tuesday", "wed", "th"]
+    ```
+
+  # Conversion from other types
+
+    Get the day of the week for a {type LocalDate}:
+
+    ```
+    base.time.LocalDate.dayOfWeek (LocalDate +2023 6 14)
+    ```
+
+    Get the day of the week for a {type LocalDateTime}:
+
+    ```
+    Optional.map
+      base.time.LocalDateTime.dayOfWeek
+      (LocalDateTime.fromIso8601 "2023-06-14T12:00:00")
+    ```
+
+    Get the day of the week for an {type OffsetDateTime}:
+
+    ```
+    Optional.map
+      OffsetDateTime.dayOfWeek
+      (OffsetDateTime.fromIso8601 "2023-06-14T12:00:00-07:00")
+    ```
+
+    Get the day of the week for an {type Instant}:
+
+    ```
+    OffsetDateTime.dayOfWeek (atUTC epoch)
+    ```
+
+  # Conversion to other types
+
+    Convert a {type base.time.DayOfWeek} to a {type Nat} representing the
+    number of days since Saturday:
+
+    ```
+    List.map
+      base.time.DayOfWeek.daysSinceSat [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+
+    Convert a {type base.time.DayOfWeek} to a {type Text}:
+
+    ```
+    List.map base.time.DayOfWeek.name [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+
+    ```
+    List.map base.time.DayOfWeek.shortName [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+
+  # Properties
+
+    Determine whether a {type base.time.DayOfWeek} is a weekend day:
+
+    ```
+    List.map base.time.DayOfWeek.isWeekend [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+
+    Determine whether a {type base.time.DayOfWeek} is a weekday:
+
+    ```
+    List.map base.time.DayOfWeek.isWeekday [Sat, Sun, Mon, Tue, Wed, Thu, Fri]
+    ```
+  }}
+
+up.base.time.DayOfWeek.fromName : Text -> Optional base.time.DayOfWeek
+up.base.time.DayOfWeek.fromName name =
+  abbrev = Text.toLowercase (Text.take 2 name)
+  match abbrev with
+    "sa" -> Some base.time.DayOfWeek.Sat
+    "su" -> Some base.time.DayOfWeek.Sun
+    "mo" -> Some base.time.DayOfWeek.Mon
+    "tu" -> Some base.time.DayOfWeek.Tue
+    "we" -> Some base.time.DayOfWeek.Wed
+    "th" -> Some base.time.DayOfWeek.Thu
+    "fr" -> Some base.time.DayOfWeek.Fri
+    _    -> None
+
+up.base.time.DayOfWeek.fromName.doc : Doc
+up.base.time.DayOfWeek.fromName.doc =
+  use List filterMap
+  use base.time.DayOfWeek fromName
+  {{
+  Returns the day of the week corresponding to the given English name or
+  3-letter abbreviation, or None if the given {type Text} is not the name of an
+  English day of the week.
+
+  # Examples
+
+    ```
+    filterMap
+      fromName
+      [ "Saturday"
+      , "Sunday"
+      , "Monday"
+      , "Tuesday"
+      , "Wednesday"
+      , "Thursday"
+      , "Friday"
+      ]
+    ```
+
+    You can supply a three-letter abbreviation instead of the full English
+    name:
+
+    ```
+    filterMap fromName ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]
+    ```
+
+    A two-letter abbreviation also works:
+
+    ```
+    filterMap fromName ["Sa", "Su", "Mo", "Tu", "We", "Th", "Fr"]
+    ```
+
+    The name is not case-sensitive:
+
+    ```
+    filterMap fromName ["sat", "sun", "mon", "tue", "wed", "thu", "fri"]
+    ```
+
+    The conversion works as long as the first two letters match:
+
+    ```
+    filterMap fromName ["Fridurday", "Friendsday", "Fössari"]
+    ```
+  }}
+
+up.base.time.DayOfWeek.isWeekday : base.time.DayOfWeek -> Boolean
+up.base.time.DayOfWeek.isWeekday = cases
+  base.time.DayOfWeek.Sat -> false
+  base.time.DayOfWeek.Sun -> false
+  _                       -> true
+
+up.base.time.DayOfWeek.isWeekday.doc : Doc
+up.base.time.DayOfWeek.isWeekday.doc =
+  use base.time.DayOfWeek isWeekday
+  {{
+  Returns whether the given day of the week is a weekday as opposed to a
+  weekend.
+
+  # Examples
+
+    ```
+    isWeekday base.time.DayOfWeek.Sat
+    ```
+
+    ```
+    isWeekday base.time.DayOfWeek.Mon
+    ```
+  }}
+
+up.base.time.DayOfWeek.isWeekend : base.time.DayOfWeek -> Boolean
+up.base.time.DayOfWeek.isWeekend = cases
+  base.time.DayOfWeek.Sat -> true
+  base.time.DayOfWeek.Sun -> true
+  _                       -> false
+
+up.base.time.DayOfWeek.isWeekend.doc : Doc
+up.base.time.DayOfWeek.isWeekend.doc =
+  use base.time.DayOfWeek isWeekend
+  {{
+  Returns whether the given day of the week is a weekend day.
+
+  # Examples
+
+    ```
+    isWeekend base.time.DayOfWeek.Mon
+    ```
+
+    ```
+    isWeekend base.time.DayOfWeek.Sat
+    ```
+  }}
+
+up.base.time.DayOfWeek.name : base.time.DayOfWeek -> Text
+up.base.time.DayOfWeek.name = cases
+  base.time.DayOfWeek.Sat -> "Saturday"
+  base.time.DayOfWeek.Sun -> "Sunday"
+  base.time.DayOfWeek.Mon -> "Monday"
+  base.time.DayOfWeek.Tue -> "Tuesday"
+  base.time.DayOfWeek.Wed -> "Wednesday"
+  base.time.DayOfWeek.Thu -> "Thursday"
+  base.time.DayOfWeek.Fri -> "Friday"
+
+up.base.time.DayOfWeek.name.doc : Doc
+up.base.time.DayOfWeek.name.doc =
+  {{
+  Returns the full English form of the given day of the week.
+
+  # Example
+
+    ```
+    List.map
+      base.time.DayOfWeek.name
+      [ base.time.DayOfWeek.Sat
+      , base.time.DayOfWeek.Sun
+      , base.time.DayOfWeek.Mon
+      , base.time.DayOfWeek.Tue
+      , base.time.DayOfWeek.Wed
+      , base.time.DayOfWeek.Thu
+      , base.time.DayOfWeek.Fri
+      ]
+    ```
+  }}
+
+up.base.time.DayOfWeek.next : base.time.DayOfWeek -> base.time.DayOfWeek
+up.base.time.DayOfWeek.next = cases
+  base.time.DayOfWeek.Sat -> base.time.DayOfWeek.Sun
+  base.time.DayOfWeek.Sun -> base.time.DayOfWeek.Mon
+  base.time.DayOfWeek.Mon -> base.time.DayOfWeek.Tue
+  base.time.DayOfWeek.Tue -> base.time.DayOfWeek.Wed
+  base.time.DayOfWeek.Wed -> base.time.DayOfWeek.Thu
+  base.time.DayOfWeek.Thu -> base.time.DayOfWeek.Fri
+  base.time.DayOfWeek.Fri -> base.time.DayOfWeek.Sat
+
+up.base.time.DayOfWeek.next.doc : Doc
+up.base.time.DayOfWeek.next.doc =
+  use base.time.DayOfWeek next
+  {{
+  Returns the day of the week that follows the given day of the week.
+
+  # Examples
+
+    ```
+    next base.time.DayOfWeek.Mon
+    ```
+
+    ```
+    next base.time.DayOfWeek.Sat
+    ```
+  }}
+
+up.base.time.DayOfWeek.number : Nat -> base.time.DayOfWeek
+up.base.time.DayOfWeek.number n = match Nat.mod n 7 with
+  0 -> base.time.DayOfWeek.Sat
+  1 -> base.time.DayOfWeek.Sun
+  2 -> base.time.DayOfWeek.Mon
+  3 -> base.time.DayOfWeek.Tue
+  4 -> base.time.DayOfWeek.Wed
+  5 -> base.time.DayOfWeek.Thu
+  6 -> base.time.DayOfWeek.Fri
+  _ -> bug "mod 7 should be between 0 and 6"
+
+up.base.time.DayOfWeek.number.doc : Doc
+up.base.time.DayOfWeek.number.doc =
+  {{
+  Returns the day of the week corresponding to the given number of days since
+  Saturday.
+
+  # Example
+
+    ```
+    List.map base.time.DayOfWeek.number (Nat.range 0 7)
+    ```
+  }}
+
+up.base.time.DayOfWeek.previous : base.time.DayOfWeek -> base.time.DayOfWeek
+up.base.time.DayOfWeek.previous = cases
+  base.time.DayOfWeek.Sat -> base.time.DayOfWeek.Fri
+  base.time.DayOfWeek.Sun -> base.time.DayOfWeek.Sat
+  base.time.DayOfWeek.Mon -> base.time.DayOfWeek.Sun
+  base.time.DayOfWeek.Tue -> base.time.DayOfWeek.Mon
+  base.time.DayOfWeek.Wed -> base.time.DayOfWeek.Tue
+  base.time.DayOfWeek.Thu -> base.time.DayOfWeek.Wed
+  base.time.DayOfWeek.Fri -> base.time.DayOfWeek.Thu
+
+up.base.time.DayOfWeek.previous.doc : Doc
+up.base.time.DayOfWeek.previous.doc =
+  use base.time.DayOfWeek previous
+  {{
+  Returns the day of the week that precedes the given day of the week.
+
+  # Examples
+
+    ```
+    previous base.time.DayOfWeek.Mon
+    ```
+
+    ```
+    previous base.time.DayOfWeek.Sat
+    ```
+  }}
+
+up.base.time.DayOfWeek.shortName : base.time.DayOfWeek -> Text
+up.base.time.DayOfWeek.shortName = cases
+  base.time.DayOfWeek.Sat -> "Sat"
+  base.time.DayOfWeek.Sun -> "Sun"
+  base.time.DayOfWeek.Mon -> "Mon"
+  base.time.DayOfWeek.Tue -> "Tue"
+  base.time.DayOfWeek.Wed -> "Wed"
+  base.time.DayOfWeek.Thu -> "Thu"
+  base.time.DayOfWeek.Fri -> "Fri"
+
+up.base.time.DayOfWeek.shortName.doc : Doc
+up.base.time.DayOfWeek.shortName.doc =
+  {{
+  Returns the short English form of the given day of the week.
+
+  # Example
+
+    ```
+    List.map
+      base.time.DayOfWeek.shortName
+      [ base.time.DayOfWeek.Sat
+      , base.time.DayOfWeek.Sun
+      , base.time.DayOfWeek.Mon
+      , base.time.DayOfWeek.Tue
+      , base.time.DayOfWeek.Wed
+      , base.time.DayOfWeek.Thu
+      , base.time.DayOfWeek.Fri
+      ]
+    ```
+  }}
+
+up.base.time.LocalDate.dayOfWeek : LocalDate -> base.time.DayOfWeek
+up.base.time.LocalDate.dayOfWeek = cases
+  LocalDate year month day ->
+    use Int * - / emod
+    use Nat < toInt
+    m = toInt (if month < 3 then month Nat.+ 12 else month)
+    y = if month < 3 then year - +1 else year
+    k = toInt (emod y +100)
+    j = y / +100
+    f =
+      toInt day Int.+ +13 * (m Int.+ +1) / +5 Int.+ k Int.+ k / +4 Int.+ j / +4
+        - +2 * j
+    base.time.DayOfWeek.number (emod f +7)
+
+up.base.time.LocalDate.dayOfWeek.doc : Doc
+up.base.time.LocalDate.dayOfWeek.doc =
+  use base.time.LocalDate dayOfWeek
+  {{
+  Returns the day of the week for the given date.
+
+  # Examples
+
+    ```
+    dayOfWeek (LocalDate +1985 10 26)
+    ```
+
+    ```
+    dayOfWeek (LocalDate +1955 11 5)
+    ```
+
+    ```
+    dayOfWeek (LocalDate +2015 10 21)
+    ```
+
+    ```
+    dayOfWeek (LocalDate +1885 9 2)
+    ```
+  }}
+
+up.base.time.LocalDateTime.dayOfWeek : LocalDateTime -> base.time.DayOfWeek
+up.base.time.LocalDateTime.dayOfWeek = cases
+  LocalDateTime d t -> base.time.LocalDate.dayOfWeek d
+
+up.base.time.LocalDateTime.dayOfWeek.doc : Doc
+up.base.time.LocalDateTime.dayOfWeek.doc =
+  use LocalDateTime fromIso8601
+  use Optional map
+  use base.time.LocalDateTime dayOfWeek
+  {{
+  Returns the day of the week for the given date and time.
+
+  # Examples
+
+    ```
+    map dayOfWeek (fromIso8601 "1985-10-26T01:21:00")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "1955-11-05T06:00:00")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "2015-10-21T13:00:00")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "1885-09-02T08:00:00")
+    ```
+  }}
+
+up.base.time.OffsetDateTime.dayOfWeek : OffsetDateTime -> base.time.DayOfWeek
+up.base.time.OffsetDateTime.dayOfWeek = cases
+  OffsetDateTime o (LocalDateTime d _) -> base.time.LocalDate.dayOfWeek d
+
+up.base.time.OffsetDateTime.dayOfWeek.doc : Doc
+up.base.time.OffsetDateTime.dayOfWeek.doc =
+  use OffsetDateTime fromIso8601
+  use Optional map
+  use base.time.OffsetDateTime dayOfWeek
+  {{
+  Returns the day of the week for the given date and time.
+
+  # Examples
+
+    ```
+    map dayOfWeek (fromIso8601 "1985-10-26T01:21:00-07:00")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "1955-11-05T06:00:00+01:00")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "2015-10-21T13:00:00Z")
+    ```
+
+    ```
+    map dayOfWeek (fromIso8601 "1885-09-02T08:00:00+02:00")
+    ```
+  }}
+
+up.codec.Decode.feedPartial :
+  Bytes -> '{g, Decode} a -> '{g, Decode} (a, Bytes)
+up.codec.Decode.feedPartial bs d = Decode.feed bs do
+  a = d()
+  residue = Bytes.drop bytesRead bs
+  (a, residue)
+
+up.codec.Decode.feedPartial.doc : Doc
+up.codec.Decode.feedPartial.doc =
+  {{
+  Feed some bytes into a decoder and return both the result and the residual
+  bytes.
+  }}
+
+up.codec.Decode.float16be : '{Decode} Float
+up.codec.Decode.float16be = do base.Float.fromHalfPrecision Decode.nat16be()
+
+up.codec.Decode.float16be.doc : Doc
+up.codec.Decode.float16be.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 16-bit big-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs3c00 float16be
+    ```
+
+    ```
+    toEither do fromBytes 0xs03ff float16be
+    ```
+
+    ```
+    toEither do fromBytes 0xs7c00 float16be
+    ```
+  }}
+
+up.codec.Decode.float16le : '{Decode} Float
+up.codec.Decode.float16le = do base.Float.fromHalfPrecision Decode.nat16le()
+
+up.codec.Decode.float16le.doc : Doc
+up.codec.Decode.float16le.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 16-bit big-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs003c float16le
+    ```
+
+    ```
+    toEither do fromBytes 0xsff03 float16le
+    ```
+
+    ```
+    toEither do fromBytes 0xs007c float16le
+    ```
+  }}
+
+up.codec.Decode.float32be : '{Decode} Float
+up.codec.Decode.float32be = do base.Float.fromSinglePrecision Decode.nat32be()
+
+up.codec.Decode.float32be.doc : Doc
+up.codec.Decode.float32be.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 32-bit big-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs3f800000 float32be
+    ```
+
+    ```
+    toEither do fromBytes 0xs00000001 float32be
+    ```
+
+    ```
+    toEither do fromBytes 0xs7f800000 float32be
+    ```
+  }}
+
+up.codec.Decode.float32le : '{Decode} Float
+up.codec.Decode.float32le = do base.Float.fromSinglePrecision Decode.nat32le()
+
+up.codec.Decode.float32le.doc : Doc
+up.codec.Decode.float32le.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 32-bit little-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs0000803f float32le
+    ```
+
+    ```
+    toEither do fromBytes 0xs01000000 float32le
+    ```
+
+    ```
+    toEither do fromBytes 0xs0000807f float32le
+    ```
+  }}
+
+up.codec.Decode.float64be : '{Decode} Float
+up.codec.Decode.float64be = do Float.fromRepresentation Decode.nat64be()
+
+up.codec.Decode.float64be.doc : Doc
+up.codec.Decode.float64be.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 64-bit big-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs3ff0000000000000 float64be
+    ```
+
+    ```
+    toEither do fromBytes 0xsbff0000000000000 float64be
+    ```
+
+    ```
+    toEither do fromBytes 0xs0000000000000000 float64be
+    ```
+  }}
+
+up.codec.Decode.float64le : '{Decode} Float
+up.codec.Decode.float64le = do Float.fromRepresentation Decode.nat64le()
+
+up.codec.Decode.float64le.doc : Doc
+up.codec.Decode.float64le.doc =
+  use Decode fromBytes
+  use fromList impl
+  {{
+  Decodes a 64-bit little-endian IEEE 754 floating point number.
+
+  # Examples
+
+    ```
+    toEither do fromBytes 0xs0000000000000000 float64le
+    ```
+
+    ```
+    toEither do fromBytes 0xs000000000000f03f float64le
+    ```
+
+    ```
+    toEither do fromBytes 0xs000000000000f0bf float64le
+    ```
+  }}
+
+up.codec.Decode.fromStreamPartial :
+  '{g, Decode, DecodeBits} a
+  -> '{g, Stream Bytes} r
+  ->{g, Throw DecodeError} (a, '{g, Stream Bytes} r)
+up.codec.Decode.fromStreamPartial d s =
+  s |> (Decode.fromStream do
+    a = d()
+    residue = Stream.drop bytesRead s
+    (a, residue))
+
+up.codec.Decode.fromStreamPartial.doc : Doc
+up.codec.Decode.fromStreamPartial.doc =
+  {{
+  Runs the decoder on a {type Stream} of {type Bytes} and returns the decoded
+  value and the remainder of the stream, or throws an error if the decoder
+  fails.
+  }}
+
+up.codec.DecodeError.toFailure : DecodeError -> Failure
+up.codec.DecodeError.toFailure e =
+  Failure (typeLink DecodeError) (Text.join "\n" (DecodeError.trace e)) (Any e)
+
+up.codec.DecodeError.toFailure.doc : Doc
+up.codec.DecodeError.toFailure.doc =
+  {{
+  The {type DecodeError} type is used to represent errors that occur when
+  decoding values from binary data. The {codec.DecodeError.toFailure} function
+  can be used to convert a {type DecodeError} into a {type Failure} value for
+  use with the {type Exception} ability.
+  }}

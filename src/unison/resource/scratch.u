@@ -1,0 +1,318 @@
+ability Resource where
+  allocate :
+    '{IO, Exception} a -> (a ->{IO, Exception} ()) ->{Resource} (ReleaseKey, a)
+  register : '{IO, Exception} () ->{Resource} ReleaseKey
+  release : ReleaseKey ->{Resource} ()
+
+type Resource.ReleaseKey
+  = ReleaseKey Nat
+
+type Resource.ReleaseMap
+  = ReleaseMap Nat Nat (Map Nat ('{IO, Exception} ()))
+
+examples.simpleFileRead : '{IO, Exception} ()
+examples.simpleFileRead = do
+  Resource.run do
+    h = allocate' (do open (FilePath "/tmp/foo.txt") Read) Handle.close
+    _ = register do printLine "Cleaning up"
+    message = getLine h
+    printLine message
+
+README : Doc
+README = Resource.doc
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  use Resource run
+  {{
+  * Added {scope} and {scope!}. These are similar to {run} but allow arbitrary
+    effects and have looser guarantees. Thanks to {{ shareSlug "@ceedubs" }}.
+  * Removed the dependency on software transactional memory (STM) for {run}.
+    This change simplifies the implementation and makes it compatible with more
+    Unison backends.
+  }}
+
+Resource.allocate' :
+  '{IO, Exception} t -> (t ->{IO, Exception} ()) ->{Resource} t
+Resource.allocate' a c = at2 (allocate a c)
+
+Resource.allocate'.doc : Doc
+Resource.allocate'.doc =
+  {{
+  {allocate'} allocates a resource and registers a cleanup action to free it.
+  It returns the allocated resource and relies on the {type Resource} handler
+  (e.g. {Resource.run}) to call the cleanup action. This function differs from
+  {allocate} in that it does not return the cleanup action to request early
+  cleanup.
+  }}
+
+Resource.bracket :
+  '{IO, Exception} r
+  -> (r ->{IO, Exception} ())
+  -> (r ->{IO, Exception, Resource} t)
+  ->{IO, Exception} t
+Resource.bracket alloc free inside =
+  Resource.run do inside (allocate' alloc free)
+
+Resource.bracket.doc : Doc
+Resource.bracket.doc =
+  use Resource bracket
+  {{
+  `` bracket alloc free f `` uses the `alloc` argument to allocate some
+  resource, registers a cleanup action to `free` the resource, and then
+  executes the `f` action. The `f` action is passed the allocated resource as
+  an argument. If `f` returns normally, the resource is freed automatically. If
+  `f` raises an exception, the resource is freed automatically before the
+  exception is re-raised.
+
+  # Example
+
+    This example uses {bracket} to open a file, read a line from its contents,
+    and then close the file.
+
+    @typecheck ```
+    bracket
+      (do open (FilePath "foo.txt") Read)
+      Handle.close
+      (h -> do printLine (getLine h))
+    ```
+  }}
+
+Resource.doc : Doc
+Resource.doc =
+  use Resource run
+  {{
+  The {type Resource} ability is used to manage resources that need to be
+  released when they are no longer needed, for example file handles or database
+  connections.
+
+  # Example
+
+    The following example shows how to use {type Resource} to allocate a file
+    handle and read from it. The file handle is released when the computation
+    completes, even if an exception is thrown.
+
+    {{ docExampleBlock 0 do
+      example = run do
+        (_, h) = allocate (do open (FilePath "foo.txt") Read) Handle.close
+        _ = register do printLine "Cleaning up"
+        message = getLine h
+        printLine message
+      () }}
+
+  # Allocating resources
+
+        @signature{allocate}
+
+    {allocate} is used to allocate a resource. It takes first an action that
+    performs the allocation and returns the resource, and second an action that
+    releases the resource. The release action is automatically called by
+    {{ docLink (docEmbedTermLink do run) }}, but can be called early with
+    {release}, passing it the resulting {type ReleaseKey}. Resources allocated
+    with {allocate} are released in the reverse order of allocation, so the
+    last resource allocated is the first to be released.
+
+  # Registering actions to run on cleanup
+
+        @signature{register}
+
+    {register} is used to register a cleanup action to be run when {{
+    docLink (docEmbedTermLink do run) }} completes, or earlier if {release} is
+    called with the resulting {type ReleaseKey}. The computation will run
+    exactly once regardless. Cleanup actions are run in the reverse order of
+    registration, so the last action registered is the first to be run. Actions
+    registered with {register} are run before the release action registered
+    with {allocate} for the same resource.
+
+  # Releasing a resource early
+
+        @signature{release}
+
+    {release} is used for early release of a resource registered with
+    {allocate}, or a computation registered with {register}. The resource or
+    computation will be released exactly once, even if multiple calls to
+    {release} are made with the same key. A resource released with {release}
+    will not be released again by {{ docLink (docEmbedTermLink do run) }}.
+
+  # Running a computation with resources
+
+    {{ docSignature [docEmbedSignatureLink do run] }}
+
+    The {{ docLink (docEmbedTermLink do run) }} function is used to run a
+    computation that uses the {type Resource} ability. It will run the
+    computation and return the result. It will also release any resources
+    allocated by the computation, and execute cleanup actions registered with
+    {register}. If the computation throws an exception, then the resources will
+    be released and cleanup actions will be executed before the exception is
+    rethrown.
+
+  # Allowing arbitrary abilities
+
+    {{ docLink (docEmbedTermLink do run) }} does not allow any abilities other
+    than {type Resource}, {type IO}, and {type Exception}, because it needs to
+    ensure that resources are released correctly. This can't be guaranteed in
+    the presence of abilities that offer e.g. early termination. If you need to
+    run a {type Resource} computation that uses other abilities than these, you
+    can use {scope!} or its lazy equivalent {scope} instead of
+    {{ docLink (docEmbedTermLink do run) }}. These functions offer a tradeoff:
+    you get to use arbitrary effects, but correct release of resources is not
+    guaranteed.
+  }}
+
+Resource.ReleaseKey.doc : Doc
+Resource.ReleaseKey.doc =
+  {{
+  A key that can be used to release a resource allocated with {allocate} or a
+  cleanup action registered with {register}.
+  }}
+
+Resource.run : '{IO, Exception, Resource} a ->{IO, Exception} a
+Resource.run r =
+  use Ref atomically
+  registerCleanup :
+    '{IO, Exception} () ->{IO, Exception, Ask (Ref {IO} ReleaseMap)} ReleaseKey
+  registerCleanup m =
+    use Nat -
+    istate = ask
+    atomically istate cases
+      ReleaseMap key ref im ->
+        (ReleaseMap (key - 1) ref (Map.insert key m im), ReleaseKey key)
+  releaseCleanup : ReleaseKey ->{IO, Exception, Ask (Ref {IO} ReleaseMap)} ()
+  releaseCleanup = cases
+    ReleaseKey key ->
+      istate = ask
+      m =
+        atomically istate cases
+          ReleaseMap key' ref im ->
+            (ReleaseMap key' ref (Map.delete key im), Map.get key im)
+      match m with
+        None   -> ()
+        Some m -> m()
+  h : Request Resource t ->{IO, Exception, Ask (Ref {IO} ReleaseMap)} t
+  h = cases
+    { allocate acquire cleanup -> k } ->
+      a = acquire()
+      key = handle register do cleanup a with h
+      handle k (key, a) with h
+    { register cleanup -> k }         ->
+      key = registerCleanup cleanup
+      handle k key with h
+    { release key -> k }              ->
+      releaseCleanup key
+      handle k() with h
+    { a }                             -> a
+  state = IO.ref (ReleaseMap maxNat 0 Map.empty)
+  doCleanup = do
+    cleanup = Ref.read state
+    let
+      (ReleaseMap _ _ im) = cleanup
+      List.foreach (Map.values im) (m -> m())
+  match catchAll do provide state do handle r() with h with
+    Left e  ->
+      doCleanup()
+      Exception.raise e
+    Right a ->
+      doCleanup()
+      a
+
+Resource.run.doc : Doc
+Resource.run.doc =
+  {{
+  Run a computation that uses the {type Resource} ability, and return the
+  result. This will also release any resources allocated by the computation,
+  and execute cleanup actions registered with {register}.
+  }}
+
+Resource.scope : '{g, Resource} a -> '{g, Resource} a
+Resource.scope =
+  use List +:
+  go : [ReleaseKey] -> (i ->{g, Resource} r) -> i ->{g, Resource} r
+  go releaseKeys f i =
+    handle f i
+    with cases
+      { r }                             ->
+        foreach_ release releaseKeys
+        r
+      { release key -> k }              ->
+        release key
+        go (deleteFirst ((===) key) releaseKeys) k ()
+      { allocate acquire cleanup -> k } ->
+        res = allocate acquire cleanup
+        go (at1 res +: releaseKeys) k res
+      { register cleanup -> k }         ->
+        key = register cleanup
+        go (key +: releaseKeys) k key
+  go []
+
+Resource.scope.doc : Doc
+Resource.scope.doc =
+  {{ A variant of {scope!} that returns a delayed computation. }}
+
+Resource.scope.tests.example1 : '{IO, Exception} [Result]
+Resource.scope.tests.example1 =
+  do
+    test.verify do
+      use List :+
+      use Ref modify
+      use Text ==
+      statuses = IO.ref []
+      setStatus : Text ->{Resource} ReleaseKey
+      setStatus msg =
+        (allocate (do modify statuses (l -> l :+ msg)) do
+          modify statuses (deleteFirst ((==) msg)))
+          |> at1
+      expectStatuses expected = ensureEqual expected (Ref.read statuses)
+      Resource.run do
+        setStatus "starting run" |> ignore
+        expectStatuses ["starting run"]
+        setStatus "continuing run" |> ignore
+        expectStatuses ["starting run", "continuing run"]
+        scope! do ()
+        expectStatuses ["starting run", "continuing run"]
+        scope! do
+          setStatus "scope 1" |> ignore
+          expectStatuses ["starting run", "continuing run", "scope 1"]
+          key2 = setStatus "scope 2"
+          expectStatuses
+            ["starting run", "continuing run", "scope 1", "scope 2"]
+          setStatus "scope 3" |> ignore
+          expectStatuses
+            ["starting run", "continuing run", "scope 1", "scope 2", "scope 3"]
+          release key2
+          expectStatuses
+            ["starting run", "continuing run", "scope 1", "scope 3"]
+        expectStatuses ["starting run", "continuing run"]
+      expectStatuses []
+
+Resource.scope! : '{g, Resource} a ->{g, Resource} a
+Resource.scope! = scope >> force
+
+Resource.scope!.doc : Doc
+Resource.scope!.doc =
+  use Exception raise
+  use Resource run
+  {{
+  `` scope! f `` runs the delayed computation `f` and then __attempts__ to
+  release any resources created while running `f`. This is similar to {run}
+  with the following differences:
+
+  * {scope!} allows arbitrary `g` effects to be performed during the
+    computation.
+  * {scope!} does **not guarantee** that all resources will be released
+    immediately when the `f` scope finishes. This is a consequence of allowing
+    arbitrary effects; {scope!} can't intercept termination of standard control
+    flow such as by {abort} or {raise}. It also cannot immediately release
+    resources in the case of runtime failures such as {bug}.
+  * Since {scope!} cannot guarantee the release of resources, its result still
+    includes the {type Resource} ability which will need to be handled (such as
+    with {run}). While this is a significant limitation, in practice it might
+    not be __much__ of an issue because non-standard control flow such as
+    {abort} or {raise} is likely to fast-forward a program toward its enclosing
+    `Resource.run` block.
+
+  # Example
+
+        @source{scope.tests.example1}
+
+    See {scope} for a variant that returns a delayed result.
+  }}

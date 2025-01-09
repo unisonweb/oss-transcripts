@@ -1,0 +1,411 @@
+
+day01.part1 : '{IO, Exception} ()
+day01.part1 = do
+  solve input = todo "implement solution for day 1 part 1"
+  submitSolution (Day 1) (Part 1) solve
+
+day01.part2 : '{IO, Exception} ()
+day01.part2 = do
+  solve input = todo "implement solution for day 1 part 2"
+  submitSolution (Day 1) (Part 2) solve
+
+day02.part1 : '{IO, Exception} ()
+day02.part1 = do
+  solve input = todo "implement solution for day 2 part 1"
+  submitSolution (Day 2) (Part 1) solve
+
+day02.part2 : '{IO, Exception} ()
+day02.part2 = do
+  solve input = todo "implement solution for day 2 part 2"
+  submitSolution (Day 2) (Part 2) solve
+
+day03.part1 : '{IO, Exception} ()
+day03.part1 = do
+  solve input = todo "implement solution for day 3 part 1"
+  submitSolution (Day 3) (Part 1) solve
+
+day03.part2 : '{IO, Exception} ()
+day03.part2 = do
+  solve input = todo "implement solution for day 3 part 2"
+  submitSolution (Day 3) (Part 2) solve
+
+day04.part1 : '{IO, Exception} ()
+day04.part1 = do
+  solve input = todo "implement solution for day 4 part 1"
+  submitSolution (Day 4) (Part 1) solve
+
+day04.part2 : '{IO, Exception} ()
+day04.part2 = do
+  solve input = todo "implement solution for day 4 part 2"
+  submitSolution (Day 4) (Part 2) solve
+
+day05.part1 : '{IO, Exception} ()
+day05.part1 = do
+  solve input = todo "implement solution for day 5 part 1"
+  submitSolution (Day 5) (Part 1) solve
+
+day05.part2 : '{IO, Exception} ()
+day05.part2 = do
+  solve input = todo "implement solution for day 5 part 2"
+  submitSolution (Day 5) (Part 2) solve
+
+day06.part1 : '{IO, Exception} ()
+day06.part1 = do
+  solve input = todo "implement solution for day 6 part 1"
+  submitSolution (Day 6) (Part 1) solve
+
+day06.part2 : '{IO, Exception} ()
+day06.part2 = do
+  solve input = todo "implement solution for day 6 part 2"
+  submitSolution (Day 6) (Part 2) solve
+
+day07.part1 : '{IO, Exception} ()
+day07.part1 = do
+  solve input = todo "implement solution for day 7 part 1"
+  submitSolution (Day 7) (Part 1) solve
+
+day07.part2 : '{IO, Exception} ()
+day07.part2 = do
+  solve input = todo "implement solution for day 7 part 2"
+  submitSolution (Day 7) (Part 2) solve
+
+day08.part1 : '{IO, Exception} ()
+day08.part1 = do
+  solve input = todo "implement solution for day 8 part 1"
+  submitSolution (Day 8) (Part 1) solve
+
+day08.part2 : '{IO, Exception} ()
+day08.part2 = do
+  solve input = todo "implement solution for day 8 part 2"
+  submitSolution (Day 8) (Part 2) solve
+
+day09.part1 : '{IO, Exception} ()
+day09.part1 = do
+  solve input = todo "implement solution for day 9 part 1"
+  submitSolution (Day 9) (Part 1) solve
+
+day09.part2 : '{IO, Exception} ()
+day09.part2 = do
+  solve input = todo "implement solution for day 9 part 2"
+  submitSolution (Day 9) (Part 2) solve
+
+day10.part1 : '{IO, Exception} ()
+day10.part1 = do
+  solve input = todo "implement solution for day 10 part 1"
+  submitSolution (Day 10) (Part 1) solve
+
+day10.part2 : '{IO, Exception} ()
+day10.part2 = do
+  solve input = todo "implement solution for day 10 part 2"
+  submitSolution (Day 10) (Part 2) solve
+
+day11.part1 : '{IO, Exception} ()
+day11.part1 = do
+  solve input = todo "implement solution for day 11 part 1"
+  submitSolution (Day 11) (Part 1) solve
+
+day11.part2 : '{IO, Exception} ()
+day11.part2 = do
+  solve input = todo "implement solution for day 11 part 2"
+  submitSolution (Day 11) (Part 2) solve
+
+day12.part1 : '{IO, Exception} ()
+day12.part1 = do
+  solve input = todo "implement solution for day 12 part 1"
+  submitSolution (Day 12) (Part 1) solve
+
+day12.part2 : '{IO, Exception} ()
+day12.part2 = do
+  solve input = todo "implement solution for day 12 part 2"
+  submitSolution (Day 12) (Part 2) solve
+
+day13.part1 : '{IO, Exception} ()
+day13.part1 = do
+  solve input = todo "implement solution for day 13 part 1"
+  submitSolution (Day 13) (Part 1) solve
+
+day13.part2 : '{IO, Exception} ()
+day13.part2 = do
+  solve input = todo "implement solution for day 13 part 2"
+  submitSolution (Day 13) (Part 2) solve
+
+day14.part1 : '{IO, Exception} ()
+day14.part1 = do
+  solve input = todo "implement solution for day 14 part 1"
+  submitSolution (Day 14) (Part 1) solve
+
+day14.part2 : '{IO, Exception} ()
+day14.part2 = do
+  solve input = todo "implement solution for day 14 part 2"
+  submitSolution (Day 14) (Part 2) solve
+
+day15.part1 : '{IO, Exception} ()
+day15.part1 = do
+  solve input = todo "implement solution for day 15 part 1"
+  submitSolution (Day 15) (Part 1) solve
+
+day15.part2 : '{IO, Exception} ()
+day15.part2 = do
+  solve input = todo "implement solution for day 15 part 2"
+  submitSolution (Day 15) (Part 2) solve
+
+day16.part1 : '{IO, Exception} ()
+day16.part1 = do
+  solve input = todo "implement solution for day 16 part 1"
+  submitSolution (Day 16) (Part 1) solve
+
+day16.part2 : '{IO, Exception} ()
+day16.part2 = do
+  solve input = todo "implement solution for day 16 part 2"
+  submitSolution (Day 16) (Part 2) solve
+
+day17.part1 : '{IO, Exception} ()
+day17.part1 = do
+  solve input = todo "implement solution for day 17 part 1"
+  submitSolution (Day 17) (Part 1) solve
+
+day17.part2 : '{IO, Exception} ()
+day17.part2 = do
+  solve input = todo "implement solution for day 17 part 2"
+  submitSolution (Day 17) (Part 2) solve
+
+day18.part1 : '{IO, Exception} ()
+day18.part1 = do
+  solve input = todo "implement solution for day 18 part 1"
+  submitSolution (Day 18) (Part 1) solve
+
+day18.part2 : '{IO, Exception} ()
+day18.part2 = do
+  solve input = todo "implement solution for day 18 part 2"
+  submitSolution (Day 18) (Part 2) solve
+
+day19.part1 : '{IO, Exception} ()
+day19.part1 = do
+  solve input = todo "implement solution for day 19 part 1"
+  submitSolution (Day 19) (Part 1) solve
+
+day19.part2 : '{IO, Exception} ()
+day19.part2 = do
+  solve input = todo "implement solution for day 19 part 2"
+  submitSolution (Day 19) (Part 2) solve
+
+day20.part1 : '{IO, Exception} ()
+day20.part1 = do
+  solve input = todo "implement solution for day 20 part 1"
+  submitSolution (Day 20) (Part 1) solve
+
+day20.part2 : '{IO, Exception} ()
+day20.part2 = do
+  solve input = todo "implement solution for day 20 part 2"
+  submitSolution (Day 20) (Part 2) solve
+
+day21.part1 : '{IO, Exception} ()
+day21.part1 = do
+  solve input = todo "implement solution for day 21 part 1"
+  submitSolution (Day 21) (Part 1) solve
+
+day21.part2 : '{IO, Exception} ()
+day21.part2 = do
+  solve input = todo "implement solution for day 21 part 2"
+  submitSolution (Day 21) (Part 2) solve
+
+day22.part1 : '{IO, Exception} ()
+day22.part1 = do
+  solve input = todo "implement solution for day 22 part 1"
+  submitSolution (Day 22) (Part 1) solve
+
+day22.part2 : '{IO, Exception} ()
+day22.part2 = do
+  solve input = todo "implement solution for day 22 part 2"
+  submitSolution (Day 22) (Part 2) solve
+
+day23.part1 : '{IO, Exception} ()
+day23.part1 = do
+  solve input = todo "implement solution for day 23 part 1"
+  submitSolution (Day 23) (Part 1) solve
+
+day23.part2 : '{IO, Exception} ()
+day23.part2 = do
+  solve input = todo "implement solution for day 23 part 2"
+  submitSolution (Day 23) (Part 2) solve
+
+day24.part1 : '{IO, Exception} ()
+day24.part1 = do
+  solve input = todo "implement solution for day 24 part 1"
+  submitSolution (Day 24) (Part 1) solve
+
+day24.part2 : '{IO, Exception} ()
+day24.part2 = do
+  solve input = todo "implement solution for day 24 part 2"
+  submitSolution (Day 24) (Part 2) solve
+
+day25.part1 : '{IO, Exception} ()
+day25.part1 = do
+  solve input = todo "implement solution for day 25 part 1"
+  submitSolution (Day 25) (Part 1) solve
+
+day25.part2 : '{IO, Exception} ()
+day25.part2 = do
+  solve input = todo "implement solution for day 25 part 2"
+  submitSolution (Day 25) (Part 2) solve
+
+getInputText : Day ->{IO, Exception} Text
+getInputText day = defaultHandler do input presentYear day
+
+getInputText.doc : Doc
+getInputText.doc =
+  {{
+  {{ docSignatureInline (docEmbedSignatureLink do getInputText) }}Gets the
+  input text for a given day without submitting anything.
+
+  Useful for debugging and testing.
+  }}
+
+presentYear : Year
+presentYear = Year 2024
+
+README : Doc
+README =
+  {{
+  # Advent of Code 🎄
+
+    Hi! Glad you're here, we're excited you've decided to try Unison as your
+    language of choice for [Advent of Code](https://adventofcode.com/)!
+
+    ## Community
+
+       Feel free to join and participate in our Unison Leaderboard using the
+       code `96155-309fe9eb` on the
+       [leaderboard page](https://adventofcode.com/leaderboard/private).
+
+       Want to share or discuss your solutions?
+
+       Join the [Unison Discord](https://discord.gg/unison) community and leave
+       a note in the the #advent-of-code-2024 channel with a link to your
+       solutions on Unison Share.
+
+       {{
+       docCallout
+         (Some {{ 🌟 }})
+         {{
+         Each year, a number of community members write write-ups of their work
+         using Unison's documentation format. We love to see Unison devs
+         sharing their learning with one another.
+
+         [Check out some of the summaries!](https://www.unison-lang.org/whats-new/advent-of-code-highlights2022/)
+         }} }}
+
+       Also share your solutions on the
+       [Advent of Code subreddit](https://www.reddit.com/r/adventofcode/) by
+       sharing links to them on Share!
+
+       Use the [#adventofcode](https://twitter.com/search?q=%23AdventOfCode)
+       and
+       [#adventofcodeunison](https://twitter.com/search?q=%23AdventOfCodeUnison)
+       hashtags on twitter, Mastodon, Bluesky, or your chosen social media
+       network.
+
+       In the month of December, you can mob program with us or just follow
+       along and co-work in [the community discord](https://discord.gg/unison).
+       We'll mention it in our #advent-of-code-2024 channel and create some
+       discord events for it.
+
+    ## Advent of code project set up
+
+       We've set up a project template to help jump-start your Advent of Code
+       participation.
+
+       Open UCM and run the following commands to create an advent of code
+       project in your own codebase with some helpful libraries already
+       installed.
+
+       ``` ucm
+       scratch/main> project.create-empty advent-of-code-2024
+       advent-of-code-2024/main> pull @unison/advent-of-code/releases/latest
+       ```
+
+       The first line creates an empty project because the Advent of Code
+       project contains a copy of the base library for you!
+
+       {{
+       docCallout
+         (Some {{ 🗓 }})
+         {{
+         If you are working on problems from another year then you'll need to
+         edit {{ (docLink (docEmbedTermLink do presentYear)) }} and change the
+         year that it uses.
+         }} }}
+
+       The only required configuration is an Advent of Code API token. It is
+       used to fetch user-specific input for a problem and to submit answers
+       for a problem.
+
+       You can get your API token by logging into
+       [Advent of Code](https://adventofcode.com/) in your browser, finding the
+       cookie named `session`, and copying its value.
+
+       By default, the Advent of Code client will look for an API token in the
+       following locations (in this order):
+
+       * The `ADVENT_OF_CODE_TOKEN` environment variable
+       * A file located at `$XDG_DATA_HOME/unison-advent-of-code/.token.txt`
+       * A file located at
+         `$HOME/.local/share/unison-advent-of-code/.token.txt`
+
+    ## Usage
+
+       Once you have pulled the template and configured your token, you can
+       start solving problems!
+
+       Try the following in your UCM prompt:
+
+       ``` ucm
+       advent-of-code-2024/main> run day01.part1
+       ```
+
+       You should see a message that says that you haven't yet implemented a
+       solution. To edit {day01.part1}, run this:
+
+       ``` ucm
+       advent-of-code-2024/main> edit day01.part1
+       ```
+
+       Now edit your scratch file (usually `scratch.u` in the directory where
+       UCM is running) with your editor of choice and fill in your solution.
+       Once it's ready you can `run day01.part1` again. Once you have
+       successfully submitted your answer you can run `update` to save your
+       solution to your Unison codebase.
+
+       To retrieve the text without submitting anything, you can use
+       `getInputText` with the desired {type Day} as an argument.
+
+       The text value is cached after the first request to avoid making
+       multiple requests for the same input.
+
+       {{
+       docCallout
+         None
+         {{
+         [Here's an implementation in Unison using this template for a previous
+         year's Advent of Code puzzle.](https://share.unison-lang.org/@ceedubs/code/latest/namespaces/public/advent_of_code_2020/;/terms/day01/part2)
+         }} }}
+
+    ## Useful Libraries
+
+       * [Text patterns & Regex in the standard lib](https://share.unison-lang.org/@unison/base/code/releases/3.23.1/latest/types/Pattern)
+       * [A parsing library with nice error messages and semantics](https://share.unison-lang.org/@dfreeman/yap)
+       * [An abilities-based parsing Library with backtracking](https://share.unison-lang.org/@rlmark/parsing)
+       * [The Uniparsec parser combinator library](https://share.unison-lang.org/@stew/uniparsec)
+
+    ## Be kind
+
+       {{ beKind }}
+  }}
+
+releaseNotes : Doc
+releaseNotes =
+  {{ * updates the advent-of-code-client library from 1.4.1 to 1.4.2. }}
+
+submitSolution : Day -> Part -> (Text ->{g} Text) ->{g, IO, Exception} ()
+submitSolution day part solve =
+  defaultHandler do solveAndSubmit presentYear day part solve

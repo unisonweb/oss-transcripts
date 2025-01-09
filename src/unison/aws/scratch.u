@@ -1,0 +1,3768 @@
+type auth.CanonicalHeaders
+  = CanonicalHeaders Text
+
+type auth.CanonicalQuery
+  = CanonicalQuery Text
+
+type auth.CanonicalRequest
+  = CanonicalRequest Text
+
+type auth.CredentialScope
+  = { date : LocalDate,
+      region : Region,
+      service : Service,
+      terminationString : Text }
+
+type auth.Signature
+  = Signature Text
+
+type auth.SignedHeaders
+  = SignedHeaders Text
+
+type auth.StringToSign
+  = StringToSign Text
+
+ability AWSEnv where
+  sign : Service -> HttpRequest ->{AWSEnv} HttpRequest
+  region : {AWSEnv} Text
+
+type AWSError
+  = UnknownError Text
+  | AccessDenied
+  | MalformedXML
+  | InvalidArgument
+  | InvalidDigest
+  | SignatureDoesNotMatch
+
+type Config
+  = { hostName : HostName,
+      port : Optional Port,
+      region : Region,
+      service : Service,
+      isHttps : Boolean,
+      credentials : Credentials }
+
+type Credentials
+  = { accessKey : Text, secretKey : Text, sessionToken : Optional Text }
+
+type Key
+  = Key Bytes
+
+type lambda.types.ClientContext
+  = ClientContext Text
+
+type lambda.types.FunctionName
+  = FunctionName Text
+
+type lambda.types.InvocationType
+  = Event
+  | RequestResponse
+  | DryRun
+
+type lambda.types.InvokeLambdaResponse
+  = { status : HttpResponse.Status,
+      payload : Bytes,
+      versionExecuted : Optional Text,
+      log : Optional Text,
+      error : Optional Text,
+      rawResponse : HttpResponse }
+
+type lambda.types.LogType
+  = LogNone
+  | LogTail
+
+type lambda.types.Qualifier
+  = Qualifier Text
+
+type Region
+  = Region Text
+
+type s3.types.Bucket
+  = { name : Text, creationDate : Optional Instant }
+
+type s3.types.BucketName
+  = { toText : Text }
+
+type s3.types.ETag
+  = { toText : Text }
+
+type s3.types.GetObjectResponse
+  = { etag : Optional ETag, objectBody : Bytes }
+
+type s3.types.HeadObjectResponse
+  = { etag : ETag,
+      lastModified : Instant,
+      contentLength : Nat,
+      contentType : Text,
+      rawMetadata : Map Text [Text] }
+
+type s3.types.Key
+  = { toText : Text }
+
+type s3.types.ListBucketsResponse
+  = { owner : Owner, buckets : [Bucket] }
+
+type s3.types.Owner
+  = { id : Text, displayName : Text }
+
+type s3.types.PutObjectResponse
+  = { etag : Optional ETag }
+
+type s3.types.S3Error
+  = { code : Text, message : Text, resouce : Text, requestId : Text }
+
+type Service
+  = Service Text
+
+type sqs.send.Failure
+  = { status : Nat, errorType : Text, description : Text }
+
+type sqs.send.Message
+  = { queue : Text,
+      body : Text,
+      attributes : [(Text, Attribute)],
+      delaySeconds : Optional Nat,
+      deduplicationId : Optional Text,
+      groupId : Optional Text,
+      systemAttributes : [(Text, Attribute)] }
+
+type sqs.send.Message.Attribute
+  = String Text
+  | Binary Bytes
+
+type sqs.send.Success
+  = { messageId : Text, md5 : Text }
+
+addAwsHeaders : Config -> Instant -> HttpRequest ->{Exception} HttpRequest
+addAwsHeaders config instant =
+  use http setHeader
+  (Config.Config host port region service isHttps creds) = config
+  setHeader
+    "x-amz-date" [base.time.Instant.toBasicISO8601 (truncateToSeconds instant)]
+    >> (req ->
+         setHeader
+           "x-amz-content-sha256"
+           [ hashBytes Sha2_256 (Body.toBytes (HttpRequest.body req))
+               |> base.Bytes.toHex
+           ]
+           req)
+    >> addSecurityTokenHeader creds
+    >> addAuthorizationHeader creds instant region service
+
+addAwsHeaders.doc : Doc
+addAwsHeaders.doc =
+  {{
+  Adds AWS headers to an {type HttpRequest}.
+
+  The following headers are added:
+
+  * `x-amz-date` with the value of the given {type Instant}
+  * `x-amz-content-sha256` with the value of the SHA-256 hash of the request
+    body.
+
+  Depending on the given {type Credentials}, the following headers may also be
+  added:
+
+  * `Authorization` with the value of the AWS authorization header
+  * `x-amz-security-token` with the value of the session token, if present
+  }}
+
+auth.addAuthorizationHeader :
+  Credentials
+  -> Instant
+  -> Region
+  -> Service
+  -> HttpRequest
+  ->{Exception} HttpRequest
+auth.addAuthorizationHeader cred instant region service req =
+  use Text ++
+  scope =
+    CredentialScope.new
+      (atUTC instant |> OffsetDateTime.localDateTime |> LocalDateTime.date)
+      region
+      service
+  string = stringToSign instant region service (canonicalRequest req)
+  signature = auth.sign cred scope string
+  http.setHeader
+    "Authorization"
+    [ "AWS4-HMAC-SHA256 Credential="
+        ++ accessKey cred
+        ++ "/"
+        ++ CredentialScope.toText scope
+        ++ ",SignedHeaders="
+        ++ SignedHeaders.toText (signedHeaders (HttpRequest.headers req))
+        ++ ",Signature="
+        ++ Signature.toText signature
+    ]
+    req
+
+auth.addAuthorizationHeader.doc : Doc
+auth.addAuthorizationHeader.doc =
+  {{
+  Creates an AWS authorization header for an {type HttpRequest}, using the
+  given {type Credentials}, {type Instant}, {type Region}, and {type Service}.
+
+  # Example
+
+    {{
+    docEval
+      (_ ->
+        catch do
+          fromUtf8
+            (HttpRequest.encode
+              NoProxy
+              (addAuthorizationHeader
+                (Credentials "key" "secret" None)
+                epoch
+                (Region "us-east-1")
+                (Service "s3")
+                (HttpRequest.get
+                  (URI
+                    Scheme.https
+                    (Some (Authority None (HostName "example.com") None))
+                    Path.root
+                    RawQuery.empty
+                    Fragment.empty))))) }}
+  }}
+
+auth.addSecurityTokenHeader : Credentials -> HttpRequest -> HttpRequest
+auth.addSecurityTokenHeader credentials = match sessionToken credentials with
+  Some token -> http.setHeader "x-amz-security-token" [token]
+  None       -> Function.id
+
+auth.addSecurityTokenHeader.doc : Doc
+auth.addSecurityTokenHeader.doc =
+  {{
+  If the provided {type Credentials} contain a session token, set the {{
+  docExample 5 do - amz security x token -> x - amz - security - token }}
+  header to its value.
+  }}
+
+auth.canonicalHeaders : Headers -> CanonicalHeaders
+auth.canonicalHeaders = cases
+  Headers headers ->
+    use List map
+    use Text ++ join
+    joinKv = cases (k, v) -> k ++ ":" ++ v
+    encodeKvs = cases
+      (k, vs) ->
+        headerName = Text.toLowercase k
+        trimSpace v = join " " (words (trim v))
+        headerValue = join "," (map trimSpace vs)
+        (headerName, headerValue)
+    kvs = sortBy at1 (map encodeKvs (Map.toList headers))
+    CanonicalHeaders (foldDelimited (++) joinKv "" "\n" "" kvs)
+
+auth.canonicalHeaders.doc : Doc
+auth.canonicalHeaders.doc =
+  {{
+  Converts {type Headers} to {type CanonicalHeaders} for signing.
+
+  The result is the request headers and their values, separated by newline
+  characters. Header names are converted to lowercase, and sorted
+  alphabetically, and followed by a colon (:). The values are trimmed of
+  leading and trailing whitespace, and sequential whitespace is replaced with a
+  single space. For headers with multiple values, the values are separeted with
+  commas (,).
+
+  # Example
+
+    ```
+    catch do
+      canonicalHeaders
+        (Headers
+          (Map.fromList
+            [("X-Amz-Date", ["20230207T182647Z"]), ("Host", ["example.com"])]))
+    ```
+  }}
+
+auth.CanonicalHeaders.doc : Doc
+auth.CanonicalHeaders.doc =
+  {{
+  A {type CanonicalHeaders} is a {type Text} representation of a set of HTTP
+  headers that are used in signing AWS requests.
+
+  The headers are sorted by key, and the values are trimmed of whitespace. The
+  headers are then joined with `\n` characters.
+
+  Construct a {type CanonicalHeaders} with {canonicalHeaders}.
+  }}
+
+auth.CanonicalHeaders.toText : CanonicalHeaders -> Text
+auth.CanonicalHeaders.toText = cases CanonicalHeaders t -> t
+
+auth.canonicalQuery : Query ->{Exception} CanonicalQuery
+auth.canonicalQuery = cases
+  Query params ->
+    if Map.isEmpty params then CanonicalQuery ""
+    else
+      use Text ++
+      joinKv = cases (k, v) -> k ++ "=" ++ v
+      encodeKvs = cases
+        (k, vs) -> List.map (v -> (uriEncode k, uriEncode v)) vs
+      kvs = sortBy at1 (List.flatMapRight encodeKvs (Map.toList params))
+      CanonicalQuery (foldDelimited (++) joinKv "" "&" "" kvs)
+
+auth.canonicalQuery.doc : Doc
+auth.canonicalQuery.doc =
+  {{
+  Converts a {type Query} to a {type CanonicalQuery} for signing.
+
+  # Example
+
+    ```
+    catch do
+      canonicalQuery
+        (Query (Map.fromList [("key1", ["value1"]), ("key2", ["value2"])]))
+    ```
+  }}
+
+auth.CanonicalQuery.doc : Doc
+auth.CanonicalQuery.doc =
+  {{
+  A {type CanonicalQuery} is a query string that is sorted by key. The keys and
+  values are separately URL-encoded. The query string is then joined with `&`
+  characters.
+  }}
+
+test> auth.canonicalQuery.tests =
+  test.verify do
+    query =
+      Query.empty
+        & ("encoding-type", "url")
+        & ("list-type", "2")
+        & ("delimiter", "/")
+        & ( "prefix"
+          , "My Documents/.autosave (Thu Sep 26 02:41:38 PM EDT 2024)"
+          )
+    expected =
+      "delimiter=%2F&encoding-type=url&list-type=2&prefix=My%20Documents%2F.autosave%20%28Thu%20Sep%2026%2002%3A41%3A38%20PM%20EDT%202024%29"
+    actual = CanonicalQuery.toText (canonicalQuery query)
+    test.ensureEqual expected actual
+
+auth.CanonicalQuery.toText : CanonicalQuery -> Text
+auth.CanonicalQuery.toText = cases CanonicalQuery t -> t
+
+auth.CanonicalQuery.toText.doc : Doc
+auth.CanonicalQuery.toText.doc =
+  {{
+  Converts a {type CanonicalQuery} to its {type Text} representation.
+
+  # Example
+
+    ```
+    catch do
+      CanonicalQuery.toText
+        (canonicalQuery
+          (Query (Map.fromList [("key1", ["value1"]), ("key2", ["value2"])])))
+    ```
+  }}
+
+auth.canonicalRequest : HttpRequest ->{Exception} CanonicalRequest
+auth.canonicalRequest = cases
+  HttpRequest method version uri headers body ->
+    CanonicalRequest
+      (Text.join
+        "\n"
+        [ Method.toText method
+        , Path.toText (URI.path uri)
+        , CanonicalQuery.toText
+            (Optional.fold
+              (do CanonicalQuery "")
+              canonicalQuery
+              (fromRawQuery (URI.query uri)))
+        , CanonicalHeaders.toText (canonicalHeaders headers) Text.++ "\n"
+        , SignedHeaders.toText (signedHeaders headers)
+        , hashPayload body
+        ])
+
+auth.CanonicalRequest.doc : Doc
+auth.CanonicalRequest.doc =
+  {{
+  A {type CanonicalRequest} is a {type Text} representation of a request that
+  is used in signing AWS requests.
+
+  Construct a {type CanonicalRequest} with {canonicalRequest}.
+  }}
+
+auth.canonicalRequest.doc : Doc
+auth.canonicalRequest.doc =
+  {{
+  Converts an {type HttpRequest} to a {type CanonicalRequest} for signing.
+
+  The result is the request method, the canonical request path, the canonical
+  request query string, the canonical request headers, the request header
+  names, and the hashed request body, separated by newline characters.
+
+  # Example
+
+    ```
+    catch do
+      canonicalRequest
+        (HttpRequest
+          GET
+          (Version 1 1)
+          (URI
+            (Scheme "https")
+            (Some (Authority None (HostName "example.com") None))
+            Path.root
+            (fromQuery
+              (Query.empty
+                & ("q", "unison+programming+language")
+                & ("lang", "en")))
+            Fragment.empty)
+          (Headers
+            (Map.fromList
+              [("X-Amz-Date", ["20230207T182647Z"]), ("Host", ["example.com"])]))
+          (Body (Text.toUtf8 "Hello, world!")))
+    ```
+  }}
+
+auth.CanonicalRequest.toText : CanonicalRequest -> Text
+auth.CanonicalRequest.toText = cases CanonicalRequest t -> t
+
+auth.CredentialScope.date : CredentialScope -> LocalDate
+auth.CredentialScope.date = cases CredentialScope date _ _ _ -> date
+
+auth.CredentialScope.date.modify :
+  (LocalDate ->{g} LocalDate) -> CredentialScope ->{g} CredentialScope
+auth.CredentialScope.date.modify f = cases
+  CredentialScope date region service terminationString ->
+    CredentialScope (f date) region service terminationString
+
+auth.CredentialScope.date.set : LocalDate -> CredentialScope -> CredentialScope
+auth.CredentialScope.date.set date1 = cases
+  CredentialScope _ region service terminationString ->
+    CredentialScope date1 region service terminationString
+
+auth.CredentialScope.doc : Doc
+auth.CredentialScope.doc =
+  {{
+  A {type CredentialScope} is a {type LocalDate}, {type Region}, and
+  {type Service} representing the scope of an AWS user's crediantials.
+  }}
+
+auth.CredentialScope.new : LocalDate -> Region -> Service -> CredentialScope
+auth.CredentialScope.new date region service =
+  CredentialScope date region service "aws4_request"
+
+auth.CredentialScope.new.doc : Doc
+auth.CredentialScope.new.doc =
+  {{
+  Creates a new {type CredentialScope} from a {type LocalDate}, {type Region},
+  and {type Service}.
+  }}
+
+auth.CredentialScope.region : CredentialScope -> Region
+auth.CredentialScope.region = cases CredentialScope _ region _ _ -> region
+
+auth.CredentialScope.region.modify :
+  (Region ->{g} Region) -> CredentialScope ->{g} CredentialScope
+auth.CredentialScope.region.modify f = cases
+  CredentialScope date region service terminationString ->
+    CredentialScope date (f region) service terminationString
+
+auth.CredentialScope.region.set : Region -> CredentialScope -> CredentialScope
+auth.CredentialScope.region.set region1 = cases
+  CredentialScope date _ service terminationString ->
+    CredentialScope date region1 service terminationString
+
+auth.CredentialScope.service : CredentialScope -> Service
+auth.CredentialScope.service = cases CredentialScope _ _ service _ -> service
+
+auth.CredentialScope.service.modify :
+  (Service ->{g} Service) -> CredentialScope ->{g} CredentialScope
+auth.CredentialScope.service.modify f = cases
+  CredentialScope date region service terminationString ->
+    CredentialScope date region (f service) terminationString
+
+auth.CredentialScope.service.set :
+  Service -> CredentialScope -> CredentialScope
+auth.CredentialScope.service.set service1 = cases
+  CredentialScope date region _ terminationString ->
+    CredentialScope date region service1 terminationString
+
+auth.CredentialScope.terminationString : CredentialScope -> Text
+auth.CredentialScope.terminationString = cases
+  CredentialScope _ _ _ terminationString -> terminationString
+
+auth.CredentialScope.terminationString.modify :
+  (Text ->{g} Text) -> CredentialScope ->{g} CredentialScope
+auth.CredentialScope.terminationString.modify f = cases
+  CredentialScope date region service terminationString ->
+    CredentialScope date region service (f terminationString)
+
+auth.CredentialScope.terminationString.set :
+  Text -> CredentialScope -> CredentialScope
+auth.CredentialScope.terminationString.set terminationString1 = cases
+  CredentialScope date region service _ ->
+    CredentialScope date region service terminationString1
+
+auth.CredentialScope.toText : CredentialScope -> Text
+auth.CredentialScope.toText = cases
+  CredentialScope date region service termination ->
+    Text.join
+      "/"
+      [ base.time.LocalDate.toBasicISO8601 date
+      , Region.name region
+      , abbreviation service
+      , termination
+      ]
+
+auth.CredentialScope.toText.doc : Doc
+auth.CredentialScope.toText.doc =
+  {{
+  Converts a {type CredentialScope} to its {type Text} representation for
+  signing.
+
+  # Example
+
+    ```
+    CredentialScope.toText
+      (CredentialScope
+        (LocalDate +2021 2 7)
+        (Region "us-east-1")
+        (Service "s3")
+        "aws4_request")
+    ```
+  }}
+
+auth.hashCanonicalRequest : CanonicalRequest -> Text
+auth.hashCanonicalRequest = cases
+  CanonicalRequest t -> hashBytes Sha2_256 (Text.toUtf8 t) |> base.Bytes.toHex
+
+auth.hashCanonicalRequest.doc : Doc
+auth.hashCanonicalRequest.doc =
+  {{
+  Computes the SHA-256 hash of a {type CanonicalRequest}, as a lowercase
+  hexadecimal string.
+  }}
+
+auth.hashPayload : Body -> Text
+auth.hashPayload body =
+  body |> Body.toBytes |> hashBytes Sha2_256 |> base.Bytes.toHex
+
+auth.hashPayload.doc : Doc
+auth.hashPayload.doc =
+  {{
+  Computes the SHA-256 hash of the request body, as a lowercase hexadecimal
+  string.
+
+  # Example
+
+    ```
+    catch do hashPayload (Body (Text.toUtf8 "Hello, world!"))
+    ```
+  }}
+
+auth.sign : Credentials -> CredentialScope -> StringToSign -> auth.Signature
+auth.sign creds scope string =
+  use Text ++ toUtf8
+  kDate =
+    hmacBytes
+      Sha2_256
+      (toUtf8 ("AWS4" ++ secretKey creds))
+      (toUtf8
+        (CredentialScope.date scope |> base.time.LocalDate.toBasicISO8601))
+  kRegion =
+    hmacBytes
+      Sha2_256 kDate (toUtf8 (Region.name (CredentialScope.region scope)))
+  kService =
+    hmacBytes
+      Sha2_256 kRegion (toUtf8 (abbreviation (CredentialScope.service scope)))
+  kSigning = hmacBytes Sha2_256 kService (toUtf8 (terminationString scope))
+  signature = hmacBytes Sha2_256 kSigning (toUtf8 (StringToSign.toText string))
+  auth.Signature.Signature (base.Bytes.toHex signature)
+
+auth.sign.doc : Doc
+auth.sign.doc =
+  {{
+  Generates the {type auth.Signature} for signing AWS requests given a
+  {type Credentials}, {type CredentialScope}, and {type StringToSign}.
+  }}
+
+auth.Signature.doc : Doc
+auth.Signature.doc =
+  {{
+  A {type auth.Signature} is a {type Text} representation of a signature that
+  is used in signing AWS requests.
+  }}
+
+auth.Signature.toText : auth.Signature -> Text
+auth.Signature.toText = cases auth.Signature.Signature t -> t
+
+auth.Signature.toText.doc : Doc
+auth.Signature.toText.doc =
+  {{ Returns the {type Text} representation of a {type auth.Signature}. }}
+
+auth.signedHeaders : Headers -> SignedHeaders
+auth.signedHeaders = cases
+  Headers headers ->
+    keys = List.map Text.toLowercase (Map.keys headers)
+    SignedHeaders (Text.join ";" (List.sort keys))
+
+auth.signedHeaders.doc : Doc
+auth.signedHeaders.doc =
+  {{
+  Converts {type Headers} to {type SignedHeaders} for signing.
+
+  The result is the request header names, converted to lowercase, and sorted
+  alphabetically, and separated by semicolons (;).
+
+  # Example
+
+    ```
+    catch do
+      signedHeaders
+        (Headers
+          (Map.fromList
+            [("X-Amz-Date", ["20230207T182647Z"]), ("Host", ["example.com"])]))
+    ```
+  }}
+
+auth.SignedHeaders.doc : Doc
+auth.SignedHeaders.doc =
+  {{
+  A {type SignedHeaders} value is a {type Text} representation of the names of
+  a set of HTTP headers that are used in signing AWS requests.
+  }}
+
+auth.SignedHeaders.toText : SignedHeaders -> Text
+auth.SignedHeaders.toText = cases SignedHeaders t -> t
+
+auth.SignedHeaders.toText.doc : Doc
+auth.SignedHeaders.toText.doc =
+  {{ Converts a {type SignedHeaders} to its {type Text} representation. }}
+
+auth.stringToSign :
+  Instant -> Region -> Service -> CanonicalRequest -> StringToSign
+auth.stringToSign instant region service request =
+  Text.join
+    "\n"
+    [ "AWS4-HMAC-SHA256"
+    , base.time.Instant.toBasicISO8601 (truncateToSeconds instant)
+    , CredentialScope.toText
+        (CredentialScope.new
+          (atUTC instant |> OffsetDateTime.localDateTime |> LocalDateTime.date)
+          region
+          service)
+    , hashCanonicalRequest request
+    ]
+    |> StringToSign
+
+auth.stringToSign.doc : Doc
+auth.stringToSign.doc =
+  {{
+  Generates the {type StringToSign} for signing AWS requests.
+
+  # Example
+
+    ```
+    catch do
+      stringToSign
+        epoch
+        (Region "us-east-1")
+        (Service "s3")
+        (canonicalRequest
+          (HttpRequest.get
+            (URI
+              Scheme.https
+              (Some (Authority None (HostName "example.com") None))
+              Path.root
+              RawQuery.empty
+              Fragment.empty)))
+    ```
+  }}
+
+auth.StringToSign.doc : Doc
+auth.StringToSign.doc =
+  {{
+  A {type StringToSign} is a {type Text} representation of a string that is
+  used in signing AWS requests.
+  }}
+
+auth.StringToSign.toText : StringToSign -> Text
+auth.StringToSign.toText = cases StringToSign t -> t
+
+auth.uriEncode : Text -> Text
+auth.uriEncode =
+  use Class + range
+  use Text ++
+  unreserved =
+    patterns.char
+      (range ?A ?Z + range ?a ?z + range ?0 ?9 + anyOf [?-, ?., ?_, ?~])
+  unreservedChunk = Pattern.capture (many unreserved)
+  pctEncode = special >> Text.toUppercase
+  go acc rem = match Pattern.run unreservedChunk rem with
+    Some ([chunk], rest) ->
+      match Text.uncons rest with
+        Some (c, rem) -> go (acc ++ chunk ++ pctEncode c) rem
+        None          -> acc ++ chunk
+    None                 -> bug "many should never fail"
+    Some other           -> bug ("Expected exactly 1 capture", other)
+  go ""
+
+auth.uriEncode.doc : Doc
+auth.uriEncode.doc =
+  {{
+  Performs URI encoding as defined by AWS and documented as `UriEncode()` in
+  [these AWS docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html).
+  }}
+
+test> auth.uriEncode.tests =
+  test.verify do
+    (input, expected) =
+      each
+        [ ("", "")
+        , ("foo", "foo")
+        , (" ", "%20")
+        , ("hello world", "hello%20world")
+        , ("/foo/bar", "%2Ffoo%2Fbar")
+        ]
+    test.ensureEqual expected (uriEncode input)
+
+AWSEnv.doc : Doc
+AWSEnv.doc =
+  use provide fromEnv
+  use sqs send
+  {{
+  The {type AWSEnv} ability is required by AWS API calls (e.g. {send}) for
+  request processing and authentication.
+
+  # Initializing from AWS Environment variables
+
+    If you're working locally you can provide the {type AWSEnv} ability from
+    the system environment using ``fromEnv``.
+
+    It will use AWS environment variables such as: `AWS_REGION`,
+    `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`.
+
+    Example:
+
+    @typecheck ```
+    fromEnv do Message.message "SQSQueue1" "hello world" |> send
+    ```
+
+  # Initializing manually
+
+    You can also initialize it manually with {AWSEnv.handler}, so you can write
+    your own provide methods, e.g. when running in the cloud.
+
+  # Signing requests
+
+    AWS API calls must be signed (see
+    [Create a signed AWS API request](https://docs.aws.amazon.com/IAM/latest/UserGuide/create-signed-request.html))
+    before they are sent. {AWSEnv.sign} is very helpful when extending the
+    library and adding new API calls as it takes care of signing the request
+    for you.
+
+    Example:     @source{send}
+  }}
+
+AWSEnv.handler : Region -> Credentials -> Request AWSEnv a ->{IO, Exception} a
+AWSEnv.handler region creds =
+  conf =
+    Config.Config
+      (HostName "ignored") None region (Service "set-later") true creds
+  let
+    (Region regionName) = region
+    h = cases
+      { a } -> a
+      { AWSEnv.sign ser httpRequest -> k } ->
+        handle
+          k (addAwsHeaders (Config.service.set ser conf) now() httpRequest)
+        with h
+      { AWSEnv.region -> k } -> handle k regionName with h
+    h
+
+AWSEnv.handler.fromEnv :
+  '{IO, Exception} (Request AWSEnv a ->{IO, Exception} a)
+AWSEnv.handler.fromEnv =
+  do AWSEnv.handler (Region (getEnv "AWS_REGION")) Credentials.fromEnv()
+
+AWSEnv.provide.fromEnv : '{g, AWSEnv} r ->{g, IO, Exception} r
+AWSEnv.provide.fromEnv f = handle f() with handler.fromEnv()
+
+AWSError.fromText : Text -> AWSError
+AWSError.fromText = cases
+  "AccessDenied"          -> AccessDenied
+  "MalformedXML"          -> MalformedXML
+  "InvalidArgument"       -> InvalidArgument
+  "InvalidDigest"         -> InvalidDigest
+  "SignatureDoesNotMatch" -> SignatureDoesNotMatch
+  x                       -> UnknownError x
+
+Config.credentials : Config -> Credentials
+Config.credentials = cases Config.Config _ _ _ _ _ credentials -> credentials
+
+Config.credentials.modify :
+  (Credentials ->{g} Credentials) -> Config ->{g} Config
+Config.credentials.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config hostName port region service isHttps (f credentials)
+
+Config.credentials.set : Credentials -> Config -> Config
+Config.credentials.set credentials1 = cases
+  Config.Config hostName port region service isHttps _ ->
+    Config.Config hostName port region service isHttps credentials1
+
+Config.hostName : Config -> HostName
+Config.hostName = cases Config.Config hostName _ _ _ _ _ -> hostName
+
+Config.hostName.modify : (HostName ->{g} HostName) -> Config ->{g} Config
+Config.hostName.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config (f hostName) port region service isHttps credentials
+
+Config.hostName.set : HostName -> Config -> Config
+Config.hostName.set hostName1 = cases
+  Config.Config _ port region service isHttps credentials ->
+    Config.Config hostName1 port region service isHttps credentials
+
+Config.isHttps : Config -> Boolean
+Config.isHttps = cases Config.Config _ _ _ _ isHttps _ -> isHttps
+
+Config.isHttps.modify : (Boolean ->{g} Boolean) -> Config ->{g} Config
+Config.isHttps.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config hostName port region service (f isHttps) credentials
+
+Config.isHttps.set : Boolean -> Config -> Config
+Config.isHttps.set isHttps1 = cases
+  Config.Config hostName port region service _ credentials ->
+    Config.Config hostName port region service isHttps1 credentials
+
+Config.port : Config -> Optional Port
+Config.port = cases Config.Config _ port _ _ _ _ -> port
+
+Config.port.modify : (Optional Port ->{g} Optional Port) -> Config ->{g} Config
+Config.port.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config hostName (f port) region service isHttps credentials
+
+Config.port.set : Optional Port -> Config -> Config
+Config.port.set port1 = cases
+  Config.Config hostName _ region service isHttps credentials ->
+    Config.Config hostName port1 region service isHttps credentials
+
+Config.region : Config -> Region
+Config.region = cases Config.Config _ _ region _ _ _ -> region
+
+Config.region.modify : (Region ->{g} Region) -> Config ->{g} Config
+Config.region.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config hostName port (f region) service isHttps credentials
+
+Config.region.set : Region -> Config -> Config
+Config.region.set region1 = cases
+  Config.Config hostName port _ service isHttps credentials ->
+    Config.Config hostName port region1 service isHttps credentials
+
+Config.scheme : Config -> Scheme
+Config.scheme = cases
+  Config.Config _ _ _ _ isHttps _ ->
+    if isHttps then Scheme.https else Scheme.http
+
+Config.service : Config -> Service
+Config.service = cases Config.Config _ _ _ service _ _ -> service
+
+Config.service.modify : (Service ->{g} Service) -> Config ->{g} Config
+Config.service.modify f = cases
+  Config.Config hostName port region service isHttps credentials ->
+    Config.Config hostName port region (f service) isHttps credentials
+
+Config.service.set : Service -> Config -> Config
+Config.service.set service1 = cases
+  Config.Config hostName port region _ isHttps credentials ->
+    Config.Config hostName port region service1 isHttps credentials
+
+Credentials.accessKey : Credentials -> Text
+Credentials.accessKey = cases Credentials accessKey _ _ -> accessKey
+
+Credentials.accessKey.modify :
+  (Text ->{g} Text) -> Credentials ->{g} Credentials
+Credentials.accessKey.modify f = cases
+  Credentials accessKey secretKey sessionToken ->
+    Credentials (f accessKey) secretKey sessionToken
+
+Credentials.accessKey.set : Text -> Credentials -> Credentials
+Credentials.accessKey.set accessKey1 = cases
+  Credentials _ secretKey sessionToken ->
+    Credentials accessKey1 secretKey sessionToken
+
+Credentials.anonymous : Credentials
+Credentials.anonymous = Credentials "" "" None
+
+Credentials.anonymous.doc : Doc
+Credentials.anonymous.doc =
+  {{ Returns a {type Credentials} representing an anonymous user. }}
+
+Credentials.defaultCredentials : '{IO, Exception} Credentials
+Credentials.defaultCredentials =
+  do
+    match tryFromEnv() with
+      Some credentials -> credentials
+      None ->
+        match tryFromDefaultCredentialsFile "default" with
+          Some credentials -> credentials
+          None ->
+            Exception.raise
+              (IO.Failure.Failure
+                (typeLink Text)
+                "defaultCredentials: Could not find credentials"
+                (Any ""))
+
+Credentials.defaultCredentials.doc : Doc
+Credentials.defaultCredentials.doc =
+  use Credentials fromEnv
+  {{
+  Returns the default {type Credentials}.
+
+  The default credentials are searched in this order:
+
+  1. Using the environment variables specified in the
+     [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+     See {fromEnv} and {tryFromEnv} for more details.
+  2. Using the default credentials file specified in the
+     [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+     See {fromDefaultCredentialsFile} and {tryFromDefaultCredentialsFile} for
+     more details.
+
+  If the credentials are not found, then an exception is raised.
+
+  # Example
+
+    @typecheck ```
+    credentials = defaultCredentials()
+    ```
+
+  # See Also
+
+    * {tryDefaultCredentials}
+    * {tryFromEnv}
+    * {fromEnv}
+    * {tryFromDefaultCredentialsFile}
+    * {fromDefaultCredentialsFile}
+  }}
+
+Credentials.doc : Doc
+Credentials.doc =
+  {{
+  A {type Credentials} is a {type Bytes} pair representing the access key and
+  secret key of an AWS user.
+
+  For temporary credentials, it also contains a session token.
+
+  {{
+  docCallout
+    (Some {{ 🚨 }})
+    {{
+    Never add your AWS credentials to your codebase. Keep them somewhere
+    private and load them from, for example, a file or from environment
+    variables.
+    }} }}
+
+  # How to load credentials
+
+    Credentials can be loaded from a file or from environment variables. To
+    load them you can use one of the following helper functions:
+
+    * {defaultCredentials} and {tryDefaultCredentials} : Search for a default
+      credentials configuration, using environment variables or the default
+      credentials file using the default profile.
+    * {fromDefaultCredentialsFile} and {tryFromDefaultCredentialsFile} : Loads
+      credentials from the default credentials file and the given profile.
+    * {Credentials.fromEnv} and {tryFromEnv} : Loads credentials from
+      environment variables.
+    * {fromCredentialsFile} and {tryFromCredentialsFile} : Loads credentials
+      from a file and a given profile.
+  }}
+
+Credentials.fromCredentialsFile :
+  FilePath -> Text ->{IO, Exception} Credentials
+Credentials.fromCredentialsFile file profile =
+  tryFromCredentialsFile file profile
+    |> base.Optional.toException
+      "fromCredentialsFile: Could not find credentials" (typeLink Text)
+
+Credentials.fromCredentialsFile.doc : Doc
+Credentials.fromCredentialsFile.doc =
+  {{
+  Parses the given credentials file and returns the {type Credentials} for the
+  given profile.
+
+  The file is expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+
+  The profile is the name of the profile to use. If the profile is not found,
+  then an exception is raised.
+
+  # Example
+
+    @typecheck ```
+    fromCredentialsFile (FilePath "/path/to/credentials") "default"
+    ```
+
+  # See Also
+
+    * {tryFromCredentialsFile}
+    * {fromDefaultCredentialsFile}
+    * {tryFromDefaultCredentialsFile}
+  }}
+
+Credentials.fromDefaultCredentialsFile : Text ->{IO, Exception} Credentials
+Credentials.fromDefaultCredentialsFile profile =
+  match getEnv.impl "AWS_SHARED_CREDENTIALS_FILE" |> Either.toOptional with
+    Some file -> fromCredentialsFile (FilePath file) profile
+    None ->
+      use Text ++
+      use getEnv impl
+      home =
+        match impl "HOME" with
+          Right home -> home
+          Left _ ->
+            match impl "%UserProfile%" with
+              Right userProfile -> userProfile
+              Left _ ->
+                Exception.raise
+                  (IO.Failure.Failure
+                    (typeLink Text)
+                    "fromDefaultCredentialsFile: Could not find home directory"
+                    (Any ""))
+      filePath = FilePath (home ++ "/.aws/credentials")
+      fromCredentialsFile filePath profile
+
+Credentials.fromDefaultCredentialsFile.doc : Doc
+Credentials.fromDefaultCredentialsFile.doc =
+  {{
+  Parses the default credentials file and returns the {type Credentials} for
+  the given profile.
+
+  The default credentials file is searched in this order:
+
+  1. Using the location specified in the `AWS_SHARED_CREDENTIALS_FILE`
+     environment variable.
+  2. In the file at `~/.aws/credentials` on Unix-like systems or
+     `%UserProfile%\.aws\credentials` on Windows.
+
+  The file is expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+
+  The profile is the name of the profile to use. If the profile is not found,
+  then an exception is raised.
+
+  # Example
+
+    @typecheck ```
+    tryFromDefaultCredentialsFile "default"
+    ```
+
+  # See Also
+
+    * {tryFromDefaultCredentialsFile}
+    * {fromCredentialsFile}
+    * {tryFromCredentialsFile}
+  }}
+
+Credentials.fromEnv : '{IO, Exception} Credentials
+Credentials.fromEnv = do
+  awsKey = getEnv "AWS_ACCESS_KEY_ID"
+  awsSecret = getEnv "AWS_SECRET_ACCESS_KEY"
+  sessionToken = getEnv.impl "AWS_SESSION_TOKEN" |> Either.toOptional
+  Credentials awsKey awsSecret sessionToken
+
+Credentials.fromEnv.doc : Doc
+Credentials.fromEnv.doc =
+  {{
+  Parses the environment variables and returns the {type Credentials}.
+
+  The environment variables are expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+
+  If the environment variables are not found, then an exception is raised.
+
+  # Example
+
+    @typecheck ```
+    Credentials.fromEnv
+    ```
+
+  # See Also
+
+    * {tryFromEnv}
+  }}
+
+Credentials.isAnonymous : Credentials -> Boolean
+Credentials.isAnonymous = cases
+  Credentials accessKey _ _ -> accessKey Text.== ""
+
+Credentials.isAnonymous.doc : Doc
+Credentials.isAnonymous.doc =
+  {{
+  Returns `` true `` if a {type Credentials} represents an anonymous user.
+
+  See {anonymous}.
+  }}
+
+Credentials.longLived : Text -> Text -> Credentials
+Credentials.longLived accessKey secretKey =
+  Credentials accessKey secretKey None
+
+Credentials.longLived.doc : Doc
+Credentials.longLived.doc =
+  {{
+  `` longLived accessKey secretKey `` creates a {type Credentials} with the
+  given access key and secret key, and no session token.
+  }}
+
+Credentials.parse : Text ->{Exception} Map Text (Map Text Text)
+Credentials.parse = parseWithCommentPrefix "#"
+
+Credentials.secretKey : Credentials -> Text
+Credentials.secretKey = cases Credentials _ secretKey _ -> secretKey
+
+Credentials.secretKey.modify :
+  (Text ->{g} Text) -> Credentials ->{g} Credentials
+Credentials.secretKey.modify f = cases
+  Credentials accessKey secretKey sessionToken ->
+    Credentials accessKey (f secretKey) sessionToken
+
+Credentials.secretKey.set : Text -> Credentials -> Credentials
+Credentials.secretKey.set secretKey1 = cases
+  Credentials accessKey _ sessionToken ->
+    Credentials accessKey secretKey1 sessionToken
+
+Credentials.sessionToken : Credentials -> Optional Text
+Credentials.sessionToken = cases Credentials _ _ sessionToken -> sessionToken
+
+Credentials.sessionToken.modify :
+  (Optional Text ->{g} Optional Text) -> Credentials ->{g} Credentials
+Credentials.sessionToken.modify f = cases
+  Credentials accessKey secretKey sessionToken ->
+    Credentials accessKey secretKey (f sessionToken)
+
+Credentials.sessionToken.set : Optional Text -> Credentials -> Credentials
+Credentials.sessionToken.set sessionToken1 = cases
+  Credentials accessKey secretKey _ ->
+    Credentials accessKey secretKey sessionToken1
+
+Credentials.tryDefaultCredentials : '{IO} Optional Credentials
+Credentials.tryDefaultCredentials = do match tryFromEnv() with
+  Some credentials -> Some credentials
+  None             -> tryFromDefaultCredentialsFile "default"
+
+Credentials.tryDefaultCredentials.doc : Doc
+Credentials.tryDefaultCredentials.doc =
+  use Credentials fromEnv
+  {{
+  Tries to return the default {type Credentials}.
+
+  The default credentials are searched in this order:
+
+  1. Using the environment variables specified in the
+     [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+     See {fromEnv} and {tryFromEnv} for more details.
+  2. Using the default credentials file specified in the
+     [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+     See {fromDefaultCredentialsFile} and {tryFromDefaultCredentialsFile} for
+     more details.
+
+  If the credentials are not found, then {None} is returned.
+
+  # Example
+
+    @typecheck ```
+    credentials = tryDefaultCredentials()
+    ```
+
+  # See Also
+
+    * {defaultCredentials}
+    * {tryFromEnv}
+    * {fromEnv}
+    * {tryFromDefaultCredentialsFile}
+    * {fromDefaultCredentialsFile}
+  }}
+
+Credentials.tryFromCredentialsFile :
+  FilePath -> Text ->{IO, Exception} Optional Credentials
+Credentials.tryFromCredentialsFile file profile =
+  use Map get
+  text = readFileUtf8 file
+  credentialProfiles = Credentials.parse text
+  getCredentials credentials =
+    keyId = get "aws_access_key_id" credentials
+    secretKey = get "aws_secret_access_key" credentials
+    sessionToken = get "aws_session_token" credentials
+    Optional.zip keyId secretKey
+      |> (Optional.map cases (id, key) -> Credentials id key sessionToken)
+  get profile credentialProfiles |> Optional.flatMap getCredentials
+
+Credentials.tryFromCredentialsFile.doc : Doc
+Credentials.tryFromCredentialsFile.doc =
+  {{
+  Attempts to parse the given credentials file and return an {type Optional}
+  {type Credentials} for the given profile.
+
+  The file is expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+
+  The profile is the name of the profile to use. If the profile is not found,
+  then {None} is returned.
+
+  # Example
+
+    @typecheck ```
+    tryFromCredentialsFile (FilePath "/path/to/credentials") "default"
+    ```
+
+  # See Also
+
+    * {fromCredentialsFile}
+    * {fromDefaultCredentialsFile}
+    * {tryFromDefaultCredentialsFile}
+  }}
+
+Credentials.tryFromDefaultCredentialsFile : Text ->{IO} Optional Credentials
+Credentials.tryFromDefaultCredentialsFile profile =
+  (catch do fromDefaultCredentialsFile profile) |> Either.toOptional
+
+Credentials.tryFromDefaultCredentialsFile.doc : Doc
+Credentials.tryFromDefaultCredentialsFile.doc =
+  {{
+  Attempts to parse the default credentials file and return an {type Optional}
+  {type Credentials} for the given profile.
+
+  The default credentials file is searched in this order:
+
+  1. Using the location specified in the `AWS_SHARED_CREDENTIALS_FILE`
+     environment variable.
+  2. In the file at `~/.aws/credentials` on Unix-like systems or
+     `%UserProfile%\.aws\credentials` on Windows.
+
+  The file is expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+
+  The profile is the name of the profile to use. If the profile is not found,
+  then {None} is returned.
+
+  # Example
+
+    @typecheck ```
+    fromDefaultCredentialsFile "default"
+    ```
+
+  # See Also
+
+    * {fromDefaultCredentialsFile}
+    * {fromCredentialsFile}
+    * {tryFromCredentialsFile}
+  }}
+
+Credentials.tryFromEnv : '{IO} Optional Credentials
+Credentials.tryFromEnv = do catch Credentials.fromEnv |> Either.toOptional
+
+Credentials.tryFromEnv.doc : Doc
+Credentials.tryFromEnv.doc =
+  {{
+  Attempts to parse the environment variables and return an {type Optional}
+  {type Credentials}.
+
+  The environment variables are expected to be in the format described in the
+  [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+
+  If the environment variables are not found, then {None} is returned.
+
+  # Example
+
+    @typecheck ```
+    tryFromEnv
+    ```
+
+  # See Also
+
+    * {Credentials.fromEnv}
+  }}
+
+Credentials.tryParse : Text -> Either IO.Failure (Map Text (Map Text Text))
+Credentials.tryParse = tryParseWithCommentPrefix "#"
+
+invalidArgument : Text ->{Exception} a
+invalidArgument msg =
+  Exception.raiseFailure (typeLink AWSError) msg InvalidArgument
+
+invalidArgument.doc : Doc
+invalidArgument.doc =
+  {{ Raise an {InvalidArgument} {type Exception} with the given message. }}
+
+Key.doc : Doc
+Key.doc =
+  {{
+  A {type Key} is a {type Bytes} representation of a key that is used in
+  signing AWS requests.
+  }}
+
+Key.toBytes : Key -> Bytes
+Key.toBytes = cases Key.Key t -> t
+
+lambda.defaultConfig : Credentials -> Config
+lambda.defaultConfig =
+  Config.Config
+    (HostName "amazonaws.com")
+    None
+    (Region "us-east-1")
+    (Service "lambda")
+    true
+
+lambda.defaultConfig.doc : Doc
+lambda.defaultConfig.doc =
+  use lambda defaultConfig
+  {{
+  A {type Config} with some sensible defaults and using the given
+  {type Credentials}.
+
+  Use setters (e.g. {Config.hostName.set} to modify to your needs.
+
+  The default config is:
+
+  * hostName = @eval{ Config.hostName (defaultConfig anonymous) }
+  * port = @eval{ Config.port (defaultConfig anonymous) }
+  * region = @eval{ Config.region (defaultConfig anonymous) }
+  * service = @eval{ Config.service (defaultConfig anonymous) }
+  * isHttps = @eval{ isHttps (defaultConfig anonymous) }
+  * credentials = the {type Credentials} object you supply.
+  }}
+
+lambda.invokeFunction :
+  FunctionName
+  -> Bytes
+  -> Optional InvocationType
+  -> Optional LogType
+  -> Optional ClientContext
+  -> Optional Qualifier
+  -> Config
+  -> Instant
+  ->{Exception, Http} InvokeLambdaResponse
+lambda.invokeFunction
+  function
+  payload
+  invocationType
+  logType
+  clientContext
+  qualifier
+  config
+  instant =
+  use HttpResponse headers
+  use List head
+  use Path /
+  use Text ++
+  (Config.Config host port region service isHttps _) = config
+  (FunctionName functionName) = function
+  (HostName hostName) = host
+  authority =
+    Authority
+      None
+      (HostName
+        (abbreviation service
+          ++ "."
+          ++ Region.name region
+          ++ "."
+          ++ HostName.toText host))
+      port
+  path = Path.root / "2015-03-31" / "functions" / functionName / "invocations"
+  query = match qualifier with
+    None   -> RawQuery.empty
+    Some q ->
+      (Qualifier qualifier) = q
+      Query.empty & ("Qualifier", qualifier) |> fromQuery
+  uri = URI (Config.scheme config) (Some authority) path query Fragment.empty
+  req =
+    HttpRequest.post uri (Body payload)
+      |> addAwsInvokeLambdaHeaders invocationType logType clientContext
+      |> addAwsHeaders config instant
+  response = request req
+  expectSuccess response
+  hs = headers response
+  InvokeLambdaResponse
+    (HttpResponse.status response)
+    (HttpResponse.body response |> Body.toBytes)
+    (response |> headers |> getValues "X-Amz-Executed-Version" |> head)
+    (Optional.flatMap
+      (x ->
+        x
+          |> Text.toUtf8
+          |> fromBase64.impl
+          |> Either.right
+          |> Optional.map fromUtf8)
+      (response |> headers |> getValues "X-Amz-Log-Result" |> head))
+    (response |> headers |> getValues "X-Amz-Function-Error" |> head)
+    response
+
+lambda.invokeFunction.addAwsInvokeLambdaHeaders :
+  Optional InvocationType
+  -> Optional LogType
+  -> Optional ClientContext
+  -> HttpRequest
+  ->{Exception} HttpRequest
+lambda.invokeFunction.addAwsInvokeLambdaHeaders
+  invocationType logType clientContext req =
+  use Optional map
+  invocationHeader =
+    map
+      (invocation ->
+        ("X-Amz-Invocation-Type", [InvocationType.toText invocation]))
+      invocationType
+  logHeader = map (log -> ("X-Amz-Log-Type", [LogType.toText log])) logType
+  contextHeader =
+    map
+      (context -> ("X-Amz-Client-Context", [encodeBase64 context]))
+      clientContext
+  awsHeaders =
+    Headers
+      (Map.fromList (List.somes [invocationHeader, logHeader, contextHeader]))
+  req |> headers.modify (Headers.union awsHeaders)
+
+lambda.invokeFunction.addAwsInvokeLambdaHeaders.doc : Doc
+lambda.invokeFunction.addAwsInvokeLambdaHeaders.doc =
+  {{
+  Add the AWS headers required to invoke a lambda function to the given
+  {type HttpRequest}.
+
+  The {type InvocationType} is used to determine the type of invocation to
+  make.
+
+  The {type LogType} is used to include the execution log in the
+  {type InvokeLambdaResponse}.
+
+  The {type ClientContext} is used to pass client-specific information to the
+  lambda function.
+  }}
+
+lambda.invokeFunction.doc : Doc
+lambda.invokeFunction.doc =
+  use lambda defaultConfig
+  {{
+  Invoke a lambda function with the given {type FunctionName} and {type Bytes}
+  payload.
+
+  The {type InvocationType} is used to determine the type of invocation to
+  make.
+
+  The {type LogType} is used to include the execution log in the
+  {type InvokeLambdaResponse}. Note that {LogTail} is not supported for
+  asynchronous invocations, ie. using {Event} as {type InvocationType}.
+
+  The {type ClientContext} is used to pass client-specific information to the
+  lambda function.
+
+  The {type Qualifier} is used to specify a version or alias to invoke.
+
+  For more details, see the
+  [AWS API documentation](https://docs.aws.amazon.com/lambda/latest/dg/API_Invoke.html#API_Invoke_RequestSyntax).
+
+  The {type Config} is used to determine the host, port, region, service and
+  credentials to use.
+
+  The {type Instant} is used to determine the current time. This is used to
+  sign the request.
+
+  Returns a {type InvokeLambdaResponse} containing the response from the lambda
+  function.
+
+  # Example
+
+    @typecheck ```
+    creds = Credentials.fromEnv()
+    config = defaultConfig creds
+    invokeFunction
+      (FunctionName "my-function")
+      (Text.toUtf8 "my payload")
+      (Some RequestResponse)
+      (Some LogTail)
+      (Some (ClientContext "my context"))
+      (Some (Qualifier "v1"))
+      (defaultConfig anonymous)
+      now()
+    ```
+  }}
+
+lambda.types.ClientContext.doc : Doc
+lambda.types.ClientContext.doc =
+  {{
+  A wrapper around {type Text} that represents client-specific information to
+  pass to the lambda function. This type is used by {invokeFunction} for
+  example.
+
+  Note that it is limited to 3583 bytes of base64-encoded data about the
+  invoking client to pass to the function in the context object.
+  }}
+
+lambda.types.ClientContext.encodeBase64 : ClientContext ->{Exception} Text
+lambda.types.ClientContext.encodeBase64 = cases
+  ClientContext context ->
+    "{ \"custom\": \"" Text.++ context Text.++ "\" }"
+      |> Text.toUtf8
+      |> toBase64
+      |> fromUtf8
+
+lambda.types.ClientContext.encodeBase64.doc : Doc
+lambda.types.ClientContext.encodeBase64.doc =
+  {{
+  Convert a {type ClientContext} to a {type Text} and encode it as a base64
+  string.
+  }}
+
+lambda.types.FunctionName.doc : Doc
+lambda.types.FunctionName.doc =
+  {{
+  The name of the Lambda function, version, or alias. This type is used by
+  {invokeFunction} for example.
+
+  **Name formats**
+
+  * Function name: `` "my-function" `` (name-only), `` "my-function:v1" ``
+    (with alias).
+
+  * Function ARN:
+    ``"arn:aws:lambda:us-west-2:123456789012:function:my-function"``.
+
+  * Partial ARN: ``"123456789012:function:my-function"``.
+  }}
+
+lambda.types.InvocationType.doc : Doc
+lambda.types.InvocationType.doc =
+  {{
+  The type of invocation to make. This type is used by {invokeFunction} for
+  example. - {RequestResponse} (default): Invoke the function synchronously.
+  Keep the connection open until the function returns a response or times out.
+  The {type InvokeLambdaResponse} includes the function response and additional
+  data.
+
+  * {Event} : Invoke the function asynchronously. Send events that fail
+    multiple times to the function's dead-letter queue (if one is configured).
+    The {type InvokeLambdaResponse} only includes a status code and an empty
+    {type Bytes} payload.
+
+  * {DryRun} : Validate parameter values and verify that the user or role has
+    permission to invoke the function.
+  }}
+
+lambda.types.InvocationType.toText : InvocationType -> Text
+lambda.types.InvocationType.toText = cases
+  Event           -> "Event"
+  RequestResponse -> "RequestResponse"
+  DryRun          -> "DryRun"
+
+lambda.types.InvocationType.toText.doc : Doc
+lambda.types.InvocationType.toText.doc =
+  {{ Convert an {type InvocationType} to a {type Text}. }}
+
+lambda.types.InvokeLambdaResponse.doc : Doc
+lambda.types.InvokeLambdaResponse.doc =
+  {{
+  The type of response returned by {invokeFunction}. It contains the following
+  fields:
+
+  * {InvokeLambdaResponse.status}: The {type HttpResponse.Status} of the
+    response. The HTTP status code is in the 200 range for a successful
+    request. For the {RequestResponse} invocation type, this status code is
+    200. For the {Event} invocation type, this status code is 202. For the
+
+  {DryRun} invocation type, the status code is 204. *
+  {InvokeLambdaResponse.payload}: The payload returned by the lambda function.
+  This is a {type Bytes}. Contains the result of the lambda function or the
+  error object. * {versionExecuted}: The version of the lambda function that
+  was executed. When you invoke a function with an alias, this indicates which
+  version the alias resolved to. * {InvokeLambdaResponse.log}: The last 4 KB of
+  the execution log of the lambda function. * {InvokeLambdaResponse.error}: If
+  present, indicates that an error occurred during function execution. Details
+  about the error are included in the response payload. * {rawResponse}: The
+  raw {type HttpResponse} returned by the lambda function.
+  }}
+
+lambda.types.InvokeLambdaResponse.error : InvokeLambdaResponse -> Optional Text
+lambda.types.InvokeLambdaResponse.error = cases
+  InvokeLambdaResponse _ _ _ _ error _ -> error
+
+lambda.types.InvokeLambdaResponse.error.modify :
+  (Optional Text ->{g} Optional Text)
+  -> InvokeLambdaResponse
+  ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.error.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      status payload versionExecuted log (f error) rawResponse
+
+lambda.types.InvokeLambdaResponse.error.set :
+  Optional Text -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.error.set error1 = cases
+  InvokeLambdaResponse status payload versionExecuted log _ rawResponse ->
+    InvokeLambdaResponse status payload versionExecuted log error1 rawResponse
+
+lambda.types.InvokeLambdaResponse.log : InvokeLambdaResponse -> Optional Text
+lambda.types.InvokeLambdaResponse.log = cases
+  InvokeLambdaResponse _ _ _ log _ _ -> log
+
+lambda.types.InvokeLambdaResponse.log.modify :
+  (Optional Text ->{g} Optional Text)
+  -> InvokeLambdaResponse
+  ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.log.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      status payload versionExecuted (f log) error rawResponse
+
+lambda.types.InvokeLambdaResponse.log.set :
+  Optional Text -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.log.set log1 = cases
+  InvokeLambdaResponse status payload versionExecuted _ error rawResponse ->
+    InvokeLambdaResponse status payload versionExecuted log1 error rawResponse
+
+lambda.types.InvokeLambdaResponse.payload : InvokeLambdaResponse -> Bytes
+lambda.types.InvokeLambdaResponse.payload = cases
+  InvokeLambdaResponse _ payload _ _ _ _ -> payload
+
+lambda.types.InvokeLambdaResponse.payload.modify :
+  (Bytes ->{g} Bytes) -> InvokeLambdaResponse ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.payload.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      status (f payload) versionExecuted log error rawResponse
+
+lambda.types.InvokeLambdaResponse.payload.set :
+  Bytes -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.payload.set payload1 = cases
+  InvokeLambdaResponse status _ versionExecuted log error rawResponse ->
+    InvokeLambdaResponse status payload1 versionExecuted log error rawResponse
+
+lambda.types.InvokeLambdaResponse.rawResponse :
+  InvokeLambdaResponse -> HttpResponse
+lambda.types.InvokeLambdaResponse.rawResponse = cases
+  InvokeLambdaResponse _ _ _ _ _ rawResponse -> rawResponse
+
+lambda.types.InvokeLambdaResponse.rawResponse.modify :
+  (HttpResponse ->{g} HttpResponse)
+  -> InvokeLambdaResponse
+  ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.rawResponse.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      status payload versionExecuted log error (f rawResponse)
+
+lambda.types.InvokeLambdaResponse.rawResponse.set :
+  HttpResponse -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.rawResponse.set rawResponse1 = cases
+  InvokeLambdaResponse status payload versionExecuted log error _ ->
+    InvokeLambdaResponse status payload versionExecuted log error rawResponse1
+
+lambda.types.InvokeLambdaResponse.status :
+  InvokeLambdaResponse -> HttpResponse.Status
+lambda.types.InvokeLambdaResponse.status = cases
+  InvokeLambdaResponse status _ _ _ _ _ -> status
+
+lambda.types.InvokeLambdaResponse.status.modify :
+  (HttpResponse.Status ->{g} HttpResponse.Status)
+  -> InvokeLambdaResponse
+  ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.status.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      (f status) payload versionExecuted log error rawResponse
+
+lambda.types.InvokeLambdaResponse.status.set :
+  HttpResponse.Status -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.status.set status1 = cases
+  InvokeLambdaResponse _ payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse status1 payload versionExecuted log error rawResponse
+
+lambda.types.InvokeLambdaResponse.versionExecuted :
+  InvokeLambdaResponse -> Optional Text
+lambda.types.InvokeLambdaResponse.versionExecuted = cases
+  InvokeLambdaResponse _ _ versionExecuted _ _ _ -> versionExecuted
+
+lambda.types.InvokeLambdaResponse.versionExecuted.modify :
+  (Optional Text ->{g} Optional Text)
+  -> InvokeLambdaResponse
+  ->{g} InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.versionExecuted.modify f = cases
+  InvokeLambdaResponse status payload versionExecuted log error rawResponse ->
+    InvokeLambdaResponse
+      status payload (f versionExecuted) log error rawResponse
+
+lambda.types.InvokeLambdaResponse.versionExecuted.set :
+  Optional Text -> InvokeLambdaResponse -> InvokeLambdaResponse
+lambda.types.InvokeLambdaResponse.versionExecuted.set versionExecuted1 = cases
+  InvokeLambdaResponse status payload _ log error rawResponse ->
+    InvokeLambdaResponse status payload versionExecuted1 log error rawResponse
+
+lambda.types.LogType.doc : Doc
+lambda.types.LogType.doc =
+  {{
+  Indicates whether to include the execution log in the response. This type is
+  used by {invokeFunction} for example.
+
+  * {LogNone} (default): Do not include execution logs in the response.
+
+  * {LogTail} : Include the execution log in the response.
+  }}
+
+lambda.types.LogType.toText : LogType -> Text
+lambda.types.LogType.toText = cases
+  LogNone -> "None"
+  LogTail -> "Tail"
+
+lambda.types.LogType.toText.doc : Doc
+lambda.types.LogType.toText.doc =
+  {{ Convert a {type LogType} to a {type Text}. }}
+
+lambda.types.Qualifier.doc : Doc
+lambda.types.Qualifier.doc =
+  {{
+  A wrapper around {type Text} which represents a version or alias of the
+  lambda function to invoke. This type is used by {invokeFunction} for example.
+  }}
+
+metadata.authors.GerardFinol : Author
+metadata.authors.GerardFinol = Author GerardFinol.guid "Gerard Finol"
+
+metadata.authors.GerardFinol.guid : GUID
+metadata.authors.GerardFinol.guid =
+  GUID 0xsfdd210bbee760be6a88e66105cd27d70a15ce1b77c79374d005aee29ed7ac3ca
+
+metadata.copyrightHolders.GerardFinol : CopyrightHolder
+metadata.copyrightHolders.GerardFinol =
+  CopyrightHolder GerardFinol.guid "Gerard Finol"
+
+metadata.licenses.GerardFinol2023 : License
+metadata.licenses.GerardFinol2023 =
+  License [copyrightHolders.GerardFinol] [Year 2023] bsd3
+
+README : Doc
+README =
+  use Credentials fromEnv
+  use s3 defaultConfig
+  use types.Key Key
+  {{
+  # Amazon Simple Storage Service (S3) SDK
+
+    This library provides a high-level interface to the Amazon Web Services
+    (AWS) API. It is a work in progress, and currently only supports a small
+    subset of the S3 and Lambda APIs. Contributions are welcome!
+
+    ## Getting started
+
+       At the moment, the only services supported are the Simple Storage
+       Service (S3), and AWS Lambda.
+
+       To get started, you'll need to create an AWS account and get an access
+       key ID and secret access key. You can do this by following the
+       instructions at
+       [https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys).
+
+       Once you have your access key ID and secret access key, you can create a
+       {type Credentials} value:
+
+       @typecheck ```
+       credentials = fromEnv()
+       ```
+
+       {{
+       docCallout
+         (Some {{ 🚨 }})
+         {{
+         Never `add` your AWS credentials to your codebase. Keep them somewhere
+         private and load them from, for example, a file or from environment
+         variables as above.
+         }} }}
+
+       You can then use operations in the `s3` and `lambda` namspace to
+       interact with S3 and Lambda, respectively.
+
+       For example, to list the S3 buckets for your account:
+
+       @typecheck ```
+       do
+         creds = fromEnv()
+         config = defaultConfig creds
+         listBuckets config now()
+       ```
+
+       This will give you a {type ListBucketsResponse} containing a list of
+       your buckets.
+
+       To put an object into an S3 bucket:
+
+       @typecheck ```
+       do
+         creds = fromEnv()
+         config = defaultConfig creds
+         putObject
+           (BucketName "myBucket")
+           (Key "hello.txt")
+           (Text.toUtf8 "Hello, world!")
+           config
+           now()
+       ```
+
+       This returns the {type ETag} of the newly created object.
+
+       And to get it back:
+
+       @typecheck ```
+       do
+         creds = fromEnv()
+         config = defaultConfig creds
+         getObject (BucketName "myBucket") (Key "hello.txt") config now()
+       ```
+
+       Which gives you a {type GetObjectResponse} containing the object's
+       contents.
+  }}
+
+Region.doc : Doc
+Region.doc =
+  {{
+  A {type Region} is a {type Text} representing the name of an AWS region.
+  }}
+
+Region.name : Region -> Text
+Region.name = cases Region t -> t
+
+Region.name.doc : Doc
+Region.name.doc = {{ Returns the name of a {type Region}. }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  This is a minor release of the AWS library. It includes:
+
+  * Don't calculate the request signature twice.
+    [contribution #6](https://share.unison-lang.org/@unison/aws/contributions/6)
+  }}
+
+s3.defaultConfig : Credentials -> Config
+s3.defaultConfig =
+  Config.Config
+    (HostName "amazonaws.com") None (Region "us-east-1") (Service "s3") true
+
+s3.defaultConfig.doc : Doc
+s3.defaultConfig.doc =
+  use s3 defaultConfig
+  {{
+  A {type Config} with some sensible defaults and using the given
+  {type Credentials}.
+
+  Use setters (e.g. {Config.hostName.set} to modify to your needs.
+
+  The default config is:
+
+  * hostName = @eval{ Config.hostName (defaultConfig anonymous) }
+  * port = @eval{ Config.port (defaultConfig anonymous) }
+  * region = @eval{ Config.region (defaultConfig anonymous) }
+  * service = @eval{ Config.service (defaultConfig anonymous) }
+  * isHttps = @eval{ isHttps (defaultConfig anonymous) }
+  * credentials = the {type Credentials} object you supply.
+  }}
+
+s3.examples.getObjectExample : '{IO, Exception} Optional Text
+s3.examples.getObjectExample =
+  do
+    creds = Credentials.fromEnv()
+    config = s3.defaultConfig creds
+    instant = now()
+    (handle
+      getObject
+        (BucketName "runarbucket") (types.Key.Key "foo.txt") config instant
+    with Http.handler)
+      |> Optional.map (objectBody >> fromUtf8)
+
+s3.examples.headObjectExample : '{IO, Exception} Optional HeadObjectResponse
+s3.examples.headObjectExample =
+  do
+    creds = Credentials.fromEnv()
+    config = s3.defaultConfig creds
+    instant = now()
+    handle
+      headObject
+        (BucketName "runarbucket") (types.Key.Key "foo.txt") config instant
+    with Http.handler
+
+s3.examples.listBucketsExample : '{IO, Exception} ListBucketsResponse
+s3.examples.listBucketsExample = do
+  creds = Credentials.fromEnv()
+  instant = now()
+  config = s3.defaultConfig creds
+  handle listBuckets config instant with Http.handler
+
+s3.examples.putObjectExample : '{IO, Exception} ETag
+s3.examples.putObjectExample =
+  do
+    creds = Credentials.fromEnv()
+    config = s3.defaultConfig creds
+    instant = now()
+    handle
+      putObject
+        (BucketName "runarbucket")
+        (types.Key.Key "foo.txt")
+        ("Hello, world" |> Text.toUtf8)
+        config
+        instant
+    with Http.handler
+
+s3.getObject :
+  BucketName
+  -> types.Key
+  -> Config
+  -> Instant
+  ->{Exception, Http} Optional GetObjectResponse
+s3.getObject bucket key config instant =
+  use HttpResponse headers
+  use Nat ==
+  use Text ++
+  (Config.Config host port _ service isHttps _) = config
+  (BucketName bucketName) = bucket
+  (HostName hostName) = host
+  authority =
+    Authority
+      None
+      (HostName
+        (bucketName
+          ++ "."
+          ++ abbreviation service
+          ++ "."
+          ++ HostName.toText host))
+      port
+  uri =
+    URI
+      (Config.scheme config)
+      (Some authority)
+      (toPath key)
+      (RawQuery "")
+      (Fragment "")
+  req = HttpRequest.get uri |> addAwsHeaders config instant
+  response = request req
+  if Status.code (HttpResponse.status response) == 404 then None
+  else
+    expectSuccess response
+    hs = headers response
+    Some
+      <| GetObjectResponse
+        (Optional.map
+          ETag (response |> headers |> getValues "ETag" |> List.head))
+        (response |> HttpResponse.body |> Body.toBytes)
+
+s3.getObject.doc : Doc
+s3.getObject.doc =
+  {{
+  Get an object from a bucket with the given {type BucketName} and object
+  {type Key}.
+
+  The {type Config} is used to determine the host, port, region, service and
+  credentials to use.
+
+  The {type Instant} is used to determine the current time. This is used to
+  sign the request.
+
+  Returns a {type GetObjectResponse} containing the object's body and
+  {type ETag}, or {None} if the object was not found.
+
+  # Example
+
+    @typecheck ```
+    getObject
+      (BucketName "my-bucket")
+      (types.Key.Key "myFile.txt")
+      (s3.defaultConfig anonymous)
+      now()
+    ```
+  }}
+
+s3.headObject :
+  BucketName
+  -> types.Key
+  -> Config
+  -> Instant
+  ->{Exception, Http} Optional HeadObjectResponse
+s3.headObject bucket key config instant =
+  use Nat ==
+  use Text ++
+  use http.Headers requireHeader
+  (Config.Config host port _ service isHttps _) = config
+  (BucketName bucketName) = bucket
+  (HostName hostName) = host
+  authority =
+    Authority
+      None
+      (HostName
+        (bucketName
+          ++ "."
+          ++ abbreviation service
+          ++ "."
+          ++ HostName.toText host))
+      port
+  uri =
+    URI
+      (Config.scheme config)
+      (Some authority)
+      (toPath key)
+      RawQuery.empty
+      Fragment.empty
+  headers = Headers.union (forURI uri) acceptEncoding.default
+  req =
+    HttpRequest HEAD Version.http11 uri headers Body.empty
+      |> addAwsHeaders config instant
+  response = request req
+  if Status.code (HttpResponse.status response) == 404 then None
+  else
+    expectSuccess response
+    hs = HttpResponse.headers response
+    Some
+      <| HeadObjectResponse
+        (ETag (requireHeader "ETag" hs))
+        (base.abilities.Abort.toException
+          (typeLink Unit)
+          "Invalid Last-Modified header"
+          do
+          http.Headers.HttpDate.parse.offsetDateTime
+            (requireHeader "Last-Modified" hs)
+            |> toInstant)
+        (requireHeader "Content-Length" hs
+          |> Nat.fromText
+          |> base.Optional.toException
+               "Invalid Content-Length header" (typeLink Unit))
+        (requireHeader "Content-Type" hs)
+        (Headers.toMap hs)
+
+s3.headObject.doc : Doc
+s3.headObject.doc =
+  {{
+  Given a {type BucketName}, an object {type Key}, a {type Config}, and an
+  {type Instant} representing the current time, returns an {type Optional}
+  {type HeadObjectResponse} containing the object's metadata. If the object
+  does not exist, this returns {None}. Otherwise, it returns a {Some}
+  containing the {type HeadObjectResponse}.
+
+  Throws an {type Exception} if there was an error retrieving or parsing the
+  object metadata.
+  }}
+
+s3.listBuckets : Config -> Instant ->{Exception, Http} ListBucketsResponse
+s3.listBuckets config instant =
+  use Text ++
+  (Config.Config host port _ service isHttps _) = config
+  authority =
+    Authority
+      None
+      (HostName (abbreviation service ++ "." ++ HostName.toText host))
+      port
+  uri =
+    URI
+      (Config.scheme config)
+      (Some authority)
+      Path.root
+      RawQuery.empty
+      Fragment.empty
+  req = HttpRequest.get uri |> addAwsHeaders config instant
+  response = request req
+  expectSuccess response
+  response
+    |> HttpResponse.body
+    |> Body.toBytes
+    |> fromUtf8
+    |> parseBucketsResult
+
+s3.listBuckets.doc : Doc
+s3.listBuckets.doc =
+  {{
+  List all buckets owned by the authenticated sender of the request.
+
+  The {type Config} is used to determine the host, port, region, service and
+  credentials to use.
+
+  The {type Instant} is used to determine the current time. This is used to
+  sign the request.
+
+  Returns a {type ListBucketsResponse} containing the list of {type Bucket}
+  objects.
+
+  # Example
+
+    @typecheck ```
+    listBuckets (s3.defaultConfig anonymous) now()
+    ```
+  }}
+
+s3.putObject :
+  BucketName
+  -> types.Key
+  -> Bytes
+  -> Config
+  -> Instant
+  ->{Exception, Http} ETag
+s3.putObject bucket key bytes config instant =
+  use Text ++
+  (Config.Config host port _ service isHttps _) = config
+  (BucketName bucketName) = bucket
+  (HostName hostName) = host
+  authority =
+    Authority
+      None
+      (HostName
+        (bucketName
+          ++ "."
+          ++ abbreviation service
+          ++ "."
+          ++ HostName.toText host))
+      port
+  uri =
+    URI
+      (Config.scheme config)
+      (Some authority)
+      (toPath key)
+      RawQuery.empty
+      Fragment.empty
+  req = HttpRequest.put uri (Body bytes) |> addAwsHeaders config instant
+  response = request req
+  expectSuccess response
+  response
+    |> HttpResponse.headers
+    |> getValues "ETag"
+    |> List.head
+    |> base.Optional.toException
+         "No ETag header in putObject response!" (typeLink S3Error)
+    |> ETag
+
+s3.putObject.doc : Doc
+s3.putObject.doc =
+  {{
+  Put an object into a bucket with the given {type BucketName}.
+
+  The {type Key} is the unique identifier of the object that you want to use
+  for later retrieval.
+
+  The {type Bytes} argument is the object's contents.
+
+  The {type Config} is used to determine the host, port, region, service and
+  credentials to use.
+
+  The {type Instant} is used to determine the current time. This is used to
+  sign the request.
+
+  Returns the {type ETag} of the object.
+
+  # Example
+
+    @typecheck ```
+    putObject
+      (BucketName "my-bucket")
+      (types.Key.Key "myFile.txt")
+      (Text.toUtf8 "Hello, World!")
+      (s3.defaultConfig anonymous)
+      now()
+    ```
+  }}
+
+s3.requireObject :
+  BucketName
+  -> types.Key
+  -> Config
+  -> Instant
+  ->{Exception, Http} GetObjectResponse
+s3.requireObject bucket key config instant =
+  use Text ++
+  (Config.Config host port _ service isHttps _) = config
+  (BucketName bucketName) = bucket
+  (HostName hostName) = host
+  authority =
+    Authority
+      None
+      (HostName
+        (bucketName
+          ++ "."
+          ++ abbreviation service
+          ++ "."
+          ++ HostName.toText host))
+      port
+  uri =
+    URI
+      (Config.scheme config)
+      (Some authority)
+      (toPath key)
+      RawQuery.empty
+      Fragment.empty
+  req = HttpRequest.get uri |> addAwsHeaders config instant
+  response = request req
+  expectSuccess response
+  GetObjectResponse
+    (Optional.map
+      ETag (response |> HttpResponse.headers |> getValues "ETag" |> List.head))
+    (response |> HttpResponse.body |> Body.toBytes)
+
+s3.requireObject.doc : Doc
+s3.requireObject.doc =
+  {{
+  Get an object from a bucket with the given {type BucketName} and object
+  {type Key}.
+
+  The {type Config} is used to determine the host, port, region, service and
+  credentials to use.
+
+  The {type Instant} is used to determine the current time. This is used to
+  sign the request.
+
+  Returns a {type GetObjectResponse} containing the object's body and
+  {type ETag}, or throws an {type Exception} if the object was not found.
+
+  # Example
+
+    @typecheck ```
+    requireObject
+      (BucketName "my-bucket")
+      (types.Key.Key "myFile.txt")
+      (s3.defaultConfig anonymous)
+      now()
+    ```
+
+  # See also
+
+    * {getObject} for a version of this that returns {type Optional} instead of
+      throwing an exception if the object doesn't exist.
+  }}
+
+s3.types.Bucket.creationDate : Bucket -> Optional Instant
+s3.types.Bucket.creationDate = cases Bucket _ creationDate -> creationDate
+
+s3.types.Bucket.creationDate.modify :
+  (Optional Instant ->{g} Optional Instant) -> Bucket ->{g} Bucket
+s3.types.Bucket.creationDate.modify f = cases
+  Bucket name creationDate -> Bucket name (f creationDate)
+
+s3.types.Bucket.creationDate.set : Optional Instant -> Bucket -> Bucket
+s3.types.Bucket.creationDate.set creationDate1 = cases
+  Bucket name _ -> Bucket name creationDate1
+
+s3.types.Bucket.doc : Doc
+s3.types.Bucket.doc =
+  {{
+  A bucket is a container for objects in S3. This type is returned, for
+  example, as part of a {type ListBucketsResponse}.
+
+  # Fields
+
+        @signature{creationDate}     @signature{Bucket.name}
+  }}
+
+s3.types.Bucket.name : Bucket -> Text
+s3.types.Bucket.name = cases Bucket name _ -> name
+
+s3.types.Bucket.name.modify : (Text ->{g} Text) -> Bucket ->{g} Bucket
+s3.types.Bucket.name.modify f = cases
+  Bucket name creationDate -> Bucket (f name) creationDate
+
+s3.types.Bucket.name.set : Text -> Bucket -> Bucket
+s3.types.Bucket.name.set name1 = cases
+  Bucket _ creationDate -> Bucket name1 creationDate
+
+s3.types.BucketName.doc : Doc
+s3.types.BucketName.doc =
+  {{
+  The name of an S3 bucket. This type is used by {getObject} and {putObject}
+  for example.
+  }}
+
+s3.types.BucketName.toText : BucketName -> Text
+s3.types.BucketName.toText = cases BucketName toText -> toText
+
+s3.types.BucketName.toText.modify :
+  (Text ->{g} Text) -> BucketName ->{g} BucketName
+s3.types.BucketName.toText.modify f = cases
+  BucketName toText -> BucketName (f toText)
+
+s3.types.BucketName.toText.set : Text -> BucketName -> BucketName
+s3.types.BucketName.toText.set toText1 = cases
+  BucketName _ -> BucketName toText1
+
+s3.types.ETag.doc : Doc
+s3.types.ETag.doc =
+  {{
+  An ETag is a unique identifier for an object in S3. It is assigned by the
+  service when you call {putObject}, for example.
+
+  This type is a simple wrapper around {type Text}:
+
+      @signature{ETag.toText}
+  }}
+
+s3.types.ETag.toText : ETag -> Text
+s3.types.ETag.toText = cases ETag toText -> toText
+
+s3.types.ETag.toText.modify : (Text ->{g} Text) -> ETag ->{g} ETag
+s3.types.ETag.toText.modify f = cases ETag toText -> ETag (f toText)
+
+s3.types.ETag.toText.set : Text -> ETag -> ETag
+s3.types.ETag.toText.set toText1 = cases ETag _ -> ETag toText1
+
+s3.types.GetObjectResponse.doc : Doc
+s3.types.GetObjectResponse.doc =
+  {{
+  The type of response returned by {getObject}. It contains an {type ETag} and
+  the {type Bytes} of the object body:
+
+      @signature{GetObjectResponse.etag}
+
+      @signature{objectBody}
+  }}
+
+s3.types.GetObjectResponse.etag : GetObjectResponse -> Optional ETag
+s3.types.GetObjectResponse.etag = cases GetObjectResponse etag _ -> etag
+
+s3.types.GetObjectResponse.etag.modify :
+  (Optional ETag ->{g} Optional ETag)
+  -> GetObjectResponse
+  ->{g} GetObjectResponse
+s3.types.GetObjectResponse.etag.modify f = cases
+  GetObjectResponse etag objectBody -> GetObjectResponse (f etag) objectBody
+
+s3.types.GetObjectResponse.etag.set :
+  Optional ETag -> GetObjectResponse -> GetObjectResponse
+s3.types.GetObjectResponse.etag.set etag1 = cases
+  GetObjectResponse _ objectBody -> GetObjectResponse etag1 objectBody
+
+s3.types.GetObjectResponse.objectBody : GetObjectResponse -> Bytes
+s3.types.GetObjectResponse.objectBody = cases
+  GetObjectResponse _ objectBody -> objectBody
+
+s3.types.GetObjectResponse.objectBody.modify :
+  (Bytes ->{g} Bytes) -> GetObjectResponse ->{g} GetObjectResponse
+s3.types.GetObjectResponse.objectBody.modify f = cases
+  GetObjectResponse etag objectBody -> GetObjectResponse etag (f objectBody)
+
+s3.types.GetObjectResponse.objectBody.set :
+  Bytes -> GetObjectResponse -> GetObjectResponse
+s3.types.GetObjectResponse.objectBody.set objectBody1 = cases
+  GetObjectResponse etag _ -> GetObjectResponse etag objectBody1
+
+s3.types.HeadObjectResponse.contentLength : HeadObjectResponse -> Nat
+s3.types.HeadObjectResponse.contentLength = cases
+  HeadObjectResponse _ _ contentLength _ _ -> contentLength
+
+s3.types.HeadObjectResponse.contentLength.modify :
+  (Nat ->{g} Nat) -> HeadObjectResponse ->{g} HeadObjectResponse
+s3.types.HeadObjectResponse.contentLength.modify f = cases
+  HeadObjectResponse etag lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse
+      etag lastModified (f contentLength) contentType rawMetadata
+
+s3.types.HeadObjectResponse.contentLength.set :
+  Nat -> HeadObjectResponse -> HeadObjectResponse
+s3.types.HeadObjectResponse.contentLength.set contentLength1 = cases
+  HeadObjectResponse etag lastModified _ contentType rawMetadata ->
+    HeadObjectResponse etag lastModified contentLength1 contentType rawMetadata
+
+s3.types.HeadObjectResponse.contentType : HeadObjectResponse -> Text
+s3.types.HeadObjectResponse.contentType = cases
+  HeadObjectResponse _ _ _ contentType _ -> contentType
+
+s3.types.HeadObjectResponse.contentType.modify :
+  (Text ->{g} Text) -> HeadObjectResponse ->{g} HeadObjectResponse
+s3.types.HeadObjectResponse.contentType.modify f = cases
+  HeadObjectResponse etag lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse
+      etag lastModified contentLength (f contentType) rawMetadata
+
+s3.types.HeadObjectResponse.contentType.set :
+  Text -> HeadObjectResponse -> HeadObjectResponse
+s3.types.HeadObjectResponse.contentType.set contentType1 = cases
+  HeadObjectResponse etag lastModified contentLength _ rawMetadata ->
+    HeadObjectResponse etag lastModified contentLength contentType1 rawMetadata
+
+s3.types.HeadObjectResponse.doc : Doc
+s3.types.HeadObjectResponse.doc =
+  {{
+  The type of response returned by {headObject}. It contains the following
+  fields:
+
+  * {HeadObjectResponse.etag}: The {type ETag} of the object.
+  * {lastModified}: The last modified date/time as an {type Instant}.
+  * {HeadObjectResponse.contentLength}: The content length in bytes.
+  * {contentType}: A {type Text} describing the content type.
+  * {rawMetadata}: A {type Map} containing all the headers in the HTTP
+    response.
+  }}
+
+s3.types.HeadObjectResponse.etag : HeadObjectResponse -> ETag
+s3.types.HeadObjectResponse.etag = cases
+  HeadObjectResponse etag _ _ _ _ -> etag
+
+s3.types.HeadObjectResponse.etag.modify :
+  (ETag ->{g} ETag) -> HeadObjectResponse ->{g} HeadObjectResponse
+s3.types.HeadObjectResponse.etag.modify f = cases
+  HeadObjectResponse etag lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse
+      (f etag) lastModified contentLength contentType rawMetadata
+
+s3.types.HeadObjectResponse.etag.set :
+  ETag -> HeadObjectResponse -> HeadObjectResponse
+s3.types.HeadObjectResponse.etag.set etag1 = cases
+  HeadObjectResponse _ lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse etag1 lastModified contentLength contentType rawMetadata
+
+s3.types.HeadObjectResponse.lastModified : HeadObjectResponse -> Instant
+s3.types.HeadObjectResponse.lastModified = cases
+  HeadObjectResponse _ lastModified _ _ _ -> lastModified
+
+s3.types.HeadObjectResponse.lastModified.modify :
+  (Instant ->{g} Instant) -> HeadObjectResponse ->{g} HeadObjectResponse
+s3.types.HeadObjectResponse.lastModified.modify f = cases
+  HeadObjectResponse etag lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse
+      etag (f lastModified) contentLength contentType rawMetadata
+
+s3.types.HeadObjectResponse.lastModified.set :
+  Instant -> HeadObjectResponse -> HeadObjectResponse
+s3.types.HeadObjectResponse.lastModified.set lastModified1 = cases
+  HeadObjectResponse etag _ contentLength contentType rawMetadata ->
+    HeadObjectResponse etag lastModified1 contentLength contentType rawMetadata
+
+s3.types.HeadObjectResponse.rawMetadata : HeadObjectResponse -> Map Text [Text]
+s3.types.HeadObjectResponse.rawMetadata = cases
+  HeadObjectResponse _ _ _ _ rawMetadata -> rawMetadata
+
+s3.types.HeadObjectResponse.rawMetadata.modify :
+  (Map Text [Text] ->{g} Map Text [Text])
+  -> HeadObjectResponse
+  ->{g} HeadObjectResponse
+s3.types.HeadObjectResponse.rawMetadata.modify f = cases
+  HeadObjectResponse etag lastModified contentLength contentType rawMetadata ->
+    HeadObjectResponse
+      etag lastModified contentLength contentType (f rawMetadata)
+
+s3.types.HeadObjectResponse.rawMetadata.set :
+  Map Text [Text] -> HeadObjectResponse -> HeadObjectResponse
+s3.types.HeadObjectResponse.rawMetadata.set rawMetadata1 = cases
+  HeadObjectResponse etag lastModified contentLength contentType _ ->
+    HeadObjectResponse etag lastModified contentLength contentType rawMetadata1
+
+s3.types.Key.toPath : types.Key -> Path
+s3.types.Key.toPath = Key.toText >> Text.split ?/ >> Path
+
+s3.types.Key.toText : types.Key -> Text
+s3.types.Key.toText = cases types.Key.Key toText -> toText
+
+s3.types.Key.toText.modify : (Text ->{g} Text) -> types.Key ->{g} types.Key
+s3.types.Key.toText.modify f = cases
+  types.Key.Key toText -> types.Key.Key (f toText)
+
+s3.types.Key.toText.set : Text -> types.Key -> types.Key
+s3.types.Key.toText.set toText1 = cases
+  types.Key.Key _ -> types.Key.Key toText1
+
+s3.types.ListBucketsResponse.buckets : ListBucketsResponse -> [Bucket]
+s3.types.ListBucketsResponse.buckets = cases
+  ListBucketsResponse _ buckets -> buckets
+
+s3.types.ListBucketsResponse.buckets.modify :
+  ([Bucket] ->{g} [Bucket]) -> ListBucketsResponse ->{g} ListBucketsResponse
+s3.types.ListBucketsResponse.buckets.modify f = cases
+  ListBucketsResponse owner buckets -> ListBucketsResponse owner (f buckets)
+
+s3.types.ListBucketsResponse.buckets.set :
+  [Bucket] -> ListBucketsResponse -> ListBucketsResponse
+s3.types.ListBucketsResponse.buckets.set buckets1 = cases
+  ListBucketsResponse owner _ -> ListBucketsResponse owner buckets1
+
+s3.types.ListBucketsResponse.doc : Doc
+s3.types.ListBucketsResponse.doc =
+  {{
+  The type of response returned by {listBuckets}.
+
+  # Fields
+
+        @signature{ListBucketsResponse.buckets}     @signature{owner}
+  }}
+
+s3.types.ListBucketsResponse.owner : ListBucketsResponse -> Owner
+s3.types.ListBucketsResponse.owner = cases ListBucketsResponse owner _ -> owner
+
+s3.types.ListBucketsResponse.owner.modify :
+  (Owner ->{g} Owner) -> ListBucketsResponse ->{g} ListBucketsResponse
+s3.types.ListBucketsResponse.owner.modify f = cases
+  ListBucketsResponse owner buckets -> ListBucketsResponse (f owner) buckets
+
+s3.types.ListBucketsResponse.owner.set :
+  Owner -> ListBucketsResponse -> ListBucketsResponse
+s3.types.ListBucketsResponse.owner.set owner1 = cases
+  ListBucketsResponse _ buckets -> ListBucketsResponse owner1 buckets
+
+s3.types.Owner.displayName : Owner -> Text
+s3.types.Owner.displayName = cases Owner _ displayName -> displayName
+
+s3.types.Owner.displayName.modify : (Text ->{g} Text) -> Owner ->{g} Owner
+s3.types.Owner.displayName.modify f = cases
+  Owner id displayName -> Owner id (f displayName)
+
+s3.types.Owner.displayName.set : Text -> Owner -> Owner
+s3.types.Owner.displayName.set displayName1 = cases
+  Owner id _ -> Owner id displayName1
+
+s3.types.Owner.id : Owner -> Text
+s3.types.Owner.id = cases Owner id _ -> id
+
+s3.types.Owner.id.modify : (Text ->{g} Text) -> Owner ->{g} Owner
+s3.types.Owner.id.modify f = cases
+  Owner id displayName -> Owner (f id) displayName
+
+s3.types.Owner.id.set : Text -> Owner -> Owner
+s3.types.Owner.id.set id1 = cases Owner _ displayName -> Owner id1 displayName
+
+s3.types.PutObjectResponse.etag : PutObjectResponse -> Optional ETag
+s3.types.PutObjectResponse.etag = cases PutObjectResponse etag -> etag
+
+s3.types.PutObjectResponse.etag.modify :
+  (Optional ETag ->{g} Optional ETag)
+  -> PutObjectResponse
+  ->{g} PutObjectResponse
+s3.types.PutObjectResponse.etag.modify f = cases
+  PutObjectResponse etag -> PutObjectResponse (f etag)
+
+s3.types.PutObjectResponse.etag.set :
+  Optional ETag -> PutObjectResponse -> PutObjectResponse
+s3.types.PutObjectResponse.etag.set etag1 = cases
+  PutObjectResponse _ -> PutObjectResponse etag1
+
+s3.types.S3Error.code : S3Error -> Text
+s3.types.S3Error.code = cases S3Error code _ _ _ -> code
+
+s3.types.S3Error.code.modify : (Text ->{g} Text) -> S3Error ->{g} S3Error
+s3.types.S3Error.code.modify f = cases
+  S3Error code message resouce requestId ->
+    S3Error (f code) message resouce requestId
+
+s3.types.S3Error.code.set : Text -> S3Error -> S3Error
+s3.types.S3Error.code.set code1 = cases
+  S3Error _ message resouce requestId ->
+    S3Error code1 message resouce requestId
+
+s3.types.S3Error.message : S3Error -> Text
+s3.types.S3Error.message = cases S3Error _ message _ _ -> message
+
+s3.types.S3Error.message.modify : (Text ->{g} Text) -> S3Error ->{g} S3Error
+s3.types.S3Error.message.modify f = cases
+  S3Error code message resouce requestId ->
+    S3Error code (f message) resouce requestId
+
+s3.types.S3Error.message.set : Text -> S3Error -> S3Error
+s3.types.S3Error.message.set message1 = cases
+  S3Error code _ resouce requestId -> S3Error code message1 resouce requestId
+
+s3.types.S3Error.requestId : S3Error -> Text
+s3.types.S3Error.requestId = cases S3Error _ _ _ requestId -> requestId
+
+s3.types.S3Error.requestId.modify : (Text ->{g} Text) -> S3Error ->{g} S3Error
+s3.types.S3Error.requestId.modify f = cases
+  S3Error code message resouce requestId ->
+    S3Error code message resouce (f requestId)
+
+s3.types.S3Error.requestId.set : Text -> S3Error -> S3Error
+s3.types.S3Error.requestId.set requestId1 = cases
+  S3Error code message resouce _ -> S3Error code message resouce requestId1
+
+s3.types.S3Error.resouce : S3Error -> Text
+s3.types.S3Error.resouce = cases S3Error _ _ resouce _ -> resouce
+
+s3.types.S3Error.resouce.modify : (Text ->{g} Text) -> S3Error ->{g} S3Error
+s3.types.S3Error.resouce.modify f = cases
+  S3Error code message resouce requestId ->
+    S3Error code message (f resouce) requestId
+
+s3.types.S3Error.resouce.set : Text -> S3Error -> S3Error
+s3.types.S3Error.resouce.set resouce1 = cases
+  S3Error code message _ requestId -> S3Error code message resouce1 requestId
+
+s3.types.S3Error.toFailure : S3Error -> IO.Failure
+s3.types.S3Error.toFailure = cases
+  e@(S3Error _ message _ _) ->
+    IO.Failure.Failure (typeLink S3Error) message (Any e)
+
+s3.xml.parseBucket : Soup ->{Exception} Bucket
+s3.xml.parseBucket xml = XMLError.toException do
+  use Soup text
+  name = xml // "Name" |> text
+  creationDate = xml // "CreationDate" |> text |> base.time.Instant.fromIso8601
+  Bucket name creationDate
+
+s3.xml.parseBucketsResult : Text ->{Exception} ListBucketsResponse
+s3.xml.parseBucketsResult xml = toExceptionWith xml do
+  soup = parseXML xml
+  owner = parseOwner (soup // "Owner")
+  buckets = Each.toList do soup |> descendants |> named "Bucket" |> parseBucket
+  ListBucketsResponse owner buckets
+
+s3.xml.parseOwner : Soup ->{Exception} Owner
+s3.xml.parseOwner xml = XMLError.toException do
+  use Soup text
+  id = xml // "ID" |> text
+  displayName = xml // "DisplayName" |> text
+  Owner id displayName
+
+Service.abbreviation : Service -> Text
+Service.abbreviation = cases Service t -> t
+
+Service.abbreviation.doc : Doc
+Service.abbreviation.doc =
+  {{ Returns the abbreviated name of a {type Service}. }}
+
+Service.doc : Doc
+Service.doc =
+  {{
+  A {type Service} is a {type Text} representing the abbreviated name of an AWS
+  service.
+  }}
+
+sqs.send :
+  send.Message
+  ->{IO, AWSEnv, Exception} Either (send.Failure, send.Message) send.Success
+sqs.send msg =
+  use Text ++
+  host = "sqs." ++ AWSEnv.region ++ ".amazonaws.com"
+  hdrs =
+    Map.fromList
+      [ ("Host", [host])
+      , ("X-Amz-Target", ["AmazonSQS.SendMessage"])
+      , ("Content-Type", ["application/x-amz-json-1.0"])
+      ]
+  request =
+    AWSEnv.sign
+      (Service "sqs")
+      (HttpRequest
+        POST
+        Version.http11
+        (parseOrBug ("https://" ++ host))
+        (Headers hdrs)
+        (Body (Text.toUtf8 (Message.toJson msg))))
+  (Http.run do Http.request request)
+    |> parseResponse
+    |> Either.mapLeft (l -> (l, msg))
+
+sqs.send.doc : Doc
+sqs.send.doc =
+  {{
+  Sends a message to an AWS SQS queue.
+
+  Example:
+
+      @source{send.test}
+
+  Also see the official AWS
+  [SendMessage](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html)
+  API documentation.
+  }}
+
+sqs.send.Failure.description : send.Failure -> Text
+sqs.send.Failure.description = cases
+  send.Failure.Failure _ _ description -> description
+
+sqs.send.Failure.description.modify :
+  (Text ->{g} Text) -> send.Failure ->{g} send.Failure
+sqs.send.Failure.description.modify f = cases
+  send.Failure.Failure status errorType description ->
+    send.Failure.Failure status errorType (f description)
+
+sqs.send.Failure.description.set : Text -> send.Failure -> send.Failure
+sqs.send.Failure.description.set description1 = cases
+  send.Failure.Failure status errorType _ ->
+    send.Failure.Failure status errorType description1
+
+sqs.send.Failure.errorType : send.Failure -> Text
+sqs.send.Failure.errorType = cases
+  send.Failure.Failure _ errorType _ -> errorType
+
+sqs.send.Failure.errorType.modify :
+  (Text ->{g} Text) -> send.Failure ->{g} send.Failure
+sqs.send.Failure.errorType.modify f = cases
+  send.Failure.Failure status errorType description ->
+    send.Failure.Failure status (f errorType) description
+
+sqs.send.Failure.errorType.set : Text -> send.Failure -> send.Failure
+sqs.send.Failure.errorType.set errorType1 = cases
+  send.Failure.Failure status _ description ->
+    send.Failure.Failure status errorType1 description
+
+sqs.send.Failure.fromJson : Nat -> Text ->{Exception} send.Failure
+sqs.send.Failure.fromJson code txt =
+  use Decoder text
+  use object at!
+  decoder =
+    do send.Failure.Failure code (at! "__type" text) (at! "message" text)
+  Decoder.run decoder txt
+
+sqs.send.Failure.status : send.Failure -> Nat
+sqs.send.Failure.status = cases send.Failure.Failure status _ _ -> status
+
+sqs.send.Failure.status.modify :
+  (Nat ->{g} Nat) -> send.Failure ->{g} send.Failure
+sqs.send.Failure.status.modify f = cases
+  send.Failure.Failure status errorType description ->
+    send.Failure.Failure (f status) errorType description
+
+sqs.send.Failure.status.set : Nat -> send.Failure -> send.Failure
+sqs.send.Failure.status.set status1 = cases
+  send.Failure.Failure _ errorType description ->
+    send.Failure.Failure status1 errorType description
+
+sqs.send.Message.Attribute.toJson : Attribute ->{Exception} Json
+sqs.send.Message.Attribute.toJson = cases
+  String s ->
+    Json.object
+      [("StringValue", Json.text s), ("DataType", Json.text "String")]
+  Attribute.Binary b ->
+    Json.object
+      [ ("BinaryValue", toBase64 b |> fromUtf8 |> Json.text)
+      , ("DataType", Json.text "Binary")
+      ]
+
+sqs.send.Message.attributes : send.Message -> [(Text, Attribute)]
+sqs.send.Message.attributes = cases
+  Message _ _ attributes _ _ _ _ -> attributes
+
+sqs.send.Message.attributes.modify :
+  ([(Text, Attribute)] ->{g} [(Text, Attribute)])
+  -> send.Message
+  ->{g} send.Message
+sqs.send.Message.attributes.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      (f attributes)
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.attributes.set :
+  [(Text, Attribute)] -> send.Message -> send.Message
+sqs.send.Message.attributes.set attributes1 = cases
+  Message queue body _ DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes1
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.body : send.Message -> Text
+sqs.send.Message.body = cases Message _ body _ _ _ _ _ -> body
+
+sqs.send.Message.body.modify :
+  (Text ->{g} Text) -> send.Message ->{g} send.Message
+sqs.send.Message.body.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      (f body)
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.body.set : Text -> send.Message -> send.Message
+sqs.send.Message.body.set body1 = cases
+  Message
+    queue _ attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body1
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.deduplicationId : send.Message -> Optional Text
+sqs.send.Message.deduplicationId = cases
+  Message _ _ _ _ deduplicationId _ _ -> deduplicationId
+
+sqs.send.Message.deduplicationId.modify :
+  (Optional Text ->{g} Optional Text) -> send.Message ->{g} send.Message
+sqs.send.Message.deduplicationId.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      (f deduplicationId)
+      groupId
+      systemAttributes
+
+sqs.send.Message.deduplicationId.set :
+  Optional Text -> send.Message -> send.Message
+sqs.send.Message.deduplicationId.set deduplicationId1 = cases
+  Message queue body attributes DelaySeconds _ groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      deduplicationId1
+      groupId
+      systemAttributes
+
+sqs.send.Message.delaySeconds : send.Message -> Optional Nat
+sqs.send.Message.delaySeconds = cases
+  Message _ _ _ DelaySeconds _ _ _ -> DelaySeconds
+
+sqs.send.Message.delaySeconds.modify :
+  (Optional Nat ->{g} Optional Nat) -> send.Message ->{g} send.Message
+sqs.send.Message.delaySeconds.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      (f DelaySeconds)
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.delaySeconds.set :
+  Optional Nat -> send.Message -> send.Message
+sqs.send.Message.delaySeconds.set DelaySeconds1 = cases
+  Message queue body attributes _ deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds1
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.doc : Doc
+sqs.send.Message.doc =
+  {{
+  The {type send.Message} type represents a
+  [SendMessage](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html#API_SendMessage_RequestSyntax)
+  request body.
+  }}
+
+sqs.send.Message.groupId : send.Message -> Optional Text
+sqs.send.Message.groupId = cases Message _ _ _ _ _ groupId _ -> groupId
+
+sqs.send.Message.groupId.modify :
+  (Optional Text ->{g} Optional Text) -> send.Message ->{g} send.Message
+sqs.send.Message.groupId.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      (f groupId)
+      systemAttributes
+
+sqs.send.Message.groupId.set : Optional Text -> send.Message -> send.Message
+sqs.send.Message.groupId.set groupId1 = cases
+  Message queue body attributes DelaySeconds deduplicationId _ systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId1
+      systemAttributes
+
+sqs.send.Message.message : Text -> Text -> send.Message
+sqs.send.Message.message queue body = Message queue body [] None None None []
+
+sqs.send.Message.queue : send.Message -> Text
+sqs.send.Message.queue = cases Message queue _ _ _ _ _ _ -> queue
+
+sqs.send.Message.queue.modify :
+  (Text ->{g} Text) -> send.Message ->{g} send.Message
+sqs.send.Message.queue.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      (f queue)
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.queue.set : Text -> send.Message -> send.Message
+sqs.send.Message.queue.set queue1 = cases
+  Message
+    _ body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue1
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes
+
+sqs.send.Message.systemAttributes : send.Message -> [(Text, Attribute)]
+sqs.send.Message.systemAttributes = cases
+  Message _ _ _ _ _ _ systemAttributes -> systemAttributes
+
+sqs.send.Message.systemAttributes.modify :
+  ([(Text, Attribute)] ->{g} [(Text, Attribute)])
+  -> send.Message
+  ->{g} send.Message
+sqs.send.Message.systemAttributes.modify f = cases
+  Message
+    queue body attributes DelaySeconds deduplicationId groupId systemAttributes ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      (f systemAttributes)
+
+sqs.send.Message.systemAttributes.set :
+  [(Text, Attribute)] -> send.Message -> send.Message
+sqs.send.Message.systemAttributes.set systemAttributes1 = cases
+  Message queue body attributes DelaySeconds deduplicationId groupId _ ->
+    Message
+      queue
+      body
+      attributes
+      DelaySeconds
+      deduplicationId
+      groupId
+      systemAttributes1
+
+sqs.send.Message.toJson : send.Message ->{Exception} Text
+sqs.send.Message.toJson msg =
+  use Json object text
+  use List ++
+  optionals =
+    List.join
+      (List.map
+        Optional.toList
+        [ delaySeconds msg |> Optional.map (v -> ("DelaySeconds", Json.nat v))
+        , deduplicationId msg
+            |> Optional.map (v -> ("MessageDeduplicationId", text v))
+        , groupId msg |> Optional.map (v -> ("MessageGroupId", text v))
+        ])
+  attrsToJson label = cases
+    [] -> []
+    xs -> [(label, object (List.map (Tuple.mapRight Attribute.toJson) xs))]
+  Json.toText
+    (object
+      ([ ("QueueUrl", text <| queue msg)
+      , ("MessageBody", text <| Message.body msg)
+      ]
+        ++ optionals
+        ++ attrsToJson "MessageAttributes" (Message.attributes msg)
+        ++ attrsToJson "MessageSystemAttributes" (systemAttributes msg)))
+
+sqs.send.parseResponse :
+  HttpResponse ->{Exception} Either send.Failure send.Success
+sqs.send.parseResponse = cases
+  HttpResponse (Status code _) _ _ (Body bytes) ->
+    match code with
+      200 -> Right (Success.fromJson (fromUtf8 bytes))
+      _   -> Left (Failure.fromJson code (fromUtf8 bytes))
+
+sqs.send.Success.fromJson : Text ->{Exception} send.Success
+sqs.send.Success.fromJson txt =
+  use Decoder text
+  use object at!
+  decoder = do Success (at! "MessageId" text) (at! "MD5OfMessageBody" text)
+  Decoder.run decoder txt
+
+sqs.send.Success.md5 : send.Success -> Text
+sqs.send.Success.md5 = cases Success _ md5 -> md5
+
+sqs.send.Success.md5.modify :
+  (Text ->{g} Text) -> send.Success ->{g} send.Success
+sqs.send.Success.md5.modify f = cases
+  Success messageId md5 -> Success messageId (f md5)
+
+sqs.send.Success.md5.set : Text -> send.Success -> send.Success
+sqs.send.Success.md5.set md51 = cases
+  Success messageId _ -> Success messageId md51
+
+sqs.send.Success.messageId : send.Success -> Text
+sqs.send.Success.messageId = cases Success messageId _ -> messageId
+
+sqs.send.Success.messageId.modify :
+  (Text ->{g} Text) -> send.Success ->{g} send.Success
+sqs.send.Success.messageId.modify f = cases
+  Success messageId md5 -> Success (f messageId) md5
+
+sqs.send.Success.messageId.set : Text -> send.Success -> send.Success
+sqs.send.Success.messageId.set messageId1 = cases
+  Success _ md5 -> Success messageId1 md5
+
+sqs.send.test :
+  '{IO, Exception} Either (send.Failure, send.Message) send.Success
+sqs.send.test =
+  do
+    provide.fromEnv do
+      sqs.send
+        (Message.message "SQSQueue1" "hello world"
+          |> attributes.set
+               [ ("transaction", String "txn-13245")
+               , ("cert", Attribute.Binary 0xs12345678)
+               ]
+          |> delaySeconds.set (Some 1))
+
+up.base.abilities.Abort.toException :
+  Type -> Text -> '{e, Abort} a ->{e, Exception} a
+up.base.abilities.Abort.toException t msg a =
+  toDefault! (do Exception.raise (IO.Failure.Failure t msg (Any ()))) a
+
+up.base.Bytes.toHex : Bytes -> Text
+up.base.Bytes.toHex bs = unsafeRun! do Bytes.toBase16 bs |> fromUtf8
+
+up.base.Optional.toException : Text -> Type -> Optional a ->{Exception} a
+up.base.Optional.toException msg t = cases
+  None   -> Exception.raise (IO.Failure.Failure t msg (Any ()))
+  Some a -> a
+
+up.base.Optional.toException.doc : Doc
+up.base.Optional.toException.doc =
+  {{
+  Convert an {type Optional} to an {type Exception}.
+
+  If the {type Optional} is {None}, then an {type Exception} is raised with the
+  given {type Text} message and {type Type}. The content of the
+  {type IO.Failure} is set to ``()``.
+
+  If the {type Optional} is {Some}, then the value is returned.
+
+  # Example
+
+    ```
+    catch do
+      base.Optional.toException "The value is missing!" (typeLink Void) None
+    ```
+  }}
+
+up.base.Pattern.oneOf : List.Nonempty (Pattern a) -> Pattern a
+up.base.Pattern.oneOf = reduceRight Pattern.or
+
+up.base.time.Instant.fromIso8601 : Text -> Optional Instant
+up.base.time.Instant.fromIso8601 t =
+  base.time.OffsetDateTime.fromIso8601 t |> Optional.map toInstant
+
+up.base.time.Instant.toBasicISO8601 : Instant -> Text
+up.base.time.Instant.toBasicISO8601 =
+  atUTC >> base.time.OffsetDateTime.toBasicISO8601
+
+up.base.time.Instant.toBasicISO8601.doc : Doc
+up.base.time.Instant.toBasicISO8601.doc =
+  {{
+  Converts an {type Instant} to a {type Text} in the format
+  `YYYYMMDDThhmmss[.nnnnnnnnn][[+|-]hh[mm]]`.
+
+  # Example
+
+    ```
+    base.time.Instant.toBasicISO8601 epoch
+    ```
+  }}
+
+up.base.time.LocalDate.fromBasicISO8601 : Text -> Optional LocalDate
+up.base.time.LocalDate.fromBasicISO8601 t = toOptional! do
+  if Text.size t Nat.== 8 then
+    use Optional toAbort
+    use Text drop take
+    year = toAbort (Int.fromText (take 4 t))
+    month = toAbort (Nat.fromText (take 2 (drop 4 t)))
+    day = toAbort (Nat.fromText (drop 6 t))
+    LocalDate year month day
+  else abort
+
+up.base.time.LocalDate.fromBasicISO8601.doc : Doc
+up.base.time.LocalDate.fromBasicISO8601.doc =
+  {{
+  Converts a {type Text} in the format `YYYYMMDD` to a {type LocalDate}.
+
+  # Example
+
+    ```
+    base.time.LocalDate.fromBasicISO8601 "20210207"
+    ```
+  }}
+
+up.base.time.LocalDate.fromIso8601 : Text -> Optional LocalDate
+up.base.time.LocalDate.fromIso8601 text =
+  toOptional! do
+    ([year, month, day], _) =
+      Optional.toAbort (Pattern.run base.time.patterns.iso8601Date text)
+    LocalDate
+      (Optional.toAbort (Int.fromText year))
+      (Optional.toAbort (Nat.fromText month))
+      (Optional.toAbort (Nat.fromText day))
+
+up.base.time.LocalDate.toBasicISO8601 : LocalDate -> Text
+up.base.time.LocalDate.toBasicISO8601 = cases
+  LocalDate year month day ->
+    Text.join
+      ""
+      [ leftPad 4 "0" (Int.toText year)
+      , leftPad 2 "0" (Nat.toText month)
+      , leftPad 2 "0" (Nat.toText day)
+      ]
+
+up.base.time.LocalDate.toBasicISO8601.doc : Doc
+up.base.time.LocalDate.toBasicISO8601.doc =
+  {{
+  Converts a {type LocalDate} to a {type Text} in the format `YYYYMMDD`.
+
+  # Example
+
+    ```
+    base.time.LocalDate.toBasicISO8601 (LocalDate +2021 2 7)
+    ```
+  }}
+
+up.base.time.LocalDateTime.fromIso8601 : Text -> Optional LocalDateTime
+up.base.time.LocalDateTime.fromIso8601 t =
+  toOptional! do
+    ([d], r) =
+      Optional.toAbort
+        (Pattern.run (Pattern.capture base.time.patterns.iso8601Date) t)
+    use Optional toAbort
+    date = toAbort (base.time.LocalDate.fromIso8601 d)
+    let
+      ([t], r') =
+        toAbort
+          (Pattern.run
+            (Pattern.join
+              [ literal "T"
+              , Pattern.capture base.time.patterns.iso8601LocalTime
+              ])
+            r)
+      time = toAbort (base.time.LocalTime.fromIso8601 t)
+      LocalDateTime date time
+
+up.base.time.LocalDateTime.toBasicISO8601 : LocalDateTime -> Text
+up.base.time.LocalDateTime.toBasicISO8601 = cases
+  LocalDateTime date time ->
+    Text.join
+      "T"
+      [ base.time.LocalDate.toBasicISO8601 date
+      , base.time.LocalTime.toBasicISO8601 time
+      ]
+
+up.base.time.LocalDateTime.toBasicISO8601.doc : Doc
+up.base.time.LocalDateTime.toBasicISO8601.doc =
+  use base.time.LocalDateTime toBasicISO8601
+  {{
+  Converts a {type LocalDateTime} to a {type Text} in the format
+  `PYYYYMMDDThhmmss[.nnnnnnnnn]`.
+
+  # Examples
+
+    ```
+    toBasicISO8601 (LocalDateTime (LocalDate +2021 2 7) (LocalTime 18 26 47 0))
+    ```
+
+    ```
+    toBasicISO8601
+      (LocalDateTime (LocalDate +2021 2 7) (LocalTime 18 26 47 123456789))
+    ```
+  }}
+
+up.base.time.LocalTime.fromBasicISO8601 : Text -> Optional LocalTime
+up.base.time.LocalTime.fromBasicISO8601 t =
+  toOptional! do
+    match Text.split ?. t with
+      whole +: frac ->
+        if Text.size whole Nat.> 6 then abort
+        else
+          use Nat > >= fromText
+          use Optional toAbort
+          use Text drop size take
+          hh = toAbort (fromText (take 2 whole))
+          mm =
+            if size whole >= 4 then toAbort (fromText (take 2 (drop 2 whole)))
+            else 0
+          ss =
+            if size whole >= 6 then toAbort (fromText (take 2 (drop 4 whole)))
+            else 0
+          nano = match frac with
+            [frac] | size frac > 0 -> toAbort (fromText (take 9 frac))
+            _      -> 0
+          LocalTime hh mm ss nano
+      _ -> abort
+
+up.base.time.LocalTime.fromBasicISO8601.doc : Doc
+up.base.time.LocalTime.fromBasicISO8601.doc =
+  use base.time.LocalTime fromBasicISO8601
+  {{
+  Converts a {type Text} in the format `hhmmss[.nnnnnnnnn]` to a
+  {type LocalTime}.
+
+  # Examples
+
+    ```
+    fromBasicISO8601 "182647"
+    ```
+
+    ```
+    fromBasicISO8601 "182647.123456789"
+    ```
+  }}
+
+up.base.time.LocalTime.fromIso8601 : Text -> Optional LocalTime
+up.base.time.LocalTime.fromIso8601 t =
+  toOptional! do
+    match Optional.toAbort (Pattern.run base.time.patterns.iso8601LocalTime t) with
+      ([hour, minute, second, fraction], _) ->
+        LocalTime
+          (Optional.toAbort (Nat.fromText hour))
+          (Optional.toAbort (Nat.fromText minute))
+          (Optional.toAbort (Nat.fromText second))
+          (Optional.toAbort
+            (Nat.fromText (Text.take 9 (leftPad 9 "0" fraction))))
+      ([hour, minute, second], _) ->
+        LocalTime
+          (Optional.toAbort (Nat.fromText hour))
+          (Optional.toAbort (Nat.fromText minute))
+          (Optional.toAbort (Nat.fromText second))
+          0
+
+up.base.time.LocalTime.toBasicISO8601 : LocalTime -> Text
+up.base.time.LocalTime.toBasicISO8601 = cases
+  LocalTime hour minute second nano ->
+    Text.join
+      ""
+      [ leftPad 2 "0" (Nat.toText hour)
+      , leftPad 2 "0" (Nat.toText minute)
+      , leftPad 2 "0" (Nat.toText second)
+      , if nano Nat.== 0 then ""
+        else
+          "."
+            Text.++ Text.dropRightWhile
+              ((Char.==) ?0) (leftPad 9 "0" (Nat.toText nano))
+      ]
+
+up.base.time.LocalTime.toBasicISO8601.doc : Doc
+up.base.time.LocalTime.toBasicISO8601.doc =
+  use base.time.LocalTime toBasicISO8601
+  {{
+  Converts a {type LocalTime} to a {type Text} in the format
+  `hhmmss[.nnnnnnnnn]`.
+
+  # Examples
+
+    ```
+    toBasicISO8601 (LocalTime 18 26 47 0)
+    ```
+
+    ```
+    toBasicISO8601 (LocalTime 18 26 47 123456789)
+    ```
+  }}
+
+up.base.time.OffsetDateTime.fromIso8601 : Text -> Optional OffsetDateTime
+up.base.time.OffsetDateTime.fromIso8601 t =
+  toOptional! do
+    (dt, r) =
+      match Optional.toAbort
+        (Pattern.run
+          (Pattern.capture base.time.patterns.iso8601LocalDateTime) t) with
+        ([dt], r) -> (dt, r)
+        _         -> abort
+    use Optional toAbort
+    tz =
+      match toAbort
+        (Pattern.run (Pattern.capture base.time.patterns.iso8601Timezone) r) with
+        ([tz], _) -> tz
+        _         -> abort
+    offset = toAbort (base.time.UTCOffset.fromIso8601 tz)
+    dateTime = toAbort (base.time.LocalDateTime.fromIso8601 dt)
+    OffsetDateTime offset dateTime
+
+up.base.time.OffsetDateTime.toBasicISO8601 : OffsetDateTime -> Text
+up.base.time.OffsetDateTime.toBasicISO8601 = cases
+  OffsetDateTime offset dateTime ->
+    base.time.LocalDateTime.toBasicISO8601 dateTime
+      Text.++ base.time.UTCOffset.toBasicISO8601 offset
+
+up.base.time.OffsetDateTime.toBasicISO8601.doc : Doc
+up.base.time.OffsetDateTime.toBasicISO8601.doc =
+  use base.time.OffsetDateTime toBasicISO8601
+  {{
+  Converts a {type OffsetDateTime} to a {type Text} in the format
+  `YYYYMMDDThhmmss[.nnnnnnnnn][[+|-]hh[mm]]`.
+
+  # Examples
+
+    ```
+    toBasicISO8601
+      (OffsetDateTime
+        UTC (LocalDateTime (LocalDate +2021 2 7) (LocalTime 18 26 47 0)))
+    ```
+
+    ```
+    toBasicISO8601
+      (OffsetDateTime
+        AST
+        (LocalDateTime (LocalDate +2021 2 7) (LocalTime 18 26 47 123456789)))
+    ```
+  }}
+
+up.base.time.patterns.iso8601Date : Pattern Text
+up.base.time.patterns.iso8601Date =
+  use Pattern capture replicate
+  use patterns digit
+  Pattern.join
+    [ capture (replicate 4 4 digit)
+    , literal "-"
+    , capture (replicate 2 2 digit)
+    , literal "-"
+    , capture (replicate 2 2 digit)
+    ]
+
+up.base.time.patterns.iso8601DateTime : Pattern Text
+up.base.time.patterns.iso8601DateTime =
+  Pattern.join
+    [ base.time.patterns.iso8601LocalDateTime
+    , base.time.patterns.iso8601Timezone
+    ]
+
+up.base.time.patterns.iso8601LocalDateTime : Pattern Text
+up.base.time.patterns.iso8601LocalDateTime =
+  Pattern.join
+    [ base.time.patterns.iso8601Date
+    , literal "T"
+    , base.time.patterns.iso8601LocalTime
+    ]
+
+up.base.time.patterns.iso8601LocalTime : Pattern Text
+up.base.time.patterns.iso8601LocalTime =
+  use Pattern capture join replicate
+  use patterns digit
+  join
+    [ capture (replicate 2 2 digit)
+    , literal ":"
+    , capture (replicate 2 2 digit)
+    , literal ":"
+    , capture (replicate 2 2 digit)
+    , Pattern.optional
+        (join [Pattern.or (literal ".") (literal ","), capture (some digit)])
+    ]
+
+up.base.time.patterns.iso8601Time : Pattern Text
+up.base.time.patterns.iso8601Time =
+  Pattern.join
+    [base.time.patterns.iso8601LocalTime, base.time.patterns.iso8601Timezone]
+
+up.base.time.patterns.iso8601Timezone : Pattern Text
+up.base.time.patterns.iso8601Timezone =
+  use Pattern capture join replicate
+  use patterns digit
+  use up.base.Pattern oneOf
+  oneOf
+    (capture (literal "Z")
+      +| [ join
+          [ capture (oneOf (literal "+" +| [literal "-"]))
+          , capture (replicate 2 2 digit)
+          , Pattern.optional (literal ":")
+          , capture (replicate 2 2 digit)
+          ]
+      , join
+          [ capture (oneOf (literal "+" +| [literal "-"]))
+          , capture (replicate 2 2 digit)
+          ]
+      ])
+
+up.base.time.UTCOffset.fromBasicISO8601 : Text -> Optional UTCOffset
+up.base.time.UTCOffset.fromBasicISO8601 t =
+  toOptional! do
+    if t Text.== "Z" then UTCOffset +0
+    else
+      use Int * + fromText
+      use Nat >=
+      use Optional toAbort
+      use Text == drop take
+      sign = if take 1 t == "-" then -1 else +1
+      hh = toAbort (fromText (take 2 (drop 1 t)))
+      mm =
+        if Text.size t >= 5 then toAbort (fromText (take 2 (drop 3 t))) else +0
+      UTCOffset (sign * (hh * +60 + mm))
+
+up.base.time.UTCOffset.fromBasicISO8601.doc : Doc
+up.base.time.UTCOffset.fromBasicISO8601.doc =
+  use base.time.UTCOffset fromBasicISO8601
+  {{
+  Converts a {type Text} in the format `Z` or `[+|-]hh[mm]` to a
+  {type UTCOffset}.
+
+  # Examples
+
+    ```
+    fromBasicISO8601 "Z"
+    ```
+
+    ```
+    fromBasicISO8601 "+01"
+    ```
+
+    ```
+    fromBasicISO8601 "-01"
+    ```
+
+    ```
+    fromBasicISO8601 "+0130"
+    ```
+
+    ```
+    fromBasicISO8601 "-0130"
+    ```
+  }}
+
+up.base.time.UTCOffset.fromIso8601 : Text -> Optional UTCOffset
+up.base.time.UTCOffset.fromIso8601 t =
+  toOptional! do
+    match Optional.toAbort (Pattern.run base.time.patterns.iso8601Timezone t) with
+      (["Z"], _)                 -> UTC
+      ([plusMinus, hh] ++ mm, _) ->
+        use Int * +
+        use Nat fromText toInt
+        use Optional toAbort
+        isPlus = match plusMinus with
+          "-" -> false
+          "+" -> true
+          _   -> abort
+        h = toAbort (fromText hh)
+        m = match mm with
+          [mins] -> toAbort (fromText mins)
+          []     -> 0
+          _      -> abort
+        mins = toInt h * +60 + toInt m
+        fromMinutes (if isPlus then mins else Int.negate mins)
+      _                          -> abort
+
+up.base.time.UTCOffset.toBasicISO8601 : UTCOffset -> Text
+up.base.time.UTCOffset.toBasicISO8601 = cases
+  UTCOffset minutes ->
+    if minutes Int.== +0 then "Z"
+    else
+      use Int < abs
+      use Nat / == toText
+      hh = abs minutes / 60
+      mm = Nat.mod (abs minutes) 60
+      Text.join
+        ""
+        [ if minutes < +0 then "-" else "+"
+        , leftPad 2 "0" (toText (abs minutes / 60))
+        , if mm == 0 then "" else leftPad 2 "0" (toText mm)
+        ]
+
+up.base.time.UTCOffset.toBasicISO8601.doc : Doc
+up.base.time.UTCOffset.toBasicISO8601.doc =
+  use base.time.UTCOffset toBasicISO8601
+  {{
+  Converts a {type UTCOffset} to a {type Text} in the format `Z` or
+  `[+|-]hh[mm]`.
+
+  # Examples
+
+    ```
+    toBasicISO8601 (UTCOffset +0)
+    ```
+
+    ```
+    toBasicISO8601 (UTCOffset +60)
+    ```
+
+    ```
+    toBasicISO8601 (UTCOffset -60)
+    ```
+
+    ```
+    toBasicISO8601 (UTCOffset +90)
+    ```
+
+    ```
+    toBasicISO8601 (UTCOffset -90)
+    ```
+  }}
+
+up.http.addHeader : Text -> Text -> HttpRequest -> HttpRequest
+up.http.addHeader name value = cases
+  HttpRequest method version uri headers body ->
+    HttpRequest method version uri (Headers.add name value headers) body
+
+up.http.addHeader.doc : Doc
+up.http.addHeader.doc =
+  {{
+  Adds a header to an {type HttpRequest}.
+
+  If the header already exists, the value is appended to the existing header.
+  }}
+
+up.http.Headers.getDateTime : Text -> Headers ->{Exception} [OffsetDateTime]
+up.http.Headers.getDateTime headerName headers =
+  vs = getValues headerName headers
+  Abort.toGenericException "Invalid date" vs do
+    List.map http.Headers.HttpDate.parse.offsetDateTime vs
+
+up.http.Headers.getInstant : Text -> Headers ->{Exception} [Instant]
+up.http.Headers.getInstant headerName headers =
+  vs = getValues headerName headers
+  Abort.toGenericException "Invalid date" vs do
+    List.map (http.Headers.HttpDate.parse.offsetDateTime >> toInstant) vs
+
+up.http.Headers.HttpDate.parse.localDate : Text ->{Abort} LocalDate
+up.http.Headers.HttpDate.parse.localDate text =
+  match Optional.toAbort
+    (Pattern.run http.Headers.HttpDate.patterns.rfc7231Date text) with
+    ([weekday, day, month, year], _) ->
+      use Int + <
+      use Optional toAbort
+      month' = match month with
+        "Jan" -> 1
+        "Feb" -> 2
+        "Mar" -> 3
+        "Apr" -> 4
+        "May" -> 5
+        "Jun" -> 6
+        "Jul" -> 7
+        "Aug" -> 8
+        "Sep" -> 9
+        "Oct" -> 10
+        "Nov" -> 11
+        "Dec" -> 12
+        _     -> abort
+      day' = toAbort (Nat.fromText day)
+      year' = toAbort (Int.fromText year)
+      year'' =
+        if year' < +100 then year' + (if year' < +50 then +2000 else +1900)
+        else year'
+      LocalDate year' month' day'
+    _ -> abort
+
+up.http.Headers.HttpDate.parse.localDateTime : Text ->{Abort} LocalDateTime
+up.http.Headers.HttpDate.parse.localDateTime text =
+  match Optional.toAbort
+    (Pattern.run
+      (Pattern.join
+        [ Pattern.capture http.Headers.HttpDate.patterns.rfc7231Date
+        , some space
+        , Pattern.capture http.Headers.HttpDate.patterns.rfc7231Time
+        ])
+      text) with
+    ([dt, tm], _) ->
+      LocalDateTime
+        (http.Headers.HttpDate.parse.localDate dt)
+        (http.Headers.HttpDate.parse.localTime tm)
+    _ -> abort
+
+up.http.Headers.HttpDate.parse.localTime : Text ->{Abort} LocalTime
+up.http.Headers.HttpDate.parse.localTime text =
+  match Optional.toAbort
+    (Pattern.run http.Headers.HttpDate.patterns.rfc7231Time text) with
+    ([hour, minute, second], _) ->
+      LocalTime
+        (Optional.toAbort (Nat.fromText hour))
+        (Optional.toAbort (Nat.fromText minute))
+        (Optional.toAbort (Nat.fromText second))
+        0
+    e -> abort
+
+up.http.Headers.HttpDate.parse.offsetDateTime : Text ->{Abort} OffsetDateTime
+up.http.Headers.HttpDate.parse.offsetDateTime text =
+  OffsetDateTime UTC (http.Headers.HttpDate.parse.localDateTime text)
+
+up.http.Headers.HttpDate.patterns.asctimeFormat : Pattern Text
+up.http.Headers.HttpDate.patterns.asctimeFormat =
+  use Pattern capture
+  use patterns digit
+  Pattern.join
+    [ capture (some wordChar)
+    , literal " "
+    , capture (some wordChar)
+    , literal " "
+    , Pattern.optional (literal " ")
+    , capture (some digit)
+    , literal " "
+    , capture (some digit)
+    , literal ":"
+    , capture (some digit)
+    , literal ":"
+    , capture (some digit)
+    , literal " "
+    , capture (some digit)
+    ]
+
+up.http.Headers.HttpDate.patterns.asctimeFormat.doc : Doc
+up.http.Headers.HttpDate.patterns.asctimeFormat.doc =
+  {{
+  A {type Pattern} for the RFC 7231 obsolete asctime() format.
+
+  # Example
+
+    ```
+    Pattern.run
+      http.Headers.HttpDate.patterns.asctimeFormat "Sun Nov  6 08:49:37 1994"
+    ```
+
+    See
+    [https://tools.ietf.org/html/rfc7231](https://tools.ietf.org/html/rfc7231)
+  }}
+
+test> up.http.Headers.HttpDate.patterns.asctimeFormat.test =
+  parsed =
+    Pattern.run
+      http.Headers.HttpDate.patterns.asctimeFormat "Sun Nov  6 08:49:37 1994"
+  check (parsed === Some (["Sun", "Nov", "6", "08", "49", "37", "1994"], ""))
+
+up.http.Headers.HttpDate.patterns.rfc7231Date : Pattern Text
+up.http.Headers.HttpDate.patterns.rfc7231Date =
+  use Pattern capture or
+  use patterns digit
+  Pattern.join
+    [ capture (some wordChar)
+    , literal ", "
+    , capture (some digit)
+    , or (literal " ") (literal "-")
+    , capture (some wordChar)
+    , or (literal " ") (literal "-")
+    , capture (some digit)
+    ]
+
+up.http.Headers.HttpDate.patterns.rfc7231DateTime : Pattern Text
+up.http.Headers.HttpDate.patterns.rfc7231DateTime =
+  Pattern.join
+    [ http.Headers.HttpDate.patterns.rfc7231Date
+    , some (patterns.char whitespace)
+    , http.Headers.HttpDate.patterns.rfc7231Time
+    ]
+
+up.http.Headers.HttpDate.patterns.rfc7231DateTime.doc : Doc
+up.http.Headers.HttpDate.patterns.rfc7231DateTime.doc =
+  use Pattern run
+  use http.Headers.HttpDate.patterns rfc7231DateTime
+  {{
+  A {type Pattern} for the RFC 7231 date/time format.
+
+  Matches both the preferred HttpDate (IMF-fixdate) format as well as the
+  obsolete RFC-850 format.
+
+  This is used to parse date/time fields in HTTP headers.
+
+  # Examples
+
+    ```
+    run rfc7231DateTime "Wed, 12 Oct 2022 18:32:45 GMT"
+    ```
+
+    ```
+    run rfc7231DateTime "Sunday, 06-Nov-94 08:49:37 GMT"
+    ```
+
+    See
+    [https://tools.ietf.org/html/rfc7231](https://tools.ietf.org/html/rfc7231)
+  }}
+
+test> up.http.Headers.HttpDate.patterns.rfc7231DateTime.test850 =
+  parsed =
+    Pattern.run
+      http.Headers.HttpDate.patterns.rfc7231DateTime
+      "Sunday, 06-Nov-94 08:49:37 GMT"
+  check
+    (parsed === Some (["Sunday", "06", "Nov", "94", "08", "49", "37"], " GMT"))
+
+test> up.http.Headers.HttpDate.patterns.rfc7231DateTime.testIMF =
+  parsed =
+    Pattern.run
+      http.Headers.HttpDate.patterns.rfc7231DateTime
+      "Wed, 12 Oct 2022 18:32:45 GMT"
+  check
+    (parsed === Some (["Wed", "12", "Oct", "2022", "18", "32", "45"], " GMT"))
+
+up.http.Headers.HttpDate.patterns.rfc7231Time : Pattern Text
+up.http.Headers.HttpDate.patterns.rfc7231Time =
+  use Pattern capture replicate
+  use patterns digit
+  Pattern.join
+    [ capture (replicate 2 2 digit)
+    , literal ":"
+    , capture (replicate 2 2 digit)
+    , literal ":"
+    , capture (replicate 2 2 digit)
+    ]
+
+up.http.Headers.requireHeader : Text -> Headers ->{Exception} Text
+up.http.Headers.requireHeader h hs =
+  hs
+    |> getValues h
+    |> List.head
+    |> (cases
+         None ->
+           Exception.raise
+             <| IO.Failure.Failure
+               (typeLink Headers)
+               ("Missing " Text.++ h Text.++ " header in response.")
+               (Any hs)
+         Some v -> v)
+
+up.http.Headers.requireHeader.doc : Doc
+up.http.Headers.requireHeader.doc =
+  {{
+  Given a {type Text} header name and a {type Headers} object, returns the
+  value of the header. If the header is not present, this raises an
+  {type Exception}.
+  }}
+
+up.http.setHeader : Text -> [Text] -> HttpRequest -> HttpRequest
+up.http.setHeader name value req =
+  setIt = cases Headers map -> Headers (Map.insert name value map)
+  headers.modify setIt req
+
+up.http.setHeader.doc : Doc
+up.http.setHeader.doc =
+  {{
+  Sets a header on an {type HttpRequest}.
+
+  If the header already exists, the value is replaced.
+  }}
+
+up.xml.XMLError.message : XMLError -> Text
+up.xml.XMLError.message = cases
+  XMLError.ParseError _ msg -> msg
+  StructureError msg        -> msg
+
+up.xml.XMLError.toException : '{e, Throw XMLError} a ->{e, Exception} a
+up.xml.XMLError.toException = Throw.toException XMLError.toFailure
+
+up.xml.XMLError.toExceptionWith :
+  e -> '{g, Throw XMLError} a ->{g, Exception} a
+up.xml.XMLError.toExceptionWith e a = Throw.toException (toFailureWith e) a
+
+up.xml.XMLError.toFailure : XMLError -> IO.Failure
+up.xml.XMLError.toFailure = cases
+  e@(XMLError.ParseError ix msg) ->
+    IO.Failure.Failure (typeLink XMLError) msg (Any e)
+  e@(StructureError msg) -> IO.Failure.Failure (typeLink XMLError) msg (Any e)
+
+up.xml.XMLError.toFailureWith : e -> XMLError -> IO.Failure
+up.xml.XMLError.toFailureWith e = cases
+  XMLError.ParseError ix msg ->
+    IO.Failure.Failure (typeLink XMLError) msg (Any e)
+  StructureError msg -> IO.Failure.Failure (typeLink XMLError) msg (Any e)

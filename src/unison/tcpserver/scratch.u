@@ -1,0 +1,421 @@
+concurrently :
+  '{base.IO, base.abilities.Exception} ()
+  ->{base.IO} base.IO.concurrent.Promise ()
+concurrently work =
+  done = base.IO.concurrent.Promise.new()
+  _ = base.IO.concurrent.fork do
+    Tcp.up.base.abilities.Exception.logAndIgnore work
+    base.IO.concurrent.Promise.write_ done ()
+  done
+
+concurrently.doc : base.Doc
+concurrently.doc =
+  use base.syntax docEmbedTermLink docEmbedTypeLink docLink docParagraph docWord
+  {{
+  Runs the given computation in a separate thread and returns a
+  {type base.IO.concurrent.Promise} that will be fulfilled when the computation
+  finishes.
+
+  The computation is run in a separate thread. If the computation throws an
+  exception, the exception is logged to {base.IO.Handle.stdErr} and the
+  {type base.IO.concurrent.Promise} is filled.
+
+  # Example
+
+        @source{concurrently.example}
+  }}
+
+concurrently.example : '{base.IO} ()
+concurrently.example = do
+  done = concurrently do base.IO.console.printLine "Hello from another thread!"
+  base.IO.concurrent.Promise.read done
+
+Tcp.acceptFork :
+  base.IO.net.Socket.ListeningServerSocket
+  -> (base.IO.net.Socket ->{base.IO, base.abilities.Exception} a)
+  ->{base.IO, base.abilities.Exception} base.IO.concurrent.ThreadId
+Tcp.acceptFork listeningSocket k =
+  use Tcp.up.base.abilities.Exception logAndIgnore
+  sock = base.IO.net.Socket.accept listeningSocket
+  base.IO.concurrent.fork do
+    _ = base.IO.catchAll do logAndIgnore do k sock
+    logAndIgnore do base.IO.net.Socket.close sock
+
+Tcp.acceptFork.doc : base.Doc
+Tcp.acceptFork.doc =
+  use base.syntax docEmbedTermLink docLink docParagraph docWord
+  {{
+  Accepts a connection from a client and passes it to the given function in a
+  separate thread.
+
+  The connection is closed automatically when the function finishes or throws
+  an exception.
+
+  The {type base.IO.net.Socket} passed to the function is a TCP connection to a
+  client. It can be used to {base.IO.net.Socket.send} data to and
+  {base.IO.net.Socket.receive} data from the client.
+  }}
+
+Tcp.examples.echoClient : '{base.IO, base.abilities.Exception} ()
+Tcp.examples.echoClient =
+  do
+    use base.Text ++
+    sock =
+      base.IO.net.Socket.client
+        (base.IO.net.HostName.HostName "localhost")
+        (base.IO.net.Port.Port "50000")
+    base.IO.net.Socket.send sock (base.Text.toUtf8 "Hello!")
+    msg = base.Text.fromUtf8 (base.IO.net.Socket.receive sock)
+    base.IO.console.printLine ("Client received: " ++ msg)
+    base.IO.net.Socket.close sock
+
+Tcp.examples.echoClientServer : '{base.IO} ()
+Tcp.examples.echoClientServer = do
+  use base.IO.concurrent.Promise read
+  serverDone = concurrently Tcp.examples.echoServer
+  clientDone = concurrently Tcp.examples.echoClient
+  read clientDone
+  read serverDone
+
+Tcp.examples.echoServer : '{base.IO, base.abilities.Exception} ()
+Tcp.examples.echoServer =
+  do
+    handler connection =
+      use base.IO.console printLine
+      printLine "Server got a connection!"
+      go =
+        do
+          use base.Text != ++
+          msg = base.Text.fromUtf8 (base.IO.net.Socket.receive connection)
+          if msg != "" then
+            printLine ("Server received: " ++ msg)
+            base.IO.net.Socket.send
+              connection (base.Text.toUtf8 ("You said: " ++ msg))
+            go()
+          else printLine "Client disconnected."
+      go()
+    Tcp.serve base.Optional.None (base.IO.net.Port.Port "50000") handler
+
+Tcp.listen :
+  base.Optional base.IO.net.HostName
+  -> base.IO.net.Port
+  -> (base.IO.net.Socket.ListeningServerSocket
+  ->{base.IO, base.abilities.Exception} a)
+  ->{base.IO, base.abilities.Exception} a
+Tcp.listen host port k =
+  provision = do
+    boundSocket = base.IO.net.Socket.server host port
+    base.IO.net.Socket.listen boundSocket
+  final = cases
+    base.IO.net.Socket.ListeningServerSocket.ListeningServerSocket sock ->
+      base.IO.net.Socket.close sock
+  base.abilities.Exception.bracket
+    provision final (sock -> base.IO.tryEval do k sock)
+
+Tcp.listen.doc : base.Doc
+Tcp.listen.doc =
+  use base.syntax docEmbedTermLink docEmbedTypeLink docLink docParagraph docWord
+  {{
+  Binds a TCP server socket and listens for connections, then passes the
+  {type base.IO.net.Socket.ListeningServerSocket} to the given function. The
+  socket is closed automatically when the function returns or throws an
+  exception.
+
+  The first argument is an {type base.Optional} {type base.IO.net.HostName} to
+  bind to. If {base.Optional.None} is given, the socket will be bound to any
+  available interface.
+
+  The second argument is the {type base.IO.net.Port} number or service name to
+  bind to.
+
+  The {type base.IO.net.Socket.ListeningServerSocket} is a
+  {type base.IO.net.Socket} that has been bound to a port and is listening for
+  connections. It can be used to {base.IO.net.Socket.accept} connections from
+  clients.
+  }}
+
+Tcp.README : base.Doc
+Tcp.README =
+  use Tcp serve
+  use base.syntax docEmbedTermLink docLink docParagraph docSection docSource docSourceElement docWord
+  {{
+  # Simple TCP Server
+
+    This library provides a simplified interface for writing TCP servers in
+    Unison. Using the {serve} function, you can write a TCP server in just a
+    few lines of code. The library takes care of multithreading and connection
+    lifecycle management for you.
+
+    ## Example usage
+
+       Here is a simple echo server running on port 50000:
+
+           @source{Tcp.examples.echoServer}
+
+       The {base.Optional.None} as the first argument to {serve} means "bind to
+       any available host".
+
+    ## Connecting to the server
+
+       We can write a simple client for our server:
+
+           @source{Tcp.examples.echoClient}
+
+       And to test, we can run both concurrently:
+
+           @source{Tcp.examples.echoClientServer}
+
+    ## Note
+
+       This has been migrated from
+       [`@runarorama/tcpserver`](/@runarorama/tcpserver)
+  }}
+
+Tcp.ReleaseNotes : base.Doc
+Tcp.ReleaseNotes =
+  use base.syntax docWord
+  {{ replace base library with version 2.7.0 }}
+
+Tcp.serve :
+  base.Optional base.IO.net.HostName
+  -> base.IO.net.Port
+  -> (base.IO.net.Socket ->{base.IO, base.abilities.Exception} ())
+  ->{base.IO, base.abilities.Exception} ()
+Tcp.serve host port k =
+  Tcp.listen
+    host
+    port
+    (sock ->
+      base.abilities.forever do
+        Tcp.up.base.abilities.Exception.logAndIgnore do Tcp.acceptFork sock k)
+
+Tcp.serve.doc : base.Doc
+Tcp.serve.doc =
+  use base.syntax docEmbedTermLink docEmbedTypeLink docLink docParagraph docWord
+  {{
+  Starts a TCP server that listens for connections and passes each connection
+  as a {type base.IO.net.Socket} to the given function.
+
+  The function is run in a separate thread for each connection. The connection
+  is closed automatically when the function finishes or throws an exception.
+
+  The first argument to {Tcp.serve} is an {type base.Optional}
+  {type base.IO.net.HostName} to bind to. If {base.Optional.None} is given, the
+  socket will be bound to any available interface.
+
+  The second argument is the {type base.IO.net.Port} number or service name to
+  bind to.
+
+  The {type base.IO.net.Socket} passed to the function is a TCP connection to a
+  client. It can be used to {base.IO.net.Socket.send} data to and
+  {base.IO.net.Socket.receive} data from the client.
+
+  # Example
+
+    Here is a simple echo server listening on port 50000:
+
+        @source{Tcp.examples.echoServer}
+  }}
+
+Tcp.up.base.abilities.Exception.logAndCrash :
+  '{g, base.IO, base.abilities.Exception} a ->{g, base.IO} a
+Tcp.up.base.abilities.Exception.logAndCrash x =
+  match base.abilities.Exception.catch x with
+    base.Either.Left e ->
+      base.abilities.Exception.unsafeRun! do
+        base.IO.Handle.putText
+          base.IO.Handle.stdErr (base.IO.Failure.message e)
+      base.bug e
+    base.Either.Right a -> a
+
+Tcp.up.base.abilities.Exception.logAndCrash.doc : base.Doc
+Tcp.up.base.abilities.Exception.logAndCrash.doc =
+  use base.syntax docWord
+  {{
+  Runs the given computation, catching any exceptions. If it catches an
+  exception, it logs the exception to {base.IO.Handle.stdErr} and crashes the
+  thread.
+  }}
+
+Tcp.up.base.abilities.Exception.logAndIgnore :
+  '{g, base.IO, base.abilities.Exception} a ->{g, base.IO} ()
+Tcp.up.base.abilities.Exception.logAndIgnore x =
+  match base.abilities.Exception.catch x with
+    base.Either.Left e ->
+      base.abilities.Exception.unsafeRun! do
+        base.IO.Handle.putText
+          base.IO.Handle.stdErr (base.IO.Failure.message e)
+    base.Either.Right _ -> ()
+
+Tcp.up.base.abilities.Exception.logAndIgnore.doc : base.Doc
+Tcp.up.base.abilities.Exception.logAndIgnore.doc =
+  use base.syntax docWord
+  {{
+  Runs the given computation, catching any exceptions. If it catches an
+  exception, it logs the exception to {base.IO.Handle.stdErr} but does not
+  rethrow the exception.
+  }}
+
+Tls.acceptFork :
+  base.IO.net.Tls.ServerConfig
+  -> base.IO.net.Socket.ListeningServerSocket
+  -> (base.IO.net.Tls.TlsSocket ->{g} t)
+  ->{base.IO, base.abilities.Exception} base.IO.concurrent.ThreadId
+Tls.acceptFork cfg listeningSocket k =
+  (tls, backend) = acceptTls cfg listeningSocket
+  base.abilities.Exception.onException (do base.IO.net.Socket.close backend) do
+    base.IO.tryEval do useTlsThenCloseFork k tls backend
+
+Tls.acceptFork.doc : base.Doc
+Tls.acceptFork.doc =
+  use base.syntax docParagraph docWord
+  {{
+  Accepts a single incoming TLS-secured TCP connection and handles it by
+  calling the given function in a new thread.
+
+  Performs the TLS handshake, then calls the given function, passing the
+  {type base.IO.net.Tls.TlsSocket} for the session. When the function returns,
+  gracefully terminates the TLS session and closes the underlying TCP
+  connection. Also cleans up any network resources in case of exceptions.
+  }}
+
+Tls.acceptTls :
+  base.IO.net.Tls.ServerConfig
+  -> base.IO.net.Socket.ListeningServerSocket
+  ->{base.IO, base.abilities.Exception} (base.IO.net.Tls, base.IO.net.Socket)
+Tls.acceptTls cfg listeningSocket =
+  ListeningServerSocket socket = listeningSocket
+  conn = base.IO.net.Socket.accept listeningSocket
+  base.abilities.Exception.onException (do base.IO.net.Socket.close conn) do
+    base.IO.tryEval do (base.IO.net.Tls.newServer cfg conn, conn)
+
+Tls.acceptTls.doc : base.Doc
+Tls.acceptTls.doc =
+  use base.syntax docEmbedTermLink docEmbedTypeLink docGroup docJoin docLink docParagraph docWord
+  {{
+  Accepts an incoming TCP connection and returns a {type base.IO.net.Tls}
+  context along with the {type base.IO.net.Socket} for the underlying TCP
+  connection.
+
+  To use the connection, you must perform a {base.IO.net.Tls.handshake} first
+  to obtain a {type base.IO.net.Tls.TlsSocket}. Don't forget to
+  {base.IO.net.Tls.terminate} the {type base.IO.net.Tls.TlsSocket} when you're
+  done, and close the underlying {type base.IO.net.Socket} as well with
+  {base.IO.net.Socket.close}.
+  }}
+
+Tls.connect :
+  base.IO.net.Tls.ClientConfig
+  -> base.IO.net.HostName
+  -> base.IO.net.Port
+  -> (base.IO.net.Tls.TlsSocket ->{base.IO, base.abilities.Exception} a)
+  ->{base.IO, base.abilities.Exception} a
+Tls.connect cfg host port k =
+  base.abilities.Exception.bracket
+    (do connectTls cfg host port)
+    (base.IO.net.Socket.close base.Function.<< base.data.Tuple.at2)
+    cases (tls, _) -> base.IO.tryEval do useTls k tls
+
+Tls.connect.doc : base.Doc
+Tls.connect.doc =
+  use base.syntax docWord
+  {{
+  Connects to a TLS-secured TCP server and performs a TLS handshake, then
+  performs the given action on the established
+  {type base.IO.net.Tls.TlsSocket}. Gracefully terminates the TLS session when
+  done (or in the case of an exception), but does not close the underlying TCP
+  connection.
+  }}
+
+Tls.connectTls :
+  base.IO.net.Tls.ClientConfig
+  -> base.IO.net.HostName
+  -> base.IO.net.Port
+  ->{base.IO, base.abilities.Exception} (base.IO.net.Tls, base.IO.net.Socket)
+Tls.connectTls cfg host port =
+  backend = base.IO.net.Socket.client host port
+  base.abilities.Exception.onException (do base.IO.net.Socket.close backend) do
+    base.IO.tryEval do
+      tls = base.IO.net.Tls.newClient cfg backend
+      (tls, backend)
+
+Tls.connectTls.doc : base.Doc
+Tls.connectTls.doc =
+  use base.syntax docEmbedTermLink docEmbedTypeLink docGroup docJoin docLink docParagraph docWord
+  {{
+  Connects to a TLS-secured TCP server and performs a TLS handshake, returning
+  a {type base.IO.net.Tls} context along with the {type base.IO.net.Socket} for
+  the underlying TCP connection.
+
+  To use the connection, you must perform a {base.IO.net.Tls.handshake} first
+  to obtain a {type base.IO.net.Tls.TlsSocket}. Don't forget to
+  {base.IO.net.Tls.terminate} the {type base.IO.net.Tls.TlsSocket} when you're
+  done, and close the underlying {type base.IO.net.Socket} as well with
+  {base.IO.net.Socket.close}.
+  }}
+
+Tls.serve :
+  base.IO.net.Tls.ServerConfig
+  -> base.Optional base.IO.net.HostName
+  -> base.IO.net.Port
+  -> (base.IO.net.Tls.TlsSocket ->{base.IO, base.abilities.Exception} ())
+  ->{base.IO, base.abilities.Exception} ()
+Tls.serve cfg host port k =
+  Tcp.listen
+    host port (socket -> base.abilities.forever do Tls.acceptFork cfg socket k)
+
+Tls.serve.doc : base.Doc
+Tls.serve.doc =
+  use base.syntax docColumn docParagraph docWord
+  {{
+  Starts a TLS-secured TCP server that accepts incoming connections and handles
+  each in a new thread by calling the given function.
+
+  Binds a listening TCP socket on the given host and port and listens for
+  incoming connections, then for each connection:
+
+  * Accepts the TCP connection
+  * Performs the TLS handshake
+  * Calls the given function, passing the {type base.IO.net.Tls.TlsSocket} for
+    the session
+  * Closes the TLS session when done
+  * Closes the TCP connection
+  }}
+
+Tls.useTls :
+  (base.IO.net.Tls.TlsSocket ->{base.IO, base.abilities.Exception} a)
+  -> base.IO.net.Tls
+  ->{base.IO, base.abilities.Exception} a
+Tls.useTls k ctx =
+  base.abilities.Exception.bracket
+    (do base.IO.net.Tls.handshake ctx)
+    base.IO.net.Tls.TlsSocket.terminate
+    (conn -> base.IO.tryEval do k conn)
+
+Tls.useTls.doc : base.Doc
+Tls.useTls.doc =
+  use base.syntax docEmbedTypeLink docLink docWord
+  {{
+  Performs a TLS handshake on the given {type base.IO.net.Tls} context, then
+  performs the given action on the established
+  {type base.IO.net.Tls.TlsSocket}. Gracefully terminates the TLS session when
+  done, but does not close the underlying TCP connection.
+  }}
+
+Tls.useTlsThenCloseFork :
+  (base.IO.net.Tls.TlsSocket -> o)
+  -> base.IO.net.Tls
+  -> base.IO.net.Socket
+  ->{base.IO} base.IO.concurrent.ThreadId
+Tls.useTlsThenCloseFork k tls backend =
+  base.IO.concurrent.fork do
+    e =
+      base.abilities.Exception.catch do
+        base.abilities.Exception.bracket
+          (do base.IO.net.Tls.handshake tls)
+          base.IO.net.Tls.TlsSocket.terminate
+          (conn -> base.IO.tryEval do k conn)
+    match e with
+      base.Either.Left err ->
+        base.abilities.Exception.unsafeRun! do base.IO.net.Socket.close backend
+      base.Either.Right _ -> ()
