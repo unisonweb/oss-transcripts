@@ -1,0 +1,4291 @@
+ability Decode where
+  bytesRead : {Decode} Nat
+  remit : Bytes ->{Decode} ()
+  moreBytes : {Decode} (Optional Bytes)
+  fail : [Text] ->{Decode} a
+
+type Decode.doc.Book
+  = Book Text Text Int Nat Text Bytes
+
+ability DecodeBits where
+  fail : [Text] ->{DecodeBits} a
+  setDecoderState : DecoderState ->{DecodeBits} ()
+  getDecoderState : {DecodeBits} DecoderState
+
+type DecodeBits.Alignment
+  = AlignLeft
+  | AlignRight
+
+type DecodeBits.DecoderState
+  = DecoderState Bytes Nat
+
+type DecodeBits.examples.IpAddress
+  = IpAddress Nat
+
+type DecodeBits.examples.IpHeader
+  = IpHeader
+      Nat
+      Nat
+      TypeOfService
+      Nat
+      Nat
+      Boolean
+      Boolean
+      Nat
+      Duration
+      Nat
+      IpV4Address
+      IpV4Address
+      Bytes
+
+type DecodeBits.examples.IpV4Address
+  = IpV4Address Nat Nat Nat Nat
+
+type DecodeBits.examples.TypeOfService
+  = { precedence : Nat,
+      lowDelay : Boolean,
+      highThroughput : Boolean,
+      highReliability : Boolean }
+
+type DecodeError
+  = DecodeError [Text] Position Bytes
+
+ability EncodeBits where
+  setEncoderState : EncoderState ->{EncodeBits} ()
+  getEncoderState : {EncodeBits} EncoderState
+
+type EncodeBits.EncoderState
+  = EncoderState Bytes Nat Nat
+
+type EncodeError
+  = EncodeError Text
+
+type Position
+  = Position Nat
+
+Decode.alsoBytes : '{g, Decode} a ->{g, Decode} (Bytes, a)
+Decode.alsoBytes d =
+  d' = do
+    use Nat -
+    sz1 = bytesRead
+    a = d()
+    sz2 = bytesRead
+    (a, sz1 - sz2)
+  let
+    (a, size) = trySilently d'
+    bytes = peekN size
+    (bytes, a)
+
+Decode.alsoBytes.doc : Doc
+Decode.alsoBytes.doc =
+  {{
+  `` alsoBytes d `` runs the decoder `d` and returns the bytes that were
+  consumed along with the result.
+  }}
+
+Decode.ascii : '{Decode} Text
+Decode.ascii =
+  do
+    Decode.label "Expecting an ASCII string" do
+      fromCharList (List.map fromNat.impl (Bytes.toList remainder()))
+
+Decode.ascii.doc : Doc
+Decode.ascii.doc =
+  {{ Decode the entire input into an ASCII string as {type Text}. }}
+
+test> Decode.ascii.test = runs 100 do
+  txt = Text.ascii()
+  bs = fromList.impl (List.map Char.toNat (toCharList txt))
+  expect ((toEither do runDecode Decode.ascii bs) === Right txt)
+
+Decode.asciiChar : '{Decode} Char
+Decode.asciiChar =
+  do Decode.label "Expecting an ASCII character" do fromNat.impl Decode.byte()
+
+Decode.asciiChar.doc : Doc
+Decode.asciiChar.doc = {{ Decode a single byte as an ASCII {type Char}. }}
+
+test> Decode.asciiChar.test = runs 100 do
+  c = Char.ascii()
+  bs = fromList.impl [Char.toNat c]
+  expect ((toEither do runDecode Decode.asciiChar bs) === Right c)
+
+Decode.asciiNullTerminated : '{Decode} Text
+Decode.asciiNullTerminated = do nullTerminated Decode.ascii
+
+Decode.asciiNullTerminated.doc : Doc
+Decode.asciiNullTerminated.doc =
+  {{ Decode a null-terminated ASCII string into {type Text}. }}
+
+test> Decode.asciiNullTerminated.test =
+  runs 100 do
+    use Char toNat
+    use List ++ map
+    use Text ascii
+    txt = ascii()
+    rest = ascii()
+    bs =
+      fromList.impl
+        (map toNat (toCharList txt) ++ [0] ++ map toNat (toCharList rest))
+    expect ((toEither do runDecode asciiNullTerminated bs) === Right txt)
+
+Decode.atEof : '{g} r -> '{g, Decode} r
+Decode.atEof decodeValue = do
+  r = decodeValue()
+  Decode.eof()
+  r
+
+Decode.atEof.doc : Doc
+Decode.atEof.doc =
+  use Decode fromBytes
+  use Text toUtf8
+  use fixedUtf8 deprecated
+  {{
+  `` atEof d `` decodes a value using the decoder `d` and expects the end of
+  the input after that.
+
+  This fails if the decoder `d` fails, or if the end of the input is not
+  reached after `d` succeeds.
+
+  Returns the value decoded by `d`.
+
+  # Examples
+
+    ```
+    toEither do fromBytes (toUtf8 "Hello") (atEof do deprecated 5)
+    ```
+
+    ```
+    toEither do fromBytes (toUtf8 "Hello there") (atEof do deprecated 5)
+    ```
+  }}
+
+Decode.bits : Bytes ->{DecodeBits} ()
+Decode.bits bytes =
+  use Bytes ++
+  (DecoderState bytes' offset) = getDecoderState
+  setDecoderState (DecoderState (bytes' ++ bytes) offset)
+
+Decode.bits.doc : Doc
+Decode.bits.doc =
+  {{
+  `` bits bs `` submits the {type Bytes} `bs` as input to a {type DecodeBits}
+  bitwise decoder that follows.
+
+  # Example
+
+    ```
+    toEither do
+      fromEmpty do
+        bits 0xs1234
+        List.replicate 4 do wordN 4
+    ```
+  }}
+
+Decode.bitsFromBytes : Nat ->{Decode, DecodeBits} ()
+Decode.bitsFromBytes n = bits (nextBytes n)
+
+Decode.bitsFromBytes.doc : Doc
+Decode.bitsFromBytes.doc =
+  {{
+  `` bitsFromBytes n `` reads the next `n` bytes from the input and submits
+  them to the {type DecodeBits} ability to decode bitwise.
+  }}
+
+Decode.boolean : '{Decode} Boolean
+Decode.boolean = do match Decode.byte() with
+  0 -> false
+  1 -> true
+  b ->
+    remit (fromList.impl [b])
+    Decode.failWith "Expecting 0x00 or 0x01"
+
+Decode.boolean.doc : Doc
+Decode.boolean.doc =
+  {{ Decode a {type Boolean} as a single byte that is either 0x00 or 0x01. }}
+
+Decode.byte : '{Decode} Nat
+Decode.byte =
+  do
+    Decode.label "Requesting one byte" do
+      toDefault! unexpectedEof do Bytes.at! 0 (nextBytes 1)
+
+Decode.byte.doc : Doc
+Decode.byte.doc = {{ Decode a single byte. }}
+
+Decode.bytesRead.doc : Doc
+Decode.bytesRead.doc =
+  use fromList impl
+  {{
+  `` bytesRead `` is a decoder that returns the number of bytes read so far
+  from the input. This can be used to determine for example where a particular
+  portion of the message begins or ends.
+
+  # Example
+
+    ```
+    toEither do
+      runDecode
+        (do
+          skipUntil 0xs00
+          bytesRead) 0xsfeedface00deadbeef
+    ```
+  }}
+
+Decode.char : Char ->{Decode} Char
+Decode.char c =
+  _ = literalBytes (up.Char.toUtf8 c)
+  c
+
+Decode.char.doc : Doc
+Decode.char.doc =
+  {{
+  `` Decode.char c `` decodes a single UTF-8 character (code point) `c`. Fails
+  if `c` is not next in the input.
+  }}
+
+Decode.charIn : Class ->{Decode} Char
+Decode.charIn class =
+  use Text ++
+  c = Decode.asciiChar()
+  if is class c then c
+  else
+    Decode.failWith
+      ("Character " ++ Char.toText c ++ " was not of the expected class.")
+
+Decode.charIn.doc : Doc
+Decode.charIn.doc =
+  use Class upper
+  use Decode charIn fromBytes
+  use Text toUtf8
+  {{
+  Decodes a single byte as a {type Char} in the given {type Class}, or fails if
+  the byte does not represent a {type Char} in that class (in the UTF-8
+  character set).
+
+  # Examples
+
+    ```
+    toEither do fromBytes (toUtf8 "ABC") do charIn upper
+    ```
+
+    ```
+    toEither do fromBytes (toUtf8 "abc") do charIn upper
+    ```
+  }}
+
+Decode.compressed.zlib : '{g, Decode} t ->{g, Decode} t
+Decode.compressed.zlib decodeValue =
+  compressedBytes = remainder()
+  match zlib.decompress.impl compressedBytes with
+    Right bytes -> Decode.feed bytes decodeValue ()
+    Left err    -> Decode.failWith err
+
+Decode.compressed.zlib.doc : Doc
+Decode.compressed.zlib.doc =
+  {{
+  Consumes all of the input, decompresses it using zlib/deflate, and decodes
+  the resulting bytes using the given decoder.
+  }}
+
+test> Decode.compressed.zlib.roundtrip =
+  test.verify do
+    encoder =
+      encode.compressed.zlib (encode.variableSizeBytes encode.byte emit)
+    decoder =
+      do
+        Decode.compressed.zlib do
+          Decode.variableSizeBytes Decode.byte remainder
+    Each.repeat 25
+    input = Random.bytes (Random.natIn 0 64)
+    deserialized = toEither do Decode.fromStream decoder do encoder input
+    ensuring do deserialized === Right input
+
+Decode.consumeUntil : Bytes ->{Decode} Bytes
+Decode.consumeUntil terminator = Decode.until terminator remainder
+
+Decode.consumeUntil.doc : Doc
+Decode.consumeUntil.doc =
+  {{ Consume bytes until we see the given sequence of bytes. }}
+
+Decode.decodePartial : '{g, Decode} a ->{g, Decode} (a, Bytes)
+Decode.decodePartial =
+  use Bytes ++ size
+  use Decode fail
+  use Nat + -
+  use fromList impl
+  go : Bytes -> Nat -> (i ->{g, Decode} a) -> i ->{g, Decode} (a, Bytes)
+  go buffer offset f i =
+    handle f i
+    with cases
+      { a }              -> (a, buffer)
+      { bytesRead -> k } -> go buffer offset k offset
+      { fail msg -> _ }  -> fail msg
+      { remit r -> k }   -> go (r ++ buffer) (offset - size r) k ()
+      { moreBytes -> k } ->
+        if Bytes.isEmpty buffer then
+          nextBytes = moreBytes
+          go 0xs (offset + Optional.fold (do 0) size nextBytes) k nextBytes
+        else go 0xs (offset + size buffer) k (Some buffer)
+  thunk -> go 0xs bytesRead thunk ()
+
+Decode.decodePartial.doc : Doc
+Decode.decodePartial.doc =
+  use fromList impl
+  {{
+  `` decodePartial decoder `` returns the decoded result of `decoder` along
+  with any {type Bytes} that were emitted by the last {moreBytes} call but were
+  __not__ consumed by `decoder`.
+
+  This is similar to calling `decoder` and then {remainder}, except {remainder}
+  will force the entire input while {decodePartial} won't call {moreBytes} more
+  times than needed by `decoder`.
+
+  This can be useful when attempting to decode a message from a {type Socket}
+  and a single {moreBytes} call might pull more bytes than the intended message
+  (for example it pulls part of the next message). The partial remainder can be
+  retained and used when decoding the next message.
+
+  # Example
+
+    ```
+    input = Stream.fromList [0xs0102, 0xs03040506, 0xs0708]
+    decoder = do
+      (consumed, partial) = decodePartial do consumeUntil 0xs04
+      remaining = remainder()
+      (consumed, partial, remaining)
+    toEither do Decode.fromStream decoder input
+    ```
+  }}
+
+test> Decode.decodePartial.tests =
+  test.verify do
+    use Bytes ++ size
+    use Random natIn
+    run : '{g, Decode} r -> '{g, Stream Bytes} () ->{g, Exception} r
+    run decoder input =
+      Throw.toException toFailure do Decode.fromStream decoder input
+    bs1 = Random.bytes (natIn 0 32)
+    bs2 = Random.bytes (natIn 0 32)
+    toGrab = bs1 ++ bs2
+    partial = Random.bytes (natIn 0 32)
+    labeled "consumed remainder" do
+      remainder = Random.bytes (natIn 0 64)
+      s = do
+        use splits bytes
+        bytes (natIn 1 32) bs1 ()
+        emit (bs2 ++ partial)
+        bytes (natIn 1 64) remainder ()
+      d = do (decodePartial do nextBytes (size toGrab), Decode.remainder())
+      ensureEqual ((toGrab, partial), remainder) (run d s)
+    labeled "ignored remainder" do
+      s =
+        do
+          splits.bytes (natIn 1 32) bs1 ()
+          emit (bs2 ++ partial)
+          test.raiseFailure
+            "Shouldn't request more elements of the stream than needed" ()
+      d = do decodePartial do nextBytes (size toGrab)
+      ensureEqual (toGrab, partial) (run d s)
+
+Decode.doc : Doc
+Decode.doc =
+  use fromList impl
+  {{
+  Support for decoding binary data.
+
+  For example, we might want to decode {type Bytes} into a Unison type like
+  this one:
+
+      @source{type Book}
+
+  We can describe a decoder from binary data to this type as follows:
+
+      @source{decodeBook}
+
+  And if we have some binary data, we can decode it into a value of this type:
+
+  ```
+  bytes =
+    0xs313938340047656f726765204f7277656c6c00079d012a3937383034353135323439333500000000
+  toEither do runDecode decodeBook bytes
+  ```
+
+  We get a nice error message if the data is not valid:
+
+  ```
+  bytes =
+    0xs313938340047656f726765204f7277656c6c00079d012a39373830343531353234393335
+  toEither do runDecode decodeBook bytes
+  ```
+
+  # Implementation notes
+
+    These primitives are used internally to construct decoders.
+
+    `` moreBytes `` asks for more bytes from the input.
+
+    `` Decode.fail msg `` fails decoding with the message 'msg'.
+
+    `` remit bytes `` is a backtracking primitive used to return unused 'bytes'
+    back to whatever process is feeding the decoder. For example, this is used
+    to implement {peekN}:
+
+        @source{peekN}
+
+    `` bytesRead `` requests the number of bytes read so far from the input.
+  }}
+
+Decode.doc.Book.author : Book -> Text
+Decode.doc.Book.author = cases Book _ author _ _ _ _ -> author
+
+Decode.doc.Book.author.modify : (Text ->{g} Text) -> Book ->{g} Book
+Decode.doc.Book.author.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book title (f author) year pages isbn coverImage
+
+Decode.doc.Book.author.set : Text -> Book -> Book
+Decode.doc.Book.author.set author1 = cases
+  Book title _ year pages isbn coverImage ->
+    Book title author1 year pages isbn coverImage
+
+Decode.doc.Book.coverImage : Book -> Bytes
+Decode.doc.Book.coverImage = cases Book _ _ _ _ _ coverImage -> coverImage
+
+Decode.doc.Book.coverImage.modify : (Bytes ->{g} Bytes) -> Book ->{g} Book
+Decode.doc.Book.coverImage.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book title author year pages isbn (f coverImage)
+
+Decode.doc.Book.coverImage.set : Bytes -> Book -> Book
+Decode.doc.Book.coverImage.set coverImage1 = cases
+  Book title author year pages isbn _ ->
+    Book title author year pages isbn coverImage1
+
+Decode.doc.Book.isbn : Book -> Text
+Decode.doc.Book.isbn = cases Book _ _ _ _ isbn _ -> isbn
+
+Decode.doc.Book.isbn.modify : (Text ->{g} Text) -> Book ->{g} Book
+Decode.doc.Book.isbn.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book title author year pages (f isbn) coverImage
+
+Decode.doc.Book.isbn.set : Text -> Book -> Book
+Decode.doc.Book.isbn.set isbn1 = cases
+  Book title author year pages _ coverImage ->
+    Book title author year pages isbn1 coverImage
+
+Decode.doc.Book.pages : Book -> Nat
+Decode.doc.Book.pages = cases Book _ _ _ pages _ _ -> pages
+
+Decode.doc.Book.pages.modify : (Nat ->{g} Nat) -> Book ->{g} Book
+Decode.doc.Book.pages.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book title author year (f pages) isbn coverImage
+
+Decode.doc.Book.pages.set : Nat -> Book -> Book
+Decode.doc.Book.pages.set pages1 = cases
+  Book title author year _ isbn coverImage ->
+    Book title author year pages1 isbn coverImage
+
+Decode.doc.Book.title : Book -> Text
+Decode.doc.Book.title = cases Book title _ _ _ _ _ -> title
+
+Decode.doc.Book.title.modify : (Text ->{g} Text) -> Book ->{g} Book
+Decode.doc.Book.title.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book (f title) author year pages isbn coverImage
+
+Decode.doc.Book.title.set : Text -> Book -> Book
+Decode.doc.Book.title.set title1 = cases
+  Book _ author year pages isbn coverImage ->
+    Book title1 author year pages isbn coverImage
+
+Decode.doc.Book.year : Book -> Int
+Decode.doc.Book.year = cases Book _ _ year _ _ _ -> year
+
+Decode.doc.Book.year.modify : (Int ->{g} Int) -> Book ->{g} Book
+Decode.doc.Book.year.modify f = cases
+  Book title author year pages isbn coverImage ->
+    Book title author (f year) pages isbn coverImage
+
+Decode.doc.Book.year.set : Int -> Book -> Book
+Decode.doc.Book.year.set year1 = cases
+  Book title author _ pages isbn coverImage ->
+    Book title author year1 pages isbn coverImage
+
+Decode.doc.decodeBook : '{Decode} Book
+Decode.doc.decodeBook = do
+  title = utf8NullTerminated()
+  author = utf8NullTerminated()
+  year = Decode.int16be()
+  pages = Decode.nat16be()
+  isbn = fromCharList (List.map fromNat.impl (Bytes.toList (nextBytes 13)))
+  imageSize = Decode.nat32be()
+  coverImage = nextBytes imageSize
+  Book title author year pages isbn coverImage
+
+Decode.either : '{g, Decode} a -> '{g, Decode} b ->{g, Decode} Either a b
+Decode.either d1 d2 = Decode.or (d1 >> Left) (d2 >> Right)
+
+Decode.either.doc : Doc
+Decode.either.doc =
+  {{
+  `` Decode.either d1 d2 `` runs the decoder `d1` and if it succeeds then
+  returns the result in a {Left}, otherwise runs the decoder `d2` and returns
+  the result in a {Right}.
+  }}
+
+Decode.eof : '{Decode} ()
+Decode.eof =
+  do
+    b = Decode.isEOF()
+    when (Boolean.not b) do
+      Decode.failWith "Expected end of input, but found more bytes."
+
+Decode.eof.doc : Doc
+Decode.eof.doc = {{ {Decode.eof} fails if the input is not empty. }}
+
+Decode.fail.doc : Doc
+Decode.fail.doc =
+  {{
+  `` Decode.fail trace `` is a decoder that fails with the message trace
+  'trace'.
+
+  See also {Decode.failWith} and {Decode.label}.
+  }}
+
+Decode.failOnThrow : '{g, Decode, Throw DecodeError} a ->{g, Decode} a
+Decode.failOnThrow dec =
+  h = cases DecodeError stack _ _ -> Decode.fail stack
+  catchWith h dec
+
+Decode.failOnThrow.doc : Doc
+Decode.failOnThrow.doc =
+  use Decode fromBytes
+  use Nat *
+  {{
+  Wraps a decoder in another decoder that fails with {Decode.fail} if the inner
+  decoder throws an error with {type Throw}.
+
+  # Example
+
+    This example calls {fromBytes}, which may {type Throw}, in an inner decoder
+    to look for a fixed number of bytes. It uses {failOnThrow} to fail the
+    outer decoder if the inner one throws an error.
+
+    @typecheck ```
+    fixedSizeString : Nat ->{Decode} Text
+    fixedSizeString n =
+      failOnThrow do fromBytes (nextBytes (n * 64)) Decode.utf8
+    ```
+  }}
+
+Decode.failWith : Text ->{Decode} a
+Decode.failWith msg = Decode.fail [msg]
+
+Decode.failWith.doc : Doc
+Decode.failWith.doc =
+  {{
+  `` Decode.failWith msg `` is a decoder that fails with the message 'msg'.
+
+  See also {Decode.label}.
+  }}
+
+Decode.feed : Bytes -> '{g, Decode} a -> '{g, Decode} a
+Decode.feed bs d =
+  use Bytes ++ empty size
+  use Decode fail
+  use Nat + -
+  h : Bytes -> Nat -> Request {Decode} a ->{g, Decode} a
+  h bs offset = cases
+    { fail msg -> _ }  -> fail msg
+    { remit r -> k }   -> handle k() with h (r ++ bs) (offset - size r)
+    { moreBytes -> k } ->
+      if Bytes.isEmpty bs then
+        match moreBytes with
+          None    -> handle k None with h empty offset
+          Some bs -> handle k (Some bs) with h empty (offset + size bs)
+      else handle k (Some bs) with h empty (offset + size bs)
+    { bytesRead -> k } -> handle k offset with h bs offset
+    { a }              -> a
+  do handle d() with h bs 0
+
+Decode.feed.doc : Doc
+Decode.feed.doc = {{ Feed some bytes into a decoder. }}
+
+test> Decode.feed.tests.checkBytesRead = test.verify do
+  use Bytes ++
+  use Decode feed
+  use List foldRight
+  use Random bytes
+  use fromList impl
+  Each.repeat 20
+  bss = Random.listOf (do bytes 100) do Random.natIn 0 100
+  junk = bytes 100
+  d = do
+    _ = Decode.list (Nat.sum (List.map Bytes.size bss)) Decode.byte
+    bytesRead
+  d' = foldRight feed d bss
+  bs = toEither do d' |> runDecode <| 0xs
+  bs' = toEither do feed (foldRight (++) 0xs bss) d |> runDecode <| junk
+  ensureEqual bs bs'
+
+test> Decode.feed.tests.feedThreeBytes =
+  use fromList impl
+  d = do Decode.list 3 Decode.byte
+  bs = toEither do Decode.feed 0xsfeedbeef d |> runDecode <| 0xs
+  check (bs === Right [254, 237, 190])
+
+Decode.feedPartial : Bytes -> '{g, Decode} a -> '{g, Decode} (a, Bytes)
+Decode.feedPartial bs d = Decode.feed bs do
+  a = d()
+  residue = Bytes.drop bytesRead bs
+  (a, residue)
+
+Decode.feedPartial.doc : Doc
+Decode.feedPartial.doc =
+  {{
+  Feed some bytes into a decoder and return both the result and the residual
+  bytes.
+  }}
+
+Decode.fixedAscii : Nat ->{Decode} Text
+Decode.fixedAscii n = fixedSizeOrFail n Decode.ascii
+
+Decode.fixedAscii.deprecated : Nat ->{Decode, Throw DecodeError} Text
+Decode.fixedAscii.deprecated n = Decode.fromBytes (nextBytes n) Decode.ascii
+
+Decode.fixedAscii.doc : Doc
+Decode.fixedAscii.doc =
+  {{
+  Decodes a fixed number of bytes as an ASCII-extended {type Text} string.
+  }}
+
+Decode.fixedSizeOrFail : Nat -> '{g, Decode} a ->{g, Decode} a
+Decode.fixedSizeOrFail expectedByteCount =
+  use Nat toText
+  use Text ++
+  fail consumedByteCount _ =
+    Decode.failWith
+      ("A fixed size decoder was expected to consume "
+        ++ toText expectedByteCount
+        ++ " bytes but only consumed "
+        ++ toText consumedByteCount
+        ++ " bytes")
+  fixedSizeOrFail.impl fail expectedByteCount
+
+Decode.fixedSizeOrFail.doc : Doc
+Decode.fixedSizeOrFail.doc =
+  {{
+  Uses the given decoder, and verifies that it consumed exactly the given
+  number of bytes, or fails otherwise.
+  }}
+
+Decode.fixedSizeOrFail.impl :
+  (Nat -> r ->{g} r) -> Nat -> '{g, Decode} r ->{g, Decode} r
+Decode.fixedSizeOrFail.impl handleRemainder expectedByteCount decodeValue =
+  use Bytes size
+  use Decode fail
+  use Nat + - < == > toText
+  use Text ++
+  go consumedByteCount = cases
+    { r } ->
+      if consumedByteCount < expectedByteCount then
+        handleRemainder consumedByteCount r
+      else r
+    { bytesRead -> k } ->
+      read = bytesRead
+      handle k read with go consumedByteCount
+    { remit remittedBytes -> k } ->
+      remittedByteCount = size remittedBytes
+      if remittedByteCount > consumedByteCount then
+        Decode.failWith
+          ("A fixed size decoder only consumed "
+            ++ toText consumedByteCount
+            ++ " bytes, but it attempted to remit "
+            ++ toText remittedByteCount
+            ++ " bytes.")
+      else ()
+      consumedByteCount' = consumedByteCount - remittedByteCount
+      remit remittedBytes
+      handle k() with go consumedByteCount'
+    { Decode.moreBytes -> k } ->
+      allowance = expectedByteCount - consumedByteCount
+      if allowance == 0 then handle k None with go consumedByteCount
+      else
+        match Decode.moreBytes with
+          None           -> handle k None with go consumedByteCount
+          Some moreBytes ->
+            (forYou, notForYou) = Bytes.splitAt allowance moreBytes
+            remit notForYou
+            handle k (Some forYou) with go (consumedByteCount + size forYou)
+    { fail errs -> k } ->
+      r = fail errs
+      handle k r with go consumedByteCount
+  handle decodeValue() with go 0
+
+test> Decode.fixedSizeOrFail.tests.success = test.verify do
+  use Random natIn
+  Each.repeat 25
+  firstChunkSize = natIn 0 12
+  input = Random.bytes (natIn firstChunkSize 48)
+  parts = do (fixedSizeOrFail firstChunkSize remainder, remainder())
+  res = toEither do runDecode parts input
+  ensuring do res === Right (Bytes.splitAt firstChunkSize input)
+
+test> Decode.fixedSizeOrFail.tests.tooFewBytes =
+  test.verify do
+    use Random natIn
+    Each.repeat 25
+    input = Random.bytes (natIn 0 48)
+    res =
+      toEither do
+        runDecode (do fixedSizeOrFail 8 do nextBytes (natIn 0 8)) input
+    ensuring do isLeft res
+
+test> Decode.fixedSizeOrFail.tests.tooManyBytes =
+  test.verify do
+    use Random natIn
+    Each.repeat 25
+    input = Random.bytes (natIn 0 48)
+    res =
+      toEither do
+        runDecode (do fixedSizeOrFail 8 do nextBytes (natIn 9 48)) input
+    ensuring do isLeft res
+
+Decode.fixedUtf8 : Nat ->{Decode} Text
+Decode.fixedUtf8 n = fixedSizeOrFail n Decode.utf8
+
+Decode.fixedUtf8.deprecated : Nat ->{Decode, Throw DecodeError} Text
+Decode.fixedUtf8.deprecated n = Decode.fromBytes (nextBytes n) Decode.utf8
+
+Decode.fixedUtf8.doc : Doc
+Decode.fixedUtf8.doc =
+  {{ Decodes a fixed number of bytes as a UTF-8 {type Text} string. }}
+
+Decode.fromBytes :
+  Bytes -> '{g, Decode, DecodeBits} a ->{g, Throw DecodeError} a
+Decode.fromBytes = flip runDecode
+
+Decode.fromBytes.doc : Doc
+Decode.fromBytes.doc =
+  use Decode fromBytes
+  {{
+  `` fromBytes bs d `` runs the decoder `d` on the {type Bytes} `bs`. The
+  decoder `d` may use either the {type Decode} ability, or {type DecodeBits},
+  or both. Bytes can be passed from the {type Decode} input to
+  {type DecodeBits} using {bitsFromBytes}.
+
+  # Example
+
+    ```
+    toEither do
+      fromBytes 0xs102030ffff do
+        x = Decode.byte()
+        bitsFromBytes 2
+        y = List.replicate 4 do wordN 4
+        z = Decode.nat16be()
+        (x, y, z)
+    ```
+  }}
+
+Decode.fromConnection :
+  Connection -> '{g, Decode, DecodeBits} a ->{g, IO, Exception} a
+Decode.fromConnection conn d =
+  use Bytes ++ empty isEmpty
+  use Exception raise
+  use Nat -
+  use Text join
+  h pos buffer lastFrame bitState = cases
+    { Decode.fail msg -> _ } ->
+      raise
+        (Failure
+          (typeLink DecodeError)
+          (join "\n" msg)
+          (Any (DecodeError msg (Position pos) lastFrame)))
+    { remit r -> k } ->
+      handle k() with h (pos - Bytes.size r) (r ++ buffer) buffer bitState
+    { moreBytes -> k } ->
+      if isEmpty buffer then
+        newBytes = Connection.receive conn
+        if isEmpty newBytes then
+          handle k None with h pos buffer lastFrame bitState
+        else handle k (Some newBytes) with h pos empty buffer bitState
+      else handle k (Some buffer) with h pos empty buffer bitState
+    { bytesRead -> k } -> handle k pos with h pos buffer lastFrame bitState
+    { getDecoderState -> k } ->
+      handle k bitState with h pos buffer lastFrame bitState
+    { setDecoderState s -> k } -> handle k() with h pos buffer lastFrame s
+    { DecodeBits.fail msg -> _ } ->
+      raise
+        (Failure
+          (typeLink DecodeError)
+          (join "\n" msg)
+          (Any (DecodeError msg (Position pos) lastFrame)))
+    { a } -> a
+  handle d() with h 0 empty empty (DecoderState empty 0)
+
+Decode.fromConnection.doc : Doc
+Decode.fromConnection.doc =
+  {{
+  `` fromConnection conn d `` reads bytes from the connection `conn` and
+  decodes them using the decoder `d`, returning the decoded value or throwing
+  an {type Exception} if the decoder failed.
+
+  The connection must be connected and readable.
+
+  This function may block until enough bytes are available on the connection to
+  decode the value.
+  }}
+
+Decode.fromHandle : Handle -> '{g, Decode, DecodeBits} a ->{g, IO, Exception} a
+Decode.fromHandle h =
+  fromConnection
+    (Connection
+      (do bug "Sent bytes to read-only file handle")
+      (do getSomeBytes h 2048)
+      do Handle.close h)
+
+Decode.fromHandle.doc : Doc
+Decode.fromHandle.doc =
+  {{
+  Runs the decoder on a {type Handle} and returns the decoded value, or throws
+  an {type Exception} if the decoder fails.
+
+  # Example
+
+    @typecheck ```
+    readLine = fromHandle stdIn do Decode.until 0xs0d0a Decode.utf8
+    ```
+  }}
+
+Decode.fromSocket :
+  Nat -> Socket -> '{g, Decode, DecodeBits} a ->{g, IO, Exception} a
+Decode.fromSocket receiveSize sock d =
+  fromConnection (sizedSocket receiveSize sock) d
+
+Decode.fromSocket.doc : Doc
+Decode.fromSocket.doc =
+  {{
+  `` Decode.fromSocket size s d `` reads bytes from the socket `s` and decodes
+  them using the decoder `d`, returning the decoded value or throwing an
+  {type Exception} if the decoder failed. The maximum number of bytes to read
+  at a time is `size`.
+
+  The socket must be connected and readable.
+
+  This function may block until enough bytes are available on the socket to
+  decode the value.
+  }}
+
+Decode.fromStream :
+  '{g, Decode, DecodeBits} a -> '{g, Stream Bytes} r ->{g, Throw DecodeError} a
+Decode.fromStream d byteStream = at1 (fromStreamPartial d byteStream)
+
+Decode.fromStream.doc : Doc
+Decode.fromStream.doc =
+  {{
+  Runs the decoder on a {type Stream} of {type Bytes} and returns the decoded
+  value, or throws an error if the decoder fails.
+
+  {{
+  docCallout
+    (Some {{ ⚠️ }})
+    {{
+    If the stream is being read from a network connection, the decoder may read
+    more bytes than you expect if the {type Bytes} aren't aligned exactly on
+    the boundaries of the encoded values. If you call this function twice on
+    the same stream, the second call will not receive the excess bytes read by
+    the first call, causing them to be lost. To avoid this, use
+    {fromStreamPartial} instead.
+    }} }}
+  }}
+
+test> Decode.fromStream.tests = test.verify do
+  Scope.run do
+    n = Scope.ref 0
+    inc = do Ref.modify n Nat.increment
+    expectN expected = ensureEqual expected (Ref.read n)
+    s = do
+      use encode nat32be
+      inc()
+      nat32be 0
+      inc()
+      nat32be 1
+      inc()
+      nat32be 2
+      inc()
+      nat32be 3
+      inc()
+    d = do
+      use Decode nat16be nat32be
+      expectN 0
+      ensureEqual 0 nat16be()
+      expectN 1
+      ensureEqual 0 nat16be()
+      expectN 1
+      ensureEqual 1 nat32be()
+      expectN 2
+      ensureEqual 0 nat16be()
+      expectN 3
+      ensureEqual 2 nat16be()
+      expectN 3
+      ensureEqual 3 nat32be()
+      expectN 4
+    Throw.toException toFailure do Decode.fromStream d s
+    expectN 4
+
+Decode.fromStreamPartial :
+  '{g, Decode, DecodeBits} a
+  -> '{g, Stream Bytes} r
+  ->{g, Throw DecodeError} (a, '{g, Stream Bytes} r)
+Decode.fromStreamPartial d byteStream =
+  use Bytes ++ empty
+  use Nat -
+  h pos buffer lastFrame bitState byteStream = cases
+    { Decode.fail msg -> _ } ->
+      throw (DecodeError msg (Position pos) lastFrame)
+    { remit r -> k } ->
+      handle k()
+      with h (pos - Bytes.size r) (r ++ buffer) buffer bitState byteStream
+    { moreBytes -> k } ->
+      if Bytes.isEmpty buffer then
+        match Stream.uncons byteStream with
+          Left r -> handle k None with h pos buffer lastFrame bitState do r
+          Right (newBytes, byteStream') ->
+            handle k (Some newBytes)
+            with h pos empty buffer bitState byteStream'
+      else handle k (Some buffer) with h pos empty buffer bitState byteStream
+    { bytesRead -> k } ->
+      handle k pos with h pos buffer lastFrame bitState byteStream
+    { getDecoderState -> k } ->
+      handle k bitState with h pos buffer lastFrame bitState byteStream
+    { setDecoderState s -> k } ->
+      handle k() with h pos buffer lastFrame s byteStream
+    { DecodeBits.fail msg -> _ } ->
+      throw (DecodeError msg (Position (bitOffset bitState)) (input bitState))
+    { a } -> (a, byteStream)
+  handle d() with h 0 empty empty (DecoderState empty 0) byteStream
+
+Decode.fromStreamPartial.doc : Doc
+Decode.fromStreamPartial.doc =
+  {{
+  Runs the decoder on a {type Stream} of {type Bytes} and returns the decoded
+  value and the remainder of the stream, or throws an error if the decoder
+  fails.
+  }}
+
+test> Decode.fromStreamPartial.tests = test.verify do
+  Scope.run do
+    n = Scope.ref 0
+    inc = do Ref.modify n Nat.increment
+    expectN expected = ensureEqual expected (Ref.read n)
+    s = do
+      use encode nat32be
+      inc()
+      nat32be 0
+      inc()
+      nat32be 1
+      inc()
+      nat32be 2
+      inc()
+      nat32be 3
+      inc()
+    d = do
+      use Decode nat16be
+      expectN 0
+      ensureEqual 0 nat16be()
+      expectN 1
+      ensureEqual 0 nat16be()
+      expectN 1
+      ensureEqual 1 Decode.nat32be()
+      expectN 2
+    let
+      (_, remainder) = Throw.toException toFailure do fromStreamPartial d s
+      expectN 2
+      ensureEqual [encodeNat32be 2, encodeNat32be 3] (Stream.toList remainder)
+      expectN 5
+
+Decode.handleFailure :
+  (Bytes -> [Text] ->{g, Decode} a) -> '{g, Decode} a ->{g, Decode} a
+Decode.handleFailure f d =
+  use Bytes ++ size
+  use Nat -
+  h consumed = cases
+    { Decode.fail trace -> _ } -> f consumed trace
+    { remit r -> k }           ->
+      remit r
+      handle k() with h (Bytes.take (size consumed - size r) consumed)
+    { moreBytes -> k }         ->
+      match moreBytes with
+        Some bs -> handle k (Some bs) with h (consumed ++ bs)
+        None    -> handle k None with h consumed
+    { bytesRead -> k }         ->
+      n = bytesRead
+      handle k n with h consumed
+    { a }                      -> a
+  handle d() with h Bytes.empty
+
+Decode.indentLabels : Text -> '{g, Decode} a ->{g, Decode} a
+Decode.indentLabels heading =
+  use List +:
+  use Text ++
+  modifyLabels (ls -> heading +: List.map (x -> "  " ++ x) ls)
+
+Decode.int16be : '{Decode} Int
+Decode.int16be =
+  do
+    Decode.label "Expecting a signed 16-bit integer in big-endian order" do
+      Int.shiftRight
+        (Int.fromRepresentation (Nat.shiftLeft Decode.nat16be() 48)) 48
+
+Decode.int16be.doc : Doc
+Decode.int16be.doc =
+  {{
+  Decode a signed 16-bit integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.int16le : '{Decode} Int
+Decode.int16le =
+  do
+    Decode.label "Expecting a signed 16-bit integer in little-endian order" do
+      Int.shiftRight
+        (Int.fromRepresentation (Nat.shiftLeft Decode.nat16le() 48)) 48
+
+Decode.int16le.doc : Doc
+Decode.int16le.doc =
+  {{
+  Decode a signed 16-bit integer in little-endian order (least significant byte
+  first).
+  }}
+
+Decode.int32be : '{Decode} Int
+Decode.int32be =
+  do
+    Decode.label "Expecting a signed 32-bit integer in big-endian order" do
+      Int.shiftRight
+        (Int.fromRepresentation (Nat.shiftLeft Decode.nat32be() 32)) 32
+
+Decode.int32be.doc : Doc
+Decode.int32be.doc =
+  {{
+  Decode a signed 32-bit integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.int32le : '{Decode} Int
+Decode.int32le =
+  do
+    Decode.label "Expecting a signed 32-bit integer in little-endian order" do
+      Int.shiftRight
+        (Int.fromRepresentation (Nat.shiftLeft Decode.nat32le() 32)) 32
+
+Decode.int32le.doc : Doc
+Decode.int32le.doc =
+  {{
+  Decode a signed 32-bit integer in little-endian order (least significant byte
+  first).
+  }}
+
+Decode.int64be : '{Decode} Int
+Decode.int64be =
+  do
+    Decode.label "Expecting a signed 64-bit integer in big-endian order" do
+      Int.fromRepresentation Decode.nat64be()
+
+Decode.int64be.doc : Doc
+Decode.int64be.doc =
+  {{
+  Decode a signed 64-bit integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.int64le : '{Decode} Int
+Decode.int64le =
+  do
+    Decode.label "Expecting a signed 64-bit integer in little-endian order" do
+      Int.fromRepresentation Decode.nat64le()
+
+Decode.int64le.doc : Doc
+Decode.int64le.doc =
+  {{
+  Decode a signed 64-bit integer in little-endian order (least significant byte
+  first).
+  }}
+
+Decode.isDone : '{g, Decode} a ->{g, Decode} Boolean
+Decode.isDone d =
+  use Bytes ++
+  use Nat -
+  h bs offset = cases
+    { Decode.fail msg -> _ } -> true
+    { remit r -> k } -> handle k() with h (r ++ bs) (offset - Bytes.size r)
+    { moreBytes -> k } -> false
+    { bytesRead -> k } -> handle k offset with h bs offset
+    { a } -> true
+  handle d() with h Bytes.empty 0
+
+Decode.isDone.doc : Doc
+Decode.isDone.doc =
+  {{
+  Returns `` true `` if the decoder is done decoding, or `` false `` if it
+  needs more bytes.
+
+  {{
+  docCallout
+    (Some {{ ⚠️ }})
+    {{
+    {isDone} will run the provided computation until it encounters a
+    {type Decode} operation (or the computation finishes), discarding the
+    result. Thus, it will perform any other effects (`{g}`) that in the
+    provided computation leading up to the next {type Decode} operation.
+    }} }}
+  }}
+
+Decode.isEOF : '{Decode} Boolean
+Decode.isEOF = do match moreBytes with
+  None   -> true
+  Some b ->
+    remit b
+    false
+
+Decode.isEOF.doc : Doc
+Decode.isEOF.doc =
+  {{
+  {Decode.isEOF} is a decoder that returns `` true `` if there are no more
+  bytes to be had from the input. Otherwise ``false``.
+
+  {{
+  docCallout
+    (Some {{ ⚠️ }})
+    {{
+    This decoder may block, because it needs to attempt to read from the input
+    to determine if it is at the end. Use with caution, especially when
+    decoding from pipes or sockets.
+    }} }}
+  }}
+
+Decode.label : Text -> '{g, Decode} a ->{g, Decode} a
+Decode.label lbl = labels [lbl]
+
+Decode.label.doc : Doc
+Decode.label.doc =
+  {{
+  Label a decoder with a message. In case of failure, the message is added to
+  the {DecodeError.trace}.
+  }}
+
+Decode.labels : [Text] -> '{g, Decode} a ->{g, Decode} a
+Decode.labels lbls =
+  use List ++
+  modifyLabels (msg -> lbls ++ msg)
+
+Decode.labels.doc : Doc
+Decode.labels.doc =
+  {{
+  `` labels list d `` adds a list of labels to the trace of the decoder 'd'.
+  See {Decode.label}.
+  }}
+
+Decode.list : Nat -> '{g, Decode} a ->{g, Decode} [a]
+Decode.list n d = List.replicate n d
+
+Decode.list.doc : Doc
+Decode.list.doc =
+  {{
+  `` Decode.list n d `` repeats 'n' times the decoder 'd' and collects the
+  results in a list.
+  }}
+
+Decode.literalBytes : Bytes ->{Decode} Bytes
+Decode.literalBytes lit =
+  match moreBytes with
+    Some bs ->
+      if Bytes.take (Bytes.size lit) bs === lit then
+        remit (Bytes.drop (Bytes.size lit) bs)
+        lit
+      else
+        use Text ++
+        use toHex deprecated
+        remit bs
+        Decode.fail
+          [ "Expected literal bytes "
+              ++ deprecated lit
+              ++ " but got "
+              ++ deprecated (Bytes.take (Bytes.size lit) bs)
+          ]
+    None ->
+      Decode.label
+        ("Expected literal bytes " Text.++ toHex.deprecated lit)
+        unexpectedEof
+        ()
+
+Decode.literalBytes.doc : Doc
+Decode.literalBytes.doc =
+  use fromList impl
+  {{
+  `` literalBytes lit `` is a decoder that expects to be fed literally the
+  bytes 'lit' and fails otherwise.
+
+  # Examples
+
+    ```
+    toEither do runDecode (do literalBytes 0xsdeadbeef) 0xsdeadbeeffeedface
+    ```
+
+    ```
+    toEither do runDecode (do literalBytes 0xsdeadbeef) 0xsfeedfacedeadbeef
+    ```
+  }}
+
+Decode.lookAhead : '{g, Decode} a ->{g, Decode} a
+Decode.lookAhead d =
+  use Bytes ++
+  go consumed = match moreBytes with
+    Some bs ->
+      consumed' = consumed ++ bs
+      d' = Decode.feed bs d
+      if isDone d' then
+        remit consumed'
+        d'()
+      else go consumed'
+    None    ->
+      if isDone d then
+        remit consumed
+        d()
+      else Decode.failWith "lookAhead: not enough bytes"
+  go 0xs
+
+Decode.lookAhead.doc : Doc
+Decode.lookAhead.doc =
+  {{
+  `` lookAhead d `` never consumes any input. It runs the decoder `d` and
+  rewinds the input even if `d` succeeds. If `d` fails then so does
+  ``lookAhead d``.
+  }}
+
+test> Decode.lookAhead.test.ex1 =
+  use fromList impl
+  check
+    let
+      prg = do
+        use Decode byte
+        b = lookAhead byte
+        (b, byte(), remainder())
+      bytes = 0xs01020304
+      match toEither do runDecode prg bytes with
+        Right (result, b, r) -> result === 1 && b === 1 && r === 0xs020304
+        _                    -> false
+
+Decode.lookAheadMaybe : '{g, Decode} Optional a ->{g, Decode} Optional a
+Decode.lookAheadMaybe d = match alsoBytes d with
+  (bytes, None)   ->
+    remit bytes
+    None
+  (bytes, Some a) -> Some a
+
+Decode.lookAheadMaybe.doc : Doc
+Decode.lookAheadMaybe.doc =
+  {{
+  `` lookAheadMaybe d `` runs the decoder `d` and only consumes input if `d`
+  returns {Some}. If `d` returns {None} or fails then the input is rewound to
+  the point before `d` was run. If `d` fails, then so does
+  ``lookAheadMaybe d``.
+  }}
+
+Decode.many : '{g, Decode} a ->{g, Decode} [a]
+Decode.many d =
+  somed = do
+    use List +:
+    oned = d()
+    mored = manyd()
+    oned +: mored
+  manyd = do Decode.or somed do []
+  manyd()
+
+Decode.many.doc : Doc
+Decode.many.doc =
+  use Decode many
+  {{
+  `` many d `` decodes a {type List} of zero or more values using the decoder
+  `d`. It will consume bytes until the decoder `d` fails and return the
+  {type List} of values it has decoded.
+
+  # Example
+
+    ```
+    toEither do runDecode (do many Decode.int16be) 0xsdeadbeeffeedface
+    ```
+  }}
+
+Decode.manyUntil : '{g, Decode} a -> '{g, Decode} b ->{g, Decode} [a]
+Decode.manyUntil elem end =
+  use List :+
+  go acc = Decode.or (do
+    end()
+    acc) do
+    e = elem()
+    go (acc :+ e)
+  go []
+
+Decode.manyUntil.doc : Doc
+Decode.manyUntil.doc =
+  use fromList impl
+  {{
+  Decode a {type List} given a decoder for the elements and a decoder for the
+  list terminator. This fails if the element decoder fails before the
+  terminator appears or if EOF is reached before the terminator.
+
+  # Example
+
+    ```
+    toEither do
+      Decode.fromBytes 0xs48656c6c6f00776f726c640000 do
+        manyUntil utf8NullTerminated do literalBytes 0xs00
+    ```
+  }}
+
+Decode.modifyLabels : ([Text] -> [Text]) -> '{g, Decode} a ->{g, Decode} a
+Decode.modifyLabels f d =
+  use Decode fail
+  h = cases
+    { fail msg -> _ }  -> fail (f msg)
+    { remit bs -> k }  ->
+      remit bs
+      handle k() with h
+    { moreBytes -> k } ->
+      bs = moreBytes
+      handle k bs with h
+    { bytesRead -> k } ->
+      bs = bytesRead
+      handle k bs with h
+    { a }              -> a
+  handle d() with h
+
+Decode.moreBytes.doc : Doc
+Decode.moreBytes.doc =
+  {{
+  {moreBytes} is a request for more input to the decoder. The handler is free
+  to send as many bytes as it has in a {Some}, or {None} if there are no more
+  bytes.
+
+  This is a primitive operation of the {type Decode} ability. Use {nextBytes}
+  instead to request a specific number of bytes, or {consumeUntil} to read from
+  the input up to some termination sequence.
+  }}
+
+Decode.nat16be : '{Decode} Nat
+Decode.nat16be = do
+  Decode.label "A 16-bit unsigned integer in big-endian order" do
+    use Text ++
+    bs = nextBytes 2
+    match decodeNat16be bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat16be.doc : Doc
+Decode.nat16be.doc =
+  {{
+  Decode a 16-bit unsigned integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.nat16le : '{Decode} Nat
+Decode.nat16le = do
+  Decode.label "Expecting a 16-bit unsigned integer in little-endian order" do
+    use Text ++
+    bs = nextBytes 2
+    match decodeNat16le bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat16le.doc : Doc
+Decode.nat16le.doc =
+  {{
+  Decode a 16-bit unsigned integer in little-endian order (least significant
+  byte first).
+  }}
+
+Decode.nat32be : '{Decode} Nat
+Decode.nat32be = do
+  Decode.label "Expecting a 32-bit unsigned integer in big-endian order" do
+    use Text ++
+    bs = nextBytes 4
+    match decodeNat32be bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat32be.doc : Doc
+Decode.nat32be.doc =
+  {{
+  Decode a 32-bit unsigned integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.nat32le : '{Decode} Nat
+Decode.nat32le = do
+  Decode.label "Expecting a 32-bit unsigned integer in little-endian order" do
+    use Text ++
+    bs = nextBytes 4
+    match decodeNat32le bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat32le.doc : Doc
+Decode.nat32le.doc =
+  {{
+  Decode a 32-bit unsigned integer in little-endian order (least significant
+  byte first).
+  }}
+
+Decode.nat64be : '{Decode} Nat
+Decode.nat64be = do
+  Decode.label "Expecting a 64-bit unsigned integer in big-endian order" do
+    use Text ++
+    bs = nextBytes 8
+    match decodeNat64be bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat64be.doc : Doc
+Decode.nat64be.doc =
+  {{
+  Decode a 64-bit unsigned integer in big-endian order (most significant byte
+  first).
+  }}
+
+Decode.nat64le : '{Decode} Nat
+Decode.nat64le = do
+  Decode.label "Expecting a 64-bit unsigned integer in little-endian order" do
+    use Text ++
+    bs = nextBytes 8
+    match decodeNat64le bs with
+      Some (n, rest) ->
+        remit rest
+        n
+      None           -> Decode.fail ["Couldn't decode " ++ toHex.deprecated bs]
+
+Decode.nat64le.doc : Doc
+Decode.nat64le.doc =
+  {{
+  Decode a 64-bit unsigned integer in little-endian order (least significant
+  byte first).
+  }}
+
+Decode.nextBytes : Nat ->{Decode} Bytes
+Decode.nextBytes n =
+  Decode.label ("Requesting " Text.++ Nat.toText n Text.++ " bytes") do
+    if n Nat.== 0 then Bytes.empty
+    else
+      match moreBytes with
+        None   -> unexpectedEof()
+        Some b ->
+          use Bytes ++
+          use Nat - <
+          bs = Bytes.take n b
+          rest = Bytes.drop n b
+          taken = Bytes.size bs
+          if taken < n then bs ++ Decode.nextBytes (n - taken)
+          else
+            remit rest
+            bs
+
+Decode.nextBytes.doc : Doc
+Decode.nextBytes.doc =
+  {{
+  `` nextBytes n `` requests the next 'n' bytes from the input. If there are
+  not 'n' bytes available, the decoder will fail.
+
+  If the argument is zero, the decoder will return an empty list of bytes and
+  not consume any input.
+  }}
+
+test> Decode.nextBytes.tests =
+  test.verify do
+    labeled "nextBytes 0 doesn't request moreBytes" do
+      stream = do Exception.raise (failure "EOF!" ())
+      res =
+        Throw.toException toFailure do
+          Decode.fromStream (do nextBytes 0) stream
+      ensureEqual Bytes.empty res
+
+Decode.nullTerminated : '{g, Decode} a ->{g, Decode} a
+Decode.nullTerminated =
+  Decode.label "Expecting a null-terminated value"
+    << delay (Decode.until 0xs00)
+
+Decode.nullTerminated.doc : Doc
+Decode.nullTerminated.doc =
+  {{ Decode a null-terminated byte string using the given decoder. }}
+
+Decode.nullTerminatedList : '{g, Decode} a ->{g, Decode} [a]
+Decode.nullTerminatedList a = manyUntil a do literalBytes 0xs00
+
+Decode.nullTerminatedList.doc : Doc
+Decode.nullTerminatedList.doc =
+  {{
+  Decode a list of values, terminated by a null byte.
+
+  # Example
+
+    ```
+    toEither do
+      Decode.fromBytes 0xs48656c6c6f00776f726c640000 do
+        nullTerminatedList utf8NullTerminated
+    ```
+  }}
+
+Decode.nullTerminatedMap :
+  '{g, Decode} k -> '{h, Decode} v ->{g, h, Decode} Map k v
+Decode.nullTerminatedMap k v =
+  Map.fromList (nullTerminatedList do Decode.pair k v)
+
+Decode.nullTerminatedMap.doc : Doc
+Decode.nullTerminatedMap.doc =
+  {{
+  Decode a map of key-value pairs, terminated by a null byte.
+
+  # Example
+
+    ```
+    toEither do
+      Map.toList
+        (Decode.fromBytes 0xs4148656c6c6f0042776f726c640000 do
+          nullTerminatedMap Decode.asciiChar utf8NullTerminated)
+    ```
+  }}
+
+Decode.optional : '{g} o ->{g, Decode} Optional o
+Decode.optional d =
+  some = do Some d()
+  Decode.or some do None
+
+Decode.optional.doc : Doc
+Decode.optional.doc =
+  use Decode char fromBytes optional
+  use Optional flatten
+  use Text toUtf8
+  use Throw toOptional
+  {{
+  Decodes an optional value. If the given decoder succeeds, the new decoder
+  returns {Some} with the decoded value. If the given decoder fails, the new
+  decoder returns {None}.
+
+  # Example
+
+    ```
+    flatten (toOptional do fromBytes (toUtf8 "abc") do optional do char ?a)
+    ```
+
+    ```
+    flatten (toOptional do fromBytes (toUtf8 "ABC") do optional do char ?a)
+    ```
+  }}
+
+Decode.or : '{g, Decode} a -> '{g, Decode} a ->{g, Decode} a
+Decode.or d1 d2 =
+  h bs _ =
+    remit bs
+    d2()
+  handleFailure h d1
+
+Decode.or.doc : Doc
+Decode.or.doc =
+  use Decode or
+  use fromList impl
+  {{
+  `` or d1 d2 `` is a decoder that runs the decoder 'd1' and if it fails,
+  rewinds the input to the point before the decoder 'd1' was run and runs the
+  decoder 'd2'.
+
+  # Examples
+
+    ```
+    toEither do
+      runDecode
+        (do or (do literalBytes 0xsfeedface) do literalBytes 0xsdeadbeef)
+        0xsfeedfacedeadbeef
+    ```
+
+    ```
+    toEither do
+      runDecode
+        (do or (do literalBytes 0xsfeedface) do literalBytes 0xsdeadbeef)
+        0xsdeadbeeffeedface
+    ```
+
+    ```
+    toEither do
+      runDecode
+        (do or (do literalBytes 0xsfeedface) do literalBytes 0xsdeadbeef)
+        0xsdecafbad
+    ```
+  }}
+
+Decode.pair : '{g, Decode} a -> '{h, Decode} b ->{g, h, Decode} (a, b)
+Decode.pair a b =
+  a' = a()
+  b' = b()
+  (a', b')
+
+Decode.pair.doc : Doc
+Decode.pair.doc =
+  {{
+  Decode a pair of values. The first value is decoded using the first decoder,
+  the second value is decoded using the second decoder.
+
+  # Example
+
+    ```
+    toEither do
+      Decode.fromBytes 0xsf09fa496f09f8cb8002a do
+        Decode.pair utf8NullTerminated Decode.byte
+    ```
+  }}
+
+Decode.patternCaptures : '{Decode} Text -> Pattern Text ->{Decode} [Text]
+Decode.patternCaptures d p =
+  txt = d()
+  match Pattern.run p txt with
+    Some (captures, rest) ->
+      remit (Text.toUtf8 rest)
+      captures
+    None                  -> Decode.failWith "Text pattern did not match."
+
+Decode.patternCaptures.doc : Doc
+Decode.patternCaptures.doc =
+  use Decode fromBytes utf8
+  use Pattern capture some
+  use Text toUtf8
+  use patterns letter
+  {{
+  `` patternCaptures d p `` uses the decoder `d` to decode some text, then runs
+  the pattern `p` on that text, returning any {captures} from the pattern
+  match.
+
+  Consumes the portion of the decoded {type Text} that matched the pattern. The
+  portion that didn't match the pattern is remitted to the decoder, so it's not
+  consumed.
+
+  The decoder fails if the pattern doesn't match.
+
+  # Example
+
+    ```
+    toEither do
+      fromBytes (toUtf8 "abc123") do
+        patternCaptures utf8 (capture (some letter))
+    ```
+
+    ```
+    toEither do
+      fromBytes (toUtf8 "123abc") do
+        patternCaptures utf8 (capture (some letter))
+    ```
+  }}
+
+Decode.peek : '{Decode} Optional Nat
+Decode.peek = do match moreBytes with
+  None    -> None
+  Some bs ->
+    remit bs
+    Bytes.at 0 bs
+
+Decode.peek.doc : Doc
+Decode.peek.doc = {{ Peek at the next byte without consuming it. }}
+
+Decode.peekChar : '{Decode} Optional Char
+Decode.peekChar = do match moreBytes with
+  None    -> None
+  Some bs ->
+    remit bs
+    Optional.map fromNat.impl (Bytes.at 0 bs)
+
+Decode.peekChar.doc : Doc
+Decode.peekChar.doc =
+  {{
+  Peek at the next byte without consuming it and treat it as a {type Char}.
+  }}
+
+Decode.peekN : Nat ->{Decode} Bytes
+Decode.peekN n =
+  bs = nextBytes n
+  remit bs
+  bs
+
+Decode.peekN.doc : Doc
+Decode.peekN.doc =
+  {{
+  `` peekN n `` gets the next 'n' bytes from the input without consuming them.
+  }}
+
+Decode.remainder : '{Decode} Bytes
+Decode.remainder = do match moreBytes with
+  None   -> Bytes.empty
+  Some b -> b Bytes.++ Decode.remainder()
+
+Decode.remainder.doc : Doc
+Decode.remainder.doc =
+  {{ {remainder} consumes all bytes until the end of the input. }}
+
+Decode.remit.doc : Doc
+Decode.remit.doc =
+  {{
+  `` remit bs `` is a backtracking operation that returns the bytes 'bs' back
+  to the input, to be used by the next decoder.
+
+  This is a primitive operation of the {type Decode} ability. Use {peekN}
+  instead to request a specific number of bytes without consuming them, or
+  {try} to backtrack on failure.
+  }}
+
+test> Decode.remit.tests.remitStreaming =
+  use fromList impl
+  check
+    ((toEither do
+      Decode.fromStream testRemit <| Stream.fromList [0xs01, 0xs02, 0xs03])
+      === Right ([1, 2, 3], [4, 5, 6]))
+
+test> Decode.remit.tests.remitUsingBytes =
+  check
+    ((toEither do Decode.fromBytes 0xs010203 testRemit)
+      === Right ([1, 2, 3], [4, 5, 6]))
+
+Decode.remit.tests.testRemit : '{Decode} ([Nat], [Nat])
+Decode.remit.tests.testRemit = do
+  use Decode byte many
+  x = many byte
+  remit 0xs040506
+  y = many byte
+  (x, y)
+
+Decode.runDecode :
+  '{g, Decode, DecodeBits} a -> Bytes ->{g, Throw DecodeError} a
+Decode.runDecode d bs' =
+  use Bytes ++ empty size
+  use Nat + -
+  h :
+    Nat
+    -> Bytes
+    -> DecoderState
+    -> Request {Decode, DecodeBits} a
+    ->{g, Throw DecodeError} a
+  h pos bs bitState = cases
+    { Decode.fail msg -> _ } ->
+      throw (DecodeError msg (Position pos) (Bytes.drop pos bs'))
+    { remit r -> k } -> handle k() with h (pos - size r) (r ++ bs) bitState
+    { moreBytes -> k } ->
+      if Bytes.isEmpty bs then handle k None with h pos bs bitState
+      else handle k (Some bs) with h (pos + size bs) empty bitState
+    { bytesRead -> k } -> handle k pos with h pos bs bitState
+    { getDecoderState -> k } -> handle k bitState with h pos bs bitState
+    { setDecoderState s -> k } -> handle k() with h pos bs s
+    { DecodeBits.fail msg -> _ } ->
+      throw (DecodeError msg (Position (bitOffset bitState)) (input bitState))
+    { a } -> a
+  handle d() with h 0 bs' (DecoderState empty 0)
+
+Decode.runDecode.doc : Doc
+Decode.runDecode.doc =
+  use fromList impl
+  {{
+  `` runDecode d bs `` runs the decoder `d` on the bytes `bs`, returning the
+  decoded result.
+
+  # Examples
+
+    ```
+    toEither do runDecode Decode.utf8 0xs48656c6c6f2c20776f726c6421
+    ```
+
+    ```
+    toEither do runDecode (do Decode.list 4 Decode.int16be) 0xs1eadd011feedface
+    ```
+  }}
+
+Decode.sepBy : '{g, Decode} a -> '{g, Decode} b ->{g, Decode} [a]
+Decode.sepBy d sep = Decode.or (do
+  use List +:
+  a = d()
+  a +: (Decode.or (do
+    List.Nonempty.toList
+      let
+        _ = sep()
+        Decode.sepBy1 d sep) do [])) do []
+
+Decode.sepBy.doc : Doc
+Decode.sepBy.doc =
+  use Decode sepBy
+  use fromList impl
+  {{
+  `` sepBy d sep `` decodes a {type List} of values using the decoder `d`
+  separated by the decoder `sep`. It will consume bytes until either `d` or
+  `sep` fails, and return the {type List} of values it has decoded.
+
+  # Example
+
+    ```
+    toEither do
+      runDecode
+        (do sepBy Decode.int16be do literalBytes 0xs00)
+        0xsdead00beef00feed00face
+    ```
+  }}
+
+Decode.sepBy1 : '{g, Decode} a -> '{g, Decode} b ->{g, Decode} List.Nonempty a
+Decode.sepBy1 d sep =
+  d() +| (Decode.or (do
+    sep()
+    Decode.sepBy d sep) do [])
+
+Decode.sepBy1.doc : Doc
+Decode.sepBy1.doc =
+  use fromList impl
+  {{
+  `` sepBy1 d sep `` decodes a {type List.Nonempty} of values using the decoder
+  `d` separated by the decoder `sep`. It will consume bytes until the decoder
+  `d` fails and return the {type List.Nonempty} of values it has decoded.
+
+  # Example
+
+    ```
+    toEither do
+      runDecode
+        (do sepBy1 Decode.int16be do literalBytes 0xs00)
+        0xsdead00beef00feed00face
+    ```
+  }}
+
+Decode.skip : Nat ->{Decode} ()
+Decode.skip n =
+  Decode.label ("Ignoring " Text.++ Nat.toText n Text.++ " bytes.") do
+    ignore (nextBytes n)
+
+Decode.skip.doc : Doc
+Decode.skip.doc =
+  {{ `` Decode.skip n `` skips the next 'n' bytes of the input. }}
+
+Decode.skipMany : '{g, Decode} a ->{g, Decode} ()
+Decode.skipMany d =
+  go = do
+    Decode.or (do
+      ignore d()
+      go()) do ()
+  go()
+
+Decode.skipMany.doc : Doc
+Decode.skipMany.doc =
+  {{ `` skipMany d `` skips the input until the decoder `d` fails. }}
+
+Decode.skipMany1 : '{g, Decode} a ->{g, Decode} ()
+Decode.skipMany1 d =
+  ignore d()
+  skipMany d
+
+Decode.skipMany1.doc : Doc
+Decode.skipMany1.doc =
+  {{
+  `` skipMany1 d `` skips the input until the decoder `d` fails. This decoder
+  fails if `d` doesn't succeed at least once.
+  }}
+
+Decode.skipUntil : Bytes ->{Decode} ()
+Decode.skipUntil signal =
+  Decode.label ("Skipping until " Text.++ toHex.deprecated signal) do
+    Decode.until signal do ()
+
+Decode.skipUntil.doc : Doc
+Decode.skipUntil.doc =
+  use fromList impl
+  {{
+  `` skipUntil bytes `` skips the input until the given bytes are consumed. If
+  the bytes are not found, the input is consumed until the end.
+
+  # Examples
+
+    ```
+    toEither do
+      runDecode
+        (do
+          skipUntil 0xsfeedface
+          literalBytes 0xsdeadbeef) 0xsfeedfacedeadbeef
+    ```
+
+    ```
+    toEither do
+      runDecode
+        (do
+          skipUntil 0xs00
+          Decode.utf8()) 0xsdeadbeef00486921
+    ```
+  }}
+
+Decode.some : '{g, Decode} a ->{g, Decode} List.Nonempty a
+Decode.some d = d() +| Decode.many d
+
+Decode.some.doc : Doc
+Decode.some.doc =
+  use Decode some
+  {{
+  `` some d `` decodes a {type List.Nonempty} of values using the decoder `d`.
+  It will consume bytes until the decoder `d` fails and return the
+  {type List.Nonempty} of values it has decoded. This decoder fails if `d`
+  doesn't succeed at least once.
+
+  # Example
+
+    ```
+    toEither do runDecode (do some Decode.int16be) 0xsdeadbeeffeedface
+    ```
+  }}
+
+Decode.someDigits : '{Decode} Nat
+Decode.someDigits =
+  failure = do Decode.failWith "Expected a sequence of digits"
+  digits =
+    do
+      (Decode.some do Decode.charIn Class.digit)
+        |> List.Nonempty.toList
+        |> fromCharList
+        |> Nat.fromText
+        |> (cases
+             Some n -> n
+             None   -> failure())
+  do Decode.or digits failure
+
+Decode.someDigits.doc : Doc
+Decode.someDigits.doc =
+  use Decode fromBytes
+  use Text toUtf8
+  {{
+  Decodes a string of decimal digits as a {type Nat}. This decoder tries to
+  decode as many UTF-8 decimal digit characters as possible from the input
+  bytes, and returns the decoded number if successful. If the next character is
+  not a digit, the decoder fails.
+
+  # Example
+
+    ```
+    toEither do fromBytes (toUtf8 "123") someDigits
+    ```
+
+    ```
+    toEither do fromBytes (toUtf8 "abc") someDigits
+    ```
+
+    ```
+    toEither do fromBytes (toUtf8 "123abc") someDigits
+    ```
+
+    ```
+    toEither do fromBytes (toUtf8 "") someDigits
+    ```
+  }}
+
+test> Decode.someDigits.tests.digits = test.verify do
+  use Decode fromBytes
+  use Text toUtf8
+  ensureEqual (toEither do fromBytes (toUtf8 "123") someDigits) (Right 123)
+  ensureEqual (toEither do fromBytes (toUtf8 "0") someDigits) (Right 0)
+  ensureEqual (toEither do fromBytes (toUtf8 "123abc") someDigits) (Right 123)
+  ensureThrows do fromBytes (toUtf8 "abc123") someDigits
+
+test> Decode.someDigits.tests.empty =
+  test.verify do ensureThrows do Decode.fromBytes 0xs someDigits
+
+Decode.terminate : '{g, Decode} a ->{g, Decode} a
+Decode.terminate d =
+  use Bytes ++
+  use Decode fail
+  use Nat -
+  use fromList impl
+  h bs offset = cases
+    { fail msg -> _ } -> fail msg
+    { remit n -> k } ->
+      remit n
+      handle k() with h (n ++ bs) (offset - Bytes.size n)
+    { moreBytes -> k } ->
+      if Bytes.isEmpty bs then handle k None with h 0xs offset
+      else handle k (Some bs) with h 0xs offset
+    { bytesRead -> k } -> handle k offset with h bs offset
+    { a } -> a
+  o = bytesRead
+  handle d() with h 0xs o
+
+Decode.terminate.doc : Doc
+Decode.terminate.doc = {{ Send an EOF signal to a decoder. }}
+
+Decode.tests.checkDecodeResult :
+  '{g, Decode, DecodeBits} r
+  -> r
+  -> Bytes
+  -> Bytes
+  ->{g, Exception, Each, Random} ()
+Decode.tests.checkDecodeResult decoder expectedResult expectedRemainder input =
+  checkDecodeResultBy (===) decoder expectedResult expectedRemainder input
+
+Decode.tests.checkDecodeResult.doc : Doc
+Decode.tests.checkDecodeResult.doc =
+  {{
+  {{
+  docExample 4 do
+    decoder expectedResult expectedRemainder input ->
+      checkDecodeResult decoder expectedResult expectedRemainder input }} runs
+  `input` through `decoder` and checks that the decoded result is equal to
+  `expectedResult` and the remaining input bytes are equal to
+  `expectedRemainder`.
+
+  The result is checked when the input is fed into the decoder as a single
+  chunk of bytes, but is also checked when the input is fed into the decoder
+  broken into randomly-sized byte chunks.
+
+  This check uses univesal equality to check whether the result matches
+  `expectedResult`. See {{ docLink (docEmbedTermLink do checkDecodeResultBy) }}
+  for a variant that allows the caller to provide a custom equality check.
+
+  # Example
+
+    {{ docSource [docSourceElement (docEmbedTermLink do until.tests) []] }}
+  }}
+
+Decode.tests.checkDecodeResultBy :
+  (r ->{h1} r ->{h} Boolean)
+  -> '{g, Decode, DecodeBits} r
+  -> r
+  -> Bytes
+  -> Bytes
+  ->{g, Exception, Each, Random} ()
+Decode.tests.checkDecodeResultBy
+  eq decoder expectedResult expectedRemainder input =
+  use Random natIn
+  use splits bytes
+  inputStream = bytes (natIn 1 100) input
+  decoderWithRemainder = do (decoder(), remainder())
+  decode : '{g, Random, Throw DecodeError} (r, Bytes)
+  decode =
+    each
+      [ do runDecode decoderWithRemainder input
+      , do Decode.fromStream decoderWithRemainder (bytes (natIn 1 100) input)
+      ]
+  let
+    (decodedValue, decodedRest) = Throw.toException toFailure decode
+    ensureEqual expectedResult decodedValue
+    ensureEqual expectedRemainder decodedRest
+
+Decode.tests.checkDecodeResultBy.doc : Doc
+Decode.tests.checkDecodeResultBy.doc =
+  {{
+  A variant of {{ docLink (docEmbedTermLink do checkDecodeResult) }} that
+  allows a user-provided equality check.
+  }}
+
+Decode.text : Text ->{Decode} Text
+Decode.text t =
+  _ = literalBytes (Text.toUtf8 t)
+  t
+
+Decode.text.doc : Doc
+Decode.text.doc =
+  {{
+  `` Decode.text t `` decodes the UTF-8 {type Text} `t`. Fails if `t` is not
+  next in the input.
+  }}
+
+Decode.tracingOr : '{g, Decode} a -> '{g, Decode} a ->{g, Decode} a
+Decode.tracingOr d1 d2 =
+  h bs trace =
+    use List ++
+    remit bs
+    modifyLabels (lbls -> trace ++ lbls) d2
+  handleFailure h do indentLabels "Trying" d1
+
+Decode.try : '{g, Decode} a ->{g, Decode} a
+Decode.try d = tracingOr d (Decode.fail [])
+
+Decode.try.doc : Doc
+Decode.try.doc =
+  {{
+  `` try d `` is a decoder that tries to decode the input using 'd'. If the
+  decoder fails, the input is not consumed.
+  }}
+
+Decode.trySilently : '{g, Decode} a ->{g, Decode} a
+Decode.trySilently d = Decode.or d (Decode.fail [])
+
+Decode.trySilently.doc : Doc
+Decode.trySilently.doc =
+  {{
+  `` trySilently d `` tries to run the decoder `d` just like {try}, but leaves
+  the trace alone, so the error message in case of failure is the same as for
+  `d`.
+  }}
+
+Decode.unexpectedEof : '{Decode} a
+Decode.unexpectedEof = do Decode.fail ["Unexpected EOF"]
+
+Decode.universal : '{IO, Decode} a
+Decode.universal =
+  do
+    Decode.label "Unison universal serialization" do
+      match load Decode.value() with
+        Left missingTerms ->
+          use Text ++
+          termText = Text.join ", " (List.map Term.toText missingTerms)
+          Decode.failWith ("missing terms: " ++ termText)
+        Right r           -> r
+
+Decode.universal.doc : Doc
+Decode.universal.doc =
+  {{
+  Parses the remainder of the input as a Unison value that was serialized with
+  {Value.serialize}.
+  }}
+
+Decode.until : Bytes -> '{g, Decode} a ->{g, Decode} a
+Decode.until terminator d =
+  use Bytes ++ size
+  use Decode feed
+  use Nat +
+  go : '{g, Decode} a -> Bytes ->{g, Decode} a
+  go d haystack = match moreBytes with
+    None          -> unexpectedEof()
+    Some newBytes ->
+      haystack' = haystack ++ newBytes
+      match Bytes.indexOf terminator haystack' with
+        None   ->
+          sz =
+            use Nat -
+            ignore "Needle could be overlapping the end of the haystack."
+            ignore "Subtracting one, becase otherwise we'd have found it."
+            size haystack' - (size terminator - 1)
+          let
+            (toFeed, remaining) = Bytes.splitAt sz haystack'
+            go (feed toFeed d) remaining
+        Some i ->
+          want = Bytes.take i haystack'
+          rest = Bytes.drop (i + size terminator) haystack'
+          remit rest
+          Decode.terminate (feed want d)
+  go d Bytes.empty
+
+Decode.until.doc : Doc
+Decode.until.doc =
+  use Bytes ++
+  use Decode until
+  use Text toUtf8
+  use fromList impl
+  {{
+  `` until terminator d `` feeds bytes to the decoder `d` until the
+  `terminator` is encountered. The terminator is consumed but not fed to the
+  decoder.
+
+  # Example
+
+    This example decodes a null-terminated UTF-8 string:
+
+    ```
+    content = toUtf8 "Hello, world!" ++ 0xs00 ++ toUtf8 "Goodbye, world!"
+    toEither do Decode.fromBytes content do until 0xs00 Decode.utf8
+    ```
+  }}
+
+test> Decode.until.tests =
+  test.verify do
+    use Bytes ++
+    use Random bytes natIn
+    Each.repeat 100
+    delimiter = bytes (natIn 1 100)
+    prefix = bytes (natIn 0 100)
+    guard (Bytes.indexOf delimiter prefix === None)
+    rest = bytes (natIn 0 100)
+    inputBytes = prefix ++ delimiter ++ rest
+    checkDecodeResult
+      (do Decode.until delimiter remainder) prefix rest inputBytes
+
+Decode.utf8 : '{Decode} Text
+Decode.utf8 =
+  do
+    Decode.label "Expecting a UTF-8 string" do
+      match catch do fromUtf8 remainder() with
+        Left (Failure _ msg _) -> Decode.failWith msg
+        Right t                -> t
+
+Decode.utf8.doc : Doc
+Decode.utf8.doc =
+  {{ Decode a string as UTF-8 {type Text} from the remaining bytes. }}
+
+Decode.utf8NullTerminated : '{Decode} Text
+Decode.utf8NullTerminated = do nullTerminated Decode.utf8
+
+Decode.utf8NullTerminated.doc : Doc
+Decode.utf8NullTerminated.doc =
+  {{ Decode a null-terminated byte string as UTF-8 {type Text}. }}
+
+Decode.value : '{Decode} Value
+Decode.value =
+  do
+    Decode.label "Unison Value serialization" do
+      match Value.deserialize.impl remainder() with
+        Left err -> Decode.failWith err
+        Right v  -> v
+
+Decode.value.doc : Doc
+Decode.value.doc =
+  {{
+  Parses the remainder of the input as a {type Value} that was serialized with
+  {Value.serialize}.
+  }}
+
+Decode.variableSizeBytes : '{g, Decode} Nat -> '{g, Decode} a ->{g, Decode} a
+Decode.variableSizeBytes decodeSize decodeValue =
+  size = decodeSize()
+  fixedSizeOrFail size decodeValue
+
+Decode.variableSizeBytes.doc : Doc
+Decode.variableSizeBytes.doc =
+  {{
+  Decodes a length-prefixed value.
+
+  `` Decode.variableSizeBytes d1 d2 `` uses the decoder `d1` to decode a
+  {type Nat}, and then decodes that number of bytes using `d2`.
+  }}
+
+DecodeBits.Alignment.doc : Doc
+DecodeBits.Alignment.doc =
+  {{
+  {type Alignment} controls whether {type DecodeBits} decodes into {type Bytes}
+  by filling them with bits from the left or the right.
+  }}
+
+DecodeBits.bit : '{DecodeBits} Boolean
+DecodeBits.bit = do Bytes.at 0 (getBits AlignRight 1) === Some 1
+
+DecodeBits.bit.doc : Doc
+DecodeBits.bit.doc =
+  use DecodeBits bit run
+  use fromList impl
+  {{
+  `` bit bs `` decodes a {type Boolean} from the next bit in the input. Returns
+  `` true `` if the next bit is 1, and `` false `` if it is 0.
+
+  # Examples
+
+    ```
+    toEither do run 0xsff bit
+    ```
+
+    ```
+    toEither do run 0xsbeef do List.replicate 8 bit
+    ```
+  }}
+
+DecodeBits.currentOffset : '{DecodeBits} Nat
+DecodeBits.currentOffset = do bitOffset getDecoderState
+
+DecodeBits.currentOffset.doc : Doc
+DecodeBits.currentOffset.doc =
+  {{
+  {DecodeBits.currentOffset} is the number of bits that have been decoded so
+  far.
+  }}
+
+DecodeBits.DecoderState.bitOffset : DecoderState -> Nat
+DecodeBits.DecoderState.bitOffset = cases DecoderState _ b -> b
+
+DecodeBits.DecoderState.bitOffset.doc : Doc
+DecodeBits.DecoderState.bitOffset.doc =
+  {{
+  {bitOffset} is the current bit offset in the {type Bytes} that are being
+  decoded by {type DecodeBits}.
+  }}
+
+DecodeBits.DecoderState.doc : Doc
+DecodeBits.DecoderState.doc =
+  {{
+  {type DecoderState} is the state of a {type DecodeBits} decoder that is used
+  to decode partial {type Bytes}. The state keeps track of the remaining
+  {type Bytes} to be decoded in {input} and the current bit offset in
+  {bitOffset}.
+  }}
+
+DecodeBits.DecoderState.input : DecoderState -> Bytes
+DecodeBits.DecoderState.input = cases DecoderState bs _ -> bs
+
+DecodeBits.DecoderState.input.doc : Doc
+DecodeBits.DecoderState.input.doc =
+  {{
+  {input} is the remaining {type Bytes} to be decoded by a {type DecodeBits}.
+  }}
+
+DecodeBits.doc : Doc
+DecodeBits.doc =
+  {{
+  {type DecodeBits} is the ability to decode parts of {type Bytes} that are
+  smaller than a single byte or that don't align with whole bytes.
+  }}
+
+DecodeBits.examples.decodeIpHeader :
+  '{Decode, DecodeBits, Throw DecodeError} IpHeader
+DecodeBits.examples.decodeIpHeader =
+  do
+    use Boolean not
+    use Decode byte nat16be
+    use DecodeBits bit
+    use Nat * -
+    ignore "Pass 2 bytes to the bitwise decoder"
+    bitsFromBytes 2
+    ignore "Begin bitwise decoding"
+    version = wordN 4
+    ihl = wordN 4
+    tos = TypeOfService (wordN 3) bit() bit() bit()
+    ignore "Back to bytewise decoding"
+    totalLength = nat16be()
+    id = nat16be()
+    ignore "The next 2 bytes have 3 bits for fragmentation flags"
+    ignore "then the 13-bit Fragment Offset"
+    bitsFromBytes 2
+    DecodeBits.skip 1
+    mayFragment = not bit()
+    lastFragment = not bit()
+    offset = wordN 13
+    ignore "Back to bytewise decoding"
+    ttl = seconds (Nat.toInt byte())
+    protocol = byte()
+    Decode.skip 2
+    sourceAddress = IpV4Address byte() byte() byte() byte()
+    destinationAddress = IpV4Address byte() byte() byte() byte()
+    options = nextBytes (ihl * 4 - 20)
+    IpHeader
+      version
+      ihl
+      tos
+      totalLength
+      id
+      mayFragment
+      lastFragment
+      offset
+      ttl
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.destinationAddress : IpHeader -> IpV4Address
+DecodeBits.examples.IpHeader.destinationAddress = cases
+  IpHeader _ _ _ _ _ _ _ _ _ _ _ destinationAddress _ -> destinationAddress
+
+DecodeBits.examples.IpHeader.destinationAddress.modify :
+  (IpV4Address ->{g} IpV4Address) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.destinationAddress.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      (f destinationAddress)
+      options
+
+DecodeBits.examples.IpHeader.destinationAddress.set :
+  IpV4Address -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.destinationAddress.set destinationAddress1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    _
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress1
+      options
+
+DecodeBits.examples.IpHeader.fragmentOffset : IpHeader -> Nat
+DecodeBits.examples.IpHeader.fragmentOffset = cases
+  IpHeader _ _ _ _ _ _ _ fragmentOffset _ _ _ _ _ -> fragmentOffset
+
+DecodeBits.examples.IpHeader.fragmentOffset.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.fragmentOffset.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      (f fragmentOffset)
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.fragmentOffset.set : Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.fragmentOffset.set fragmentOffset1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    _
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset1
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.identification : IpHeader -> Nat
+DecodeBits.examples.IpHeader.identification = cases
+  IpHeader _ _ _ _ identification _ _ _ _ _ _ _ _ -> identification
+
+DecodeBits.examples.IpHeader.identification.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.identification.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      (f identification)
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.identification.set : Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.identification.set identification1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    _
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification1
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.internetHeaderLength : IpHeader -> Nat
+DecodeBits.examples.IpHeader.internetHeaderLength = cases
+  IpHeader _ internetHeaderLength _ _ _ _ _ _ _ _ _ _ _ -> internetHeaderLength
+
+DecodeBits.examples.IpHeader.internetHeaderLength.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.internetHeaderLength.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      (f internetHeaderLength)
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.internetHeaderLength.set :
+  Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.internetHeaderLength.set internetHeaderLength1 = cases
+  IpHeader
+    version
+    _
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength1
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.lastFragment : IpHeader -> Boolean
+DecodeBits.examples.IpHeader.lastFragment = cases
+  IpHeader _ _ _ _ _ _ lastFragment _ _ _ _ _ _ -> lastFragment
+
+DecodeBits.examples.IpHeader.lastFragment.modify :
+  (Boolean ->{g} Boolean) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.lastFragment.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      (f lastFragment)
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.lastFragment.set : Boolean -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.lastFragment.set lastFragment1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    _
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment1
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.mayBeFragment : IpHeader -> Boolean
+DecodeBits.examples.IpHeader.mayBeFragment = cases
+  IpHeader _ _ _ _ _ mayBeFragment _ _ _ _ _ _ _ -> mayBeFragment
+
+DecodeBits.examples.IpHeader.mayBeFragment.modify :
+  (Boolean ->{g} Boolean) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.mayBeFragment.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      (f mayBeFragment)
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.mayBeFragment.set :
+  Boolean -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.mayBeFragment.set mayBeFragment1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    _
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment1
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.options : IpHeader -> Bytes
+DecodeBits.examples.IpHeader.options = cases
+  IpHeader _ _ _ _ _ _ _ _ _ _ _ _ options -> options
+
+DecodeBits.examples.IpHeader.options.modify :
+  (Bytes ->{g} Bytes) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.options.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      (f options)
+
+DecodeBits.examples.IpHeader.options.set : Bytes -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.options.set options1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    _ ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options1
+
+DecodeBits.examples.IpHeader.protocol : IpHeader -> Nat
+DecodeBits.examples.IpHeader.protocol = cases
+  IpHeader _ _ _ _ _ _ _ _ _ protocol _ _ _ -> protocol
+
+DecodeBits.examples.IpHeader.protocol.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.protocol.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      (f protocol)
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.protocol.set : Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.protocol.set protocol1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    _
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol1
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.sourceAddress : IpHeader -> IpV4Address
+DecodeBits.examples.IpHeader.sourceAddress = cases
+  IpHeader _ _ _ _ _ _ _ _ _ _ sourceAddress _ _ -> sourceAddress
+
+DecodeBits.examples.IpHeader.sourceAddress.modify :
+  (IpV4Address ->{g} IpV4Address) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.sourceAddress.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      (f sourceAddress)
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.sourceAddress.set :
+  IpV4Address -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.sourceAddress.set sourceAddress1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    _
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress1
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.timeToLive : IpHeader -> Duration
+DecodeBits.examples.IpHeader.timeToLive = cases
+  IpHeader _ _ _ _ _ _ _ _ timeToLive _ _ _ _ -> timeToLive
+
+DecodeBits.examples.IpHeader.timeToLive.modify :
+  (Duration ->{g} Duration) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.timeToLive.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      (f timeToLive)
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.timeToLive.set : Duration -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.timeToLive.set timeToLive1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    _
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive1
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.totalLength : IpHeader -> Nat
+DecodeBits.examples.IpHeader.totalLength = cases
+  IpHeader _ _ _ totalLength _ _ _ _ _ _ _ _ _ -> totalLength
+
+DecodeBits.examples.IpHeader.totalLength.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.totalLength.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      (f totalLength)
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.totalLength.set : Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.totalLength.set totalLength1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    _
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService
+      totalLength1
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.typeOfService : IpHeader -> TypeOfService
+DecodeBits.examples.IpHeader.typeOfService = cases
+  IpHeader _ _ typeOfService _ _ _ _ _ _ _ _ _ _ -> typeOfService
+
+DecodeBits.examples.IpHeader.typeOfService.modify :
+  (TypeOfService ->{g} TypeOfService) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.typeOfService.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      (f typeOfService)
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.typeOfService.set :
+  TypeOfService -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.typeOfService.set typeOfService1 = cases
+  IpHeader
+    version
+    internetHeaderLength
+    _
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version
+      internetHeaderLength
+      typeOfService1
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.version : IpHeader -> Nat
+DecodeBits.examples.IpHeader.version = cases
+  IpHeader version _ _ _ _ _ _ _ _ _ _ _ _ -> version
+
+DecodeBits.examples.IpHeader.version.modify :
+  (Nat ->{g} Nat) -> IpHeader ->{g} IpHeader
+DecodeBits.examples.IpHeader.version.modify f = cases
+  IpHeader
+    version
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      (f version)
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.IpHeader.version.set : Nat -> IpHeader -> IpHeader
+DecodeBits.examples.IpHeader.version.set version1 = cases
+  IpHeader
+    _
+    internetHeaderLength
+    typeOfService
+    totalLength
+    identification
+    mayBeFragment
+    lastFragment
+    fragmentOffset
+    timeToLive
+    protocol
+    sourceAddress
+    destinationAddress
+    options ->
+    IpHeader
+      version1
+      internetHeaderLength
+      typeOfService
+      totalLength
+      identification
+      mayBeFragment
+      lastFragment
+      fragmentOffset
+      timeToLive
+      protocol
+      sourceAddress
+      destinationAddress
+      options
+
+DecodeBits.examples.rawIpHeader : Bytes
+DecodeBits.examples.rawIpHeader = 0xs45000433b05600188006b7a4c0a803030a010106
+
+DecodeBits.examples.TypeOfService.highReliability : TypeOfService -> Boolean
+DecodeBits.examples.TypeOfService.highReliability = cases
+  TypeOfService _ _ _ highReliability -> highReliability
+
+DecodeBits.examples.TypeOfService.highReliability.modify :
+  (Boolean ->{g} Boolean) -> TypeOfService ->{g} TypeOfService
+DecodeBits.examples.TypeOfService.highReliability.modify f = cases
+  TypeOfService precedence lowDelay highThroughput highReliability ->
+    TypeOfService precedence lowDelay highThroughput (f highReliability)
+
+DecodeBits.examples.TypeOfService.highReliability.set :
+  Boolean -> TypeOfService -> TypeOfService
+DecodeBits.examples.TypeOfService.highReliability.set highReliability1 = cases
+  TypeOfService precedence lowDelay highThroughput _ ->
+    TypeOfService precedence lowDelay highThroughput highReliability1
+
+DecodeBits.examples.TypeOfService.highThroughput : TypeOfService -> Boolean
+DecodeBits.examples.TypeOfService.highThroughput = cases
+  TypeOfService _ _ highThroughput _ -> highThroughput
+
+DecodeBits.examples.TypeOfService.highThroughput.modify :
+  (Boolean ->{g} Boolean) -> TypeOfService ->{g} TypeOfService
+DecodeBits.examples.TypeOfService.highThroughput.modify f = cases
+  TypeOfService precedence lowDelay highThroughput highReliability ->
+    TypeOfService precedence lowDelay (f highThroughput) highReliability
+
+DecodeBits.examples.TypeOfService.highThroughput.set :
+  Boolean -> TypeOfService -> TypeOfService
+DecodeBits.examples.TypeOfService.highThroughput.set highThroughput1 = cases
+  TypeOfService precedence lowDelay _ highReliability ->
+    TypeOfService precedence lowDelay highThroughput1 highReliability
+
+DecodeBits.examples.TypeOfService.lowDelay : TypeOfService -> Boolean
+DecodeBits.examples.TypeOfService.lowDelay = cases
+  TypeOfService _ lowDelay _ _ -> lowDelay
+
+DecodeBits.examples.TypeOfService.lowDelay.modify :
+  (Boolean ->{g} Boolean) -> TypeOfService ->{g} TypeOfService
+DecodeBits.examples.TypeOfService.lowDelay.modify f = cases
+  TypeOfService precedence lowDelay highThroughput highReliability ->
+    TypeOfService precedence (f lowDelay) highThroughput highReliability
+
+DecodeBits.examples.TypeOfService.lowDelay.set :
+  Boolean -> TypeOfService -> TypeOfService
+DecodeBits.examples.TypeOfService.lowDelay.set lowDelay1 = cases
+  TypeOfService precedence _ highThroughput highReliability ->
+    TypeOfService precedence lowDelay1 highThroughput highReliability
+
+DecodeBits.examples.TypeOfService.precedence : TypeOfService -> Nat
+DecodeBits.examples.TypeOfService.precedence = cases
+  TypeOfService precedence _ _ _ -> precedence
+
+DecodeBits.examples.TypeOfService.precedence.modify :
+  (Nat ->{g} Nat) -> TypeOfService ->{g} TypeOfService
+DecodeBits.examples.TypeOfService.precedence.modify f = cases
+  TypeOfService precedence lowDelay highThroughput highReliability ->
+    TypeOfService (f precedence) lowDelay highThroughput highReliability
+
+DecodeBits.examples.TypeOfService.precedence.set :
+  Nat -> TypeOfService -> TypeOfService
+DecodeBits.examples.TypeOfService.precedence.set precedence1 = cases
+  TypeOfService _ lowDelay highThroughput highReliability ->
+    TypeOfService precedence1 lowDelay highThroughput highReliability
+
+DecodeBits.fromEmpty : '{g, DecodeBits} a ->{g, Throw DecodeError} a
+DecodeBits.fromEmpty decoder = DecodeBits.run 0xs decoder
+
+DecodeBits.fromEmpty.doc : Doc
+DecodeBits.fromEmpty.doc =
+  {{
+  {fromEmpty} runs a bitwise decoder on the empty input. The decoder relies on
+  another process such as {bitsFromBytes} to supply the input bytes.
+  }}
+
+DecodeBits.getBits : Alignment -> Nat ->{DecodeBits} Bytes
+DecodeBits.getBits align n =
+  use Bytes drop take
+  use Nat * + - / < == mod
+  (DecoderState bytes boff) = getDecoderState
+  bitsRemaining = Bytes.size bytes * 8 - boff
+  let
+    (shift, truncate) =
+      match align with
+        AlignLeft -> (Bytes.shiftLeft, truncateLeft)
+        AlignRight ->
+          ( offset -> Bytes.shiftRight (mod (mod (8 - mod n 8) 8 - offset) 8)
+          , truncateRight
+          )
+    if bitsRemaining < n then
+      DecodeBits.fail ["getBits: not enough bits remaining"]
+    else
+      bytesRequired = (n - 1 + boff) / 8 + 1
+      boff' = mod (boff + n) 8
+      let
+        (r, rest) =
+          if boff' == 0 then
+            (take bytesRequired bytes, drop bytesRequired bytes)
+          else (take bytesRequired bytes, drop (bytesRequired - 1) bytes)
+        setDecoderState (DecoderState rest boff')
+        truncate n (shift boff r)
+
+DecodeBits.getBits.doc : Doc
+DecodeBits.getBits.doc =
+  {{
+  `` getBits alignment n `` reads the next `n` bits from the input and returns
+  them in a {type Bytes} that is either filled with bits from the left or the
+  right depending on the {type Alignment} `alignment`.
+  }}
+
+DecodeBits.getInt : Nat ->{DecodeBits} Int
+DecodeBits.getInt n =
+  match Bytes.at 0 (getBits AlignRight n) with
+    None -> DecodeBits.fail ["DecodeBits.getInt: not enough bits"]
+    Some x ->
+      Int.fromRepresentation
+        (Nat.or
+          (Nat.shiftLeft (if isSetBit (n Nat.- 1) x then maxNat else 0) n) x)
+
+DecodeBits.getInt.doc : Doc
+DecodeBits.getInt.doc =
+  use DecodeBits run
+  use fromList impl
+  {{
+  `` getInt n `` reads the next `n` bits from the input as an {type Int}, where
+  `n` is at most 64. If `n` is greater than 64, the result is the same as if
+  `n` were 64.
+
+  Note that the result is sign-extended to 64 bits. If the input bits represent
+  a negative number (in two's complement), the result is negative.
+
+  # Examples
+
+    ```
+    toEither do run 0xsfeed do getInt 2
+    ```
+
+    ```
+    toEither do run 0xs7777 do getInt 7
+    ```
+
+    ```
+    toEither do run 0xsbeef do getInt 4
+    ```
+  }}
+
+DecodeBits.isEmpty : '{DecodeBits} Boolean
+DecodeBits.isEmpty = do
+  use Nat * - ==
+  s = getDecoderState
+  Bytes.size (input s) * 8 - bitOffset s == 0
+
+DecodeBits.isEmpty.doc : Doc
+DecodeBits.isEmpty.doc =
+  {{ {DecodeBits.isEmpty} returns `` true `` if the input is exhausted. }}
+
+DecodeBits.nextByte : '{DecodeBits} ()
+DecodeBits.nextByte = do DecodeBits.skip (Nat.mod DecodeBits.currentOffset() 8)
+
+DecodeBits.nextByte.doc : Doc
+DecodeBits.nextByte.doc =
+  {{
+  {nextByte} skips to the next byte of the input. If the decoder is currently
+  aligned on a byte boundary, this is a no-op.
+  }}
+
+DecodeBits.remaining : '{DecodeBits} Nat
+DecodeBits.remaining = do
+  use Nat * -
+  s = getDecoderState
+  Bytes.size (input s) * 8 - bitOffset s
+
+DecodeBits.remaining.doc : Doc
+DecodeBits.remaining.doc =
+  {{ {remaining} returns the number of bits remaining in the input. }}
+
+DecodeBits.run : Bytes -> '{g, DecodeBits} a ->{g, Throw DecodeError} a
+DecodeBits.run bs f =
+  h state = cases
+    { DecodeBits.fail msg -> _ } ->
+      throw (DecodeError msg (Position (bitOffset state)) (input state))
+    { getDecoderState -> k } -> handle k state with h state
+    { setDecoderState s -> k } -> handle k() with h s
+    { a } -> a
+  handle f() with h (DecoderState bs 0)
+
+DecodeBits.run.doc : Doc
+DecodeBits.run.doc =
+  {{
+  `` DecodeBits.run g bs `` runs the bit decoder `g` on the {type Bytes} `bs`,
+  returning the decoded value.
+  }}
+
+DecodeBits.skip : Nat ->{DecodeBits} ()
+DecodeBits.skip n =
+  _ = getBits AlignRight n
+  ()
+
+DecodeBits.skip.doc : Doc
+DecodeBits.skip.doc =
+  {{ `` DecodeBits.skip n `` skips the next `n` bits of the input. }}
+
+DecodeBits.wordN : Nat ->{DecodeBits} Nat
+DecodeBits.wordN n = match Bytes.at 0 (getBits AlignRight n) with
+  None   -> DecodeBits.fail ["DecodeBits.getNat: not enough bits"]
+  Some x -> x
+
+DecodeBits.wordN.doc : Doc
+DecodeBits.wordN.doc =
+  use DecodeBits run
+  use fromList impl
+  {{
+  `` wordN n `` reads the next `n` bits from the input as a {type Nat}, where
+  `n` is at most 64. If `n` is greater than 64, the result is the same as if
+  `n` were 64.
+
+  # Examples
+
+    ```
+    toEither do run 0xsbeef do wordN 4
+    ```
+
+    ```
+    toEither do run 0xsfeed do wordN 2
+    ```
+  }}
+
+DecodeError.frame : DecodeError -> Bytes
+DecodeError.frame = cases DecodeError _ _ frame -> frame
+
+DecodeError.frame.modify : (Bytes ->{g} Bytes) -> DecodeError ->{g} DecodeError
+DecodeError.frame.modify f = cases
+  DecodeError trace position frame -> DecodeError trace position (f frame)
+
+DecodeError.frame.set : Bytes -> DecodeError -> DecodeError
+DecodeError.frame.set frame1 = cases
+  DecodeError trace position _ -> DecodeError trace position frame1
+
+DecodeError.position : DecodeError -> Position
+DecodeError.position = cases DecodeError _ position _ -> position
+
+DecodeError.position.modify :
+  (Position ->{g} Position) -> DecodeError ->{g} DecodeError
+DecodeError.position.modify f = cases
+  DecodeError trace position frame -> DecodeError trace (f position) frame
+
+DecodeError.position.set : Position -> DecodeError -> DecodeError
+DecodeError.position.set position1 = cases
+  DecodeError trace _ frame -> DecodeError trace position1 frame
+
+DecodeError.toFailure : DecodeError -> Failure
+DecodeError.toFailure e =
+  Failure (typeLink DecodeError) (Text.join "\n" (DecodeError.trace e)) (Any e)
+
+DecodeError.toFailure.doc : Doc
+DecodeError.toFailure.doc =
+  {{
+  The {type DecodeError} type is used to represent errors that occur when
+  decoding values from binary data. The {toFailure} function can be used to
+  convert a {type DecodeError} into a {type Failure} value for use with the
+  {type Exception} ability.
+  }}
+
+DecodeError.trace : DecodeError -> [Text]
+DecodeError.trace = cases DecodeError trace _ _ -> trace
+
+DecodeError.trace.modify :
+  ([Text] ->{g} [Text]) -> DecodeError ->{g} DecodeError
+DecodeError.trace.modify f = cases
+  DecodeError trace position frame -> DecodeError (f trace) position frame
+
+DecodeError.trace.set : [Text] -> DecodeError -> DecodeError
+DecodeError.trace.set trace1 = cases
+  DecodeError _ position frame -> DecodeError trace1 position frame
+
+encode.ascii : Text ->{Stream Bytes} ()
+encode.ascii t = foreach.deprecated encode.asciiChar (toCharList t)
+
+encode.asciiChar : Char ->{Stream Bytes} ()
+encode.asciiChar c =
+  n = dropBits 56 (Char.toNat c)
+  emit (fromList.impl [n])
+
+encode.asciiChar.doc : Doc
+encode.asciiChar.doc =
+  {{
+  `` encode.asciiChar c `` emits a single byte representing the character 'c'.
+  Assumes the character is in the extended ASCII range (0-255), and will throw
+  an error if it isn't.
+  }}
+
+encode.byte : Nat ->{Stream Bytes} ()
+encode.byte b = emit (fromList.impl [b])
+
+encode.byte.doc : Doc
+encode.byte.doc =
+  {{
+  `` encode.byte n `` sends the lowest-order byte of the {type Nat} `n` to the
+  output stream.
+  }}
+
+encode.compressed.zlib : (a ->{g, Stream Bytes} ()) -> a ->{g, Stream Bytes} ()
+encode.compressed.zlib encodeValue value =
+  valueBytes = encode.toBytes do encodeValue value
+  compressedBytes = zlib.compress valueBytes
+  emit compressedBytes
+
+encode.compressed.zlib.doc : Doc
+encode.compressed.zlib.doc =
+  {{ Uses the given encoder, and compresses the results using zlib/deflate. }}
+
+encode.int16be : Int ->{Stream Bytes} ()
+encode.int16be n = emit (encodeNat16be (Int.toRepresentation n))
+
+encode.int16be.doc : Doc
+encode.int16be.doc =
+  {{
+  `` encode.int16be n `` emits the 16-bit big-endian encoding of the 16 least
+  significant bits of the {type Int} 'n'.
+  }}
+
+encode.int16le : Int ->{Stream Bytes} ()
+encode.int16le n = emit (encodeNat16le (Int.toRepresentation n))
+
+encode.int16le.doc : Doc
+encode.int16le.doc =
+  {{
+  `` encode.int16le n `` emits the 16-bit little-endian encoding of the 16
+  least significant bits of the {type Int} 'n'.
+  }}
+
+encode.int32be : Int ->{Stream Bytes} ()
+encode.int32be n = emit (encodeNat32be (Int.toRepresentation n))
+
+encode.int32be.doc : Doc
+encode.int32be.doc =
+  {{
+  `` encode.int32be n `` emits the 32-bit big-endian encoding of the 32 least
+  significant bits of the {type Int} 'n'.
+  }}
+
+encode.int32le : Int ->{Stream Bytes} ()
+encode.int32le n = emit (encodeNat32le (Int.toRepresentation n))
+
+encode.int32le.doc : Doc
+encode.int32le.doc =
+  {{
+  `` encode.int32le n `` emits the 32-bit little-endian encoding of the 32
+  least significant bits of the {type Int} 'n'.
+  }}
+
+encode.int64be : Int ->{Stream Bytes} ()
+encode.int64be n = emit (encodeNat64be (Int.toRepresentation n))
+
+encode.int64be.doc : Doc
+encode.int64be.doc =
+  {{
+  `` encode.int64be n `` emits the 64-bit big-endian encoding of the {type Int}
+  'n'.
+  }}
+
+encode.int64le : Int ->{Stream Bytes} ()
+encode.int64le n = emit (encodeNat64le (Int.toRepresentation n))
+
+encode.int64le.doc : Doc
+encode.int64le.doc =
+  {{
+  `` encode.int64le n `` emits the 64-bit little-endian encoding of the
+  {type Int} 'n'.
+  }}
+
+encode.list : (a ->{g, Stream Bytes} ()) -> [a] ->{g, Stream Bytes} ()
+encode.list = foreach.deprecated
+
+encode.nat16be : Nat ->{Stream Bytes} ()
+encode.nat16be n = emit (encodeNat16be n)
+
+encode.nat16be.doc : Doc
+encode.nat16be.doc =
+  {{
+  `` encode.nat16be n `` emits the 16-bit big-endian encoding of the 16 least
+  significant bits of the {type Nat} 'n'.
+  }}
+
+encode.nat16le : Nat ->{Stream Bytes} ()
+encode.nat16le n = emit (encodeNat16le n)
+
+encode.nat16le.doc : Doc
+encode.nat16le.doc =
+  {{
+  `` encode.nat16le n `` emits the 16-bit little-endian encoding of the 16
+  least significant bits of the {type Nat} 'n'.
+  }}
+
+encode.nat32be : Nat ->{Stream Bytes} ()
+encode.nat32be n = emit (encodeNat32be n)
+
+encode.nat32be.doc : Doc
+encode.nat32be.doc =
+  {{
+  `` encode.nat32be n `` emits the 32-bit big-endian encoding of the 32 least
+  significant bits of the {type Nat} 'n'.
+  }}
+
+encode.nat32le : Nat ->{Stream Bytes} ()
+encode.nat32le n = emit (encodeNat32le n)
+
+encode.nat32le.doc : Doc
+encode.nat32le.doc =
+  {{
+  `` encode.nat32le n `` emits the 32-bit little-endian encoding of the 32
+  least significant bits of the {type Nat} 'n'.
+  }}
+
+encode.nat64be : Nat ->{Stream Bytes} ()
+encode.nat64be n = emit (encodeNat64be n)
+
+encode.nat64be.doc : Doc
+encode.nat64be.doc =
+  {{
+  `` encode.nat64be n `` emits the 64-bit big-endian encoding of the {type Nat}
+  'n'.
+  }}
+
+encode.nat64le : Nat ->{Stream Bytes} ()
+encode.nat64le n = emit (encodeNat64le n)
+
+encode.nat64le.doc : Doc
+encode.nat64le.doc =
+  {{
+  `` encode.nat64le n `` emits the 64-bit little-endian encoding of the
+  {type Nat} 'n'.
+  }}
+
+encode.nullTerminatedString : Text ->{Stream Bytes} ()
+encode.nullTerminatedString t =
+  encode.utf8 t
+  emit 0xs00
+
+encode.nullTerminatedString.doc : Doc
+encode.nullTerminatedString.doc =
+  {{
+  Encodes {type Text} as a null-terminated UTF-8 string.
+
+  # Examples
+
+    ```
+    encode.toBytes do nullTerminatedString "Hello, world!"
+    ```
+  }}
+
+encode.replicated : Nat -> '{g, Stream Bytes} a ->{g, Stream Bytes} [a]
+encode.replicated n e = List.replicate n e
+
+encode.toBytes : '{g, Stream Bytes} () ->{g} Bytes
+encode.toBytes =
+  use Bytes ++
+  Stream.fold (acc bs -> acc ++ bs) Bytes.empty
+
+encode.toBytes.doc : Doc
+encode.toBytes.doc =
+  {{
+  `` encode.toBytes `` turns a {type Stream} of {type Bytes} into a single
+  {type Bytes} value.
+  }}
+
+encode.toConnection :
+  Connection -> '{g, EncodeBits, Stream Bytes} a ->{g, IO, Exception} a
+encode.toConnection conn f =
+  (_, r) =
+    foldWithResult (do bs -> Connection.send conn bs) () do
+      EncodeBits.toStream f
+  r
+
+encode.toConnection.doc : Doc
+encode.toConnection.doc =
+  {{
+  `` toConnection conn f `` reads the bytes produced by the stream `f` and
+  writes them to the connection `conn`.
+
+  The connection must be connected and writable.
+  }}
+
+encode.toSocket :
+  Socket -> '{g, EncodeBits, Stream Bytes} a ->{g, IO, Exception} a
+encode.toSocket sock f = toConnection (socket sock) f
+
+encode.toSocket.doc : Doc
+encode.toSocket.doc =
+  {{
+  `` toSocket s bs `` writes the {type Bytes} value 'bs' to the {type Socket}
+  's'.
+
+  The socket is assumed to be open and writeable. See {type Socket} for more
+  information.
+  }}
+
+encode.universal : a ->{Stream Bytes} ()
+encode.universal = Value.value >> encode.value
+
+encode.universal.doc : Doc
+encode.universal.doc = {{ Encodes a unison value using {Value.serialize}. }}
+
+encode.utf8 : Text ->{Stream Bytes} ()
+encode.utf8 s = emit (Text.toUtf8 s)
+
+encode.utf8.doc : Doc
+encode.utf8.doc =
+  {{ `` encode.utf8 s `` emits the UTF-8 encoding of the {type Text} 's'. }}
+
+encode.value : Value ->{Stream Bytes} ()
+encode.value = Value.serialize >> emit
+
+encode.value.doc : Doc
+encode.value.doc = {{ Encodes a {type Value} using {Value.serialize}. }}
+
+encode.variableSizeBytes :
+  (Nat ->{g, Stream Bytes} ())
+  -> (a ->{g, Stream Bytes} ())
+  -> a
+  ->{g, Stream Bytes} ()
+encode.variableSizeBytes encodeSize encodeValue value =
+  valueBytes = encode.toBytes do encodeValue value
+  encodeSize (Bytes.size valueBytes)
+  emit valueBytes
+
+encode.variableSizeBytes.doc : Doc
+encode.variableSizeBytes.doc =
+  {{
+  Encode a length-prefixed value.
+
+  `` encode.variableSizeBytes en ex x `` encodes the value `x` using the
+  encoder `ex`, and prefixes the result with its size. The size is encoded
+  using the encoder `en`.
+  }}
+
+EncodeBits.encode :
+  '{f, EncodeBits} a -> (a ->{g} EncoderState ->{h} b) ->{f, g, h} b
+EncodeBits.encode e f =
+  h s = cases
+    { getEncoderState -> k }    -> handle k s with h s
+    { setEncoderState s' -> k } -> handle k() with h s'
+    { a }                       -> f a s
+  handle e() with h (EncoderState Bytes.empty 0 0)
+
+EncodeBits.encode.doc : Doc
+EncodeBits.encode.doc =
+  {{
+  `` EncodeBits.encode e f `` runs the encoder `e` and applies the function `f`
+  to the end state of the encoder.
+  }}
+
+EncodeBits.EncoderState.currentBit : EncoderState -> Nat
+EncodeBits.EncoderState.currentBit = cases EncoderState _ _ offset -> offset
+
+EncodeBits.EncoderState.currentBit.doc : Doc
+EncodeBits.EncoderState.currentBit.doc =
+  {{
+  {currentBit} returns the index of the next free bit in the {currentWord}.
+  }}
+
+EncodeBits.EncoderState.currentWord : EncoderState -> Nat
+EncodeBits.EncoderState.currentWord = cases EncoderState _ w _ -> w
+
+EncodeBits.EncoderState.currentWord.doc : Doc
+EncodeBits.EncoderState.currentWord.doc =
+  {{ {currentWord} returns the current 64-bit word as a Nat. }}
+
+EncodeBits.EncoderState.encodedBytes : EncoderState -> Bytes
+EncodeBits.EncoderState.encodedBytes = cases EncoderState bs _ _ -> bs
+
+EncodeBits.EncoderState.encodedBytes.doc : Doc
+EncodeBits.EncoderState.encodedBytes.doc =
+  {{ {encodedBytes} returns the bytes encoded so far. }}
+
+EncodeBits.examples.checksum : Bytes -> Nat
+EncodeBits.examples.checksum bytes =
+  use List foldLeft
+  words = Bytes.toList bytes
+  word16s =
+    List.map
+      (foldLeft (a b -> Nat.or (Nat.shiftLeft a 8) b) 0) (List.chunk 2 words)
+  Nat.complement (foldLeft (onesComplementSum 16) 0 word16s)
+
+EncodeBits.examples.checksum.doc : Doc
+EncodeBits.examples.checksum.doc =
+  {{
+  The checksum is the 16-bit one's complement of the one's complement sum of
+  all 16-bit words in the {type Bytes}.
+  }}
+
+EncodeBits.examples.encodeIpHeader : IpHeader ->{Stream Bytes} ()
+EncodeBits.examples.encodeIpHeader = cases
+  IpHeader
+    version
+    ihl
+    tos
+    totLen
+    id
+    mayFrag
+    lastFrag
+    fragOffset
+    ttl
+    protocol
+    src
+    dst
+    options ->
+    use Boolean not
+    use Bytes ++
+    use encode byte nat16be
+    use fromList impl
+    ignore "Encode everything up to the checksum field"
+    firstHalf =
+      encode.toBytes do
+        use EncodeBits toBytes
+        ignore "Switch to bitwise encoding"
+        emit
+          (toBytes do
+            putWordN 4 version
+            putWordN 4 ihl
+            let
+              (TypeOfService precedence lowDelay highThroughput highReliability)
+                =
+                tos
+              putWordN 3 precedence
+              putBit lowDelay
+              putBit highThroughput
+              putBit highReliability)
+        ignore "Back to bytewise encoding"
+        nat16be totLen
+        nat16be id
+        ignore "Bitwise encoding again"
+        emit
+          (toBytes do
+            putBit false
+            putBit (not mayFrag)
+            putBit (not lastFrag)
+            putWordN 13 fragOffset)
+        ignore "Back to bytes"
+        byte (truncate0 (countSeconds ttl))
+        byte protocol
+    ignore "Encode everything after the checksum field"
+    secondHalf = encode.toBytes do
+      (IpV4Address a b c d, IpV4Address e f g h) = (src, dst)
+      emit (impl [a, b, c, d, e, f, g, h])
+    ignore "Compute the checksum"
+    csum = checksum (firstHalf ++ 0xs0000 ++ secondHalf)
+    ignore "Put the full header on the stream"
+    emit firstHalf
+    nat16be csum
+    emit secondHalf
+
+EncodeBits.examples.ipHeader : IpHeader
+EncodeBits.examples.ipHeader =
+  Throw.toBug do Decode.fromBytes rawIpHeader decodeIpHeader
+
+EncodeBits.putBit : Boolean ->{EncodeBits} ()
+EncodeBits.putBit b = putWordN 1 (if b then 1 else 0)
+
+EncodeBits.putBits : Nat -> Bytes ->{EncodeBits} ()
+EncodeBits.putBits n input =
+  use Bytes ++ take
+  use Nat != + - / > mod shiftRight
+  (EncoderState bytesSoFar currentWord currentBit) = getEncoderState
+  needBits = 64 - currentBit
+  partSize = Nat.min n needBits
+  needBytes = (partSize + 7) / 8
+  ignore "This is zero if writing all the bits puts the cursor in phase."
+  lastByte = mod (n - partSize) 8 != 0
+  f nat b = Nat.or (Nat.shiftLeft nat 8) b
+  aNat = List.foldLeft f 0 (Bytes.toList (take needBytes input))
+  bNat = shiftRight aNat (mod (8 - mod partSize 8) 8)
+  putWordN partSize bNat
+  if n > partSize then
+    (EncoderState bytesSoFar currentWord currentBit) = getEncoderState
+    shiftedBytes = Bytes.shiftLeft partSize input
+    setEncoderState
+      (EncoderState (bytesSoFar ++ take ((n - partSize) / 8) shiftedBytes) 0 0)
+    when lastByte do
+      putWordN (mod (n - partSize) 8) match Bytes.at
+        0 (Bytes.drop ((n - partSize) / 8) shiftedBytes) with
+        None   -> 0
+        Some b -> shiftRight b (8 - mod (n - partSize) 8)
+  else ()
+
+EncodeBits.putBits.doc : Doc
+EncodeBits.putBits.doc =
+  use EncodeBits toBytes
+  use fromList impl
+  {{
+  `` putBits n bs `` sends the first `n` bits of the {type Bytes} `bs` to the
+  output buffer.
+
+  # Examples
+
+    This puts the first 8 bits of ``0xsface``, which are ``0xsfa``:
+
+    ```
+    toEither do toBytes do putBits 8 0xsface
+    ```
+
+    This puts a single bit, followed by 16 bits from a {type Bytes}, causing
+    the {putBits} call to be out of phase. The {toBytes} function pads the
+    resulting bytes with zeroes.
+
+    ```
+    toEither do
+      toBytes do
+        putBit false
+        putBits 16 0xsffffffff
+    ```
+  }}
+
+EncodeBits.putWordN : Nat -> Nat ->{EncodeBits} ()
+EncodeBits.putWordN n w' =
+  use Bytes ++
+  use Int < abs
+  use Nat + > shiftLeft toInt
+  w = dropBits (64 Nat.- n) w'
+  let
+    (EncoderState bytes word offset) = getEncoderState
+    newOffset = offset + n
+    spaceLeft = 64 Nat.- offset
+    "Where in the current word does the new data go?"
+    "If this is negative, it actually goes partly in the next word."
+    wordPos = toInt spaceLeft Int.- toInt n
+    "The part of the new data that goes in the current word"
+    let
+      (leftPart, rightPart) =
+        if wordPos < +0 then
+          (Nat.shiftRight w (abs wordPos), shiftLeft w (64 Nat.- abs wordPos))
+        else (shiftLeft w (abs wordPos), 0)
+      newWord = Nat.or leftPart word
+      let
+        (newBytes, nextWord) =
+          if newOffset > 63 then (bytes ++ toBytesBigEndian newWord, rightPart)
+          else (bytes, newWord)
+        setEncoderState (EncoderState newBytes nextWord (Nat.mod newOffset 64))
+
+EncodeBits.putWordN.doc : Doc
+EncodeBits.putWordN.doc =
+  use EncodeBits toBytes
+  {{
+  `` putWordN n word `` writes the `n` low-order bits of the {type Nat} `word`
+  to the output buffer.
+
+  # Examples
+
+    ```
+    toBytes do putWordN 32 18369614221520256751
+    ```
+
+    ```
+    toBytes do
+      putWordN 16 65261
+      putWordN 8 250
+      putWordN 4 12
+      putWordN 2 3
+      putWordN 1 1
+      putWordN 1 0
+    ```
+
+    ```
+    toBytes do
+      putWordN 4 10
+      putWordN 4 11
+      putWordN 4 12
+    ```
+  }}
+
+EncodeBits.toBytes : '{g, EncodeBits} () ->{g} Bytes
+EncodeBits.toBytes e =
+  use Bytes ++
+  use Nat + /
+  EncodeBits.encode
+    e
+    (const cases
+      EncoderState bytes word offset ->
+        bytes ++ Bytes.take ((offset + 7) / 8) (toBytesBigEndian word))
+
+EncodeBits.toBytes.doc : Doc
+EncodeBits.toBytes.doc =
+  use EncodeBits toBytes
+  {{
+  `` toBytes `` runs the encoder `e` and returns the resulting bytes. If the
+  encoder writes partial bytes at the end, those bits are padded with zeros up
+  to the next whole byte.
+
+  # Examples
+
+    ```
+    toBytes do
+      putWordN 4 10
+      putWordN 4 11
+    ```
+
+    ```
+    toBytes do
+      putWordN 4 10
+      putWordN 4 11
+      putWordN 4 12
+    ```
+  }}
+
+EncodeBits.toStream : '{g, EncodeBits} a ->{g, Stream Bytes} a
+EncodeBits.toStream e =
+  use Nat / >
+  EncodeBits.encode
+    e
+    (a gbn5l92tc91 ->
+      let
+        (EncoderState bytes word offset) = gbn5l92tc91
+        emit bytes
+        when (offset > 0) do
+          emit (Bytes.take (offset / 8) (toBytesBigEndian word))
+        a)
+
+EncodeBits.toStream.doc : Doc
+EncodeBits.toStream.doc =
+  use EncodeBits toStream
+  {{
+  `` toStream e `` runs the encoder `e` and writes the resulting bytes to the
+  output stream. If the encoder writes partial bytes at the end, those bits are
+  padded with zeros up to the next whole byte.
+
+  # Example
+
+    ```
+    Stream.toList do
+      toStream do
+        putWordN 64 1311768467294899695
+        putWordN 32 305419896
+        putWordN 16 4660
+        putWordN 8 18
+        putWordN 4 1
+        putWordN 2 0
+        putWordN 1 1
+    ```
+  }}
+
+README : Doc
+README =
+  use encode toBytes
+  use fromList impl
+  {{
+  This is a library for writing compositional binary codecs that can serialize
+  and/or deserialize Unison values to and from binary formats. Functions are
+  provided for writing and reading values to and from {type Bytes}, network
+  sockets, and files.
+
+  # Decoding binary data
+
+    The primary type for decoding binary data is the {type Decode} ability.
+
+    For example, we might want to decode {type Bytes} into a Unison type like
+    this one:
+
+        @source{type Book}
+
+    We can describe a decoder from binary data to this type as follows:
+
+        @source{decodeBook}
+
+    And if we have some binary data, we can decode it into a value of this
+    type:
+
+    ```
+    bytes =
+      0xs313938340047656f726765204f7277656c6c00079d012a3937383034353135323439333500000000
+    toEither do runDecode decodeBook bytes
+    ```
+
+    We get a nice error message if the data is not valid:
+
+    ```
+    bytes =
+      0xs313938340047656f726765204f7277656c6c00079d012a39373830343531353234393335
+    toEither do runDecode decodeBook bytes
+    ```
+
+    See {Decode.doc} for more information on constructing and using decoders.
+
+  # Encoding binary data
+
+    A binary encoder is a simply a function from a value to a {type Stream} of
+    {type Bytes}. For example, an encoder for the {type Book} type could look
+    like this:
+
+        @source{encodeBook}
+
+    If we have a book, we can encode it into a {type Stream} of {type Bytes}
+    with {encodeBook}:
+
+    ```
+    toBytes do
+      encodeBook (Book "1984" "George Orwell" +1949 298 "9780451524935" 0xs)
+    ```
+
+    Here we are accumulating the {type Stream} into a single {type Bytes}
+    buffer using {toBytes}, but you could for example send the {type Stream} to
+    a socket instead with {toSocket}.
+
+  # Bitwise decoding
+
+    The {type DecodeBits} type is a decoder for data formats with fields that
+    are not a whole number of bytes in length.
+
+    For example, the Internet Protocol (IP) header format is:
+
+    ``` raw
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |Version|  IHL  |Type of Service|          Total Length         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |         Identification        |Flags|      Fragment Offset    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |  Time to Live |    Protocol   |         Header Checksum       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                       Source Address                          |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Destination Address                        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Options                    |    Padding    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    ```
+
+    The `Version` and `IHL` fields in this header are 4-bit fields, the `Flags`
+    field is 3 bits, and the `Fragment Offset` field is 13 bits.
+
+    We can describe this header format using a decoder like this:
+
+        @source{decodeIpHeader}
+
+    We can then decode {type Bytes} containing an IP header into a Unison value
+    like this:
+
+        @source{rawIpHeader}
+
+    ```
+    toEither do Decode.fromBytes rawIpHeader decodeIpHeader
+    ```
+
+  # Bitwise encoding
+
+    The type {type EncodeBits} is an encoder for data formats with fields that
+    are not a whole number of bytes in length.
+
+    We can encode the IP header format above using an encoder like this:
+
+        @source{encodeIpHeader}
+
+    We can then encode an {IpHeader} into {type Bytes}:
+
+    ```
+    toBytes do encodeIpHeader ipHeader
+    ```
+  }}
+
+README.encodeBook : Book ->{Stream Bytes} ()
+README.encodeBook = cases
+  Book title author year pages isbn coverImage ->
+    use encode utf8
+    use fromList impl
+    utf8 title
+    emit 0xs00
+    utf8 author
+    emit 0xs00
+    encode.int16be year
+    encode.nat16be pages
+    encode.ascii isbn
+    encode.nat32be (Bytes.size coverImage)
+    emit coverImage
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  * Fixed a bug in {someDigits} where it would try to consume the entire input.
+    It now stops at the first non-digit character.
+  }}
+
+up.base.test.ensureFailure : '{g, Exception} t ->{g, Exception} ()
+up.base.test.ensureFailure t = catch t |> (cases
+  Left e  -> ()
+  Right a -> test.raiseFailure "Expected a failure" a)
+
+up.base.test.ensureThrows : '{g, Throw e} t ->{g, Exception} ()
+up.base.test.ensureThrows t = toEither t |> (cases
+  Left e  -> ()
+  Right a -> test.raiseFailure "Expected a failure" a)
+
+up.Char.toUtf8 : Char -> Bytes
+up.Char.toUtf8 = Text.toUtf8 << Char.toText
+
+withConnection :
+  Connection
+  -> '{g, EncodeBits, Decode, DecodeBits, Stream Bytes} r
+  ->{g, IO, Exception} r
+withConnection conn f = toConnection conn do fromConnection conn f
+
+withConnection.doc : Doc
+withConnection.doc =
+  {{
+  `` withConnection conn f `` reads the bytes produced by the stream `f` and
+  writes them to the connection `conn`, and simultaneously reads bytes from the
+  connection and decodes them using the decoder `f`, returning the decoded
+  value or throwing an {type Exception} if the decoder failed.
+
+  The connection must be connected, readable and writable.
+
+  This function may block until enough bytes are available on the connection to
+  decode the value.
+  }}
+
+withSocket :
+  Nat
+  -> Socket
+  -> '{g, EncodeBits, Decode, DecodeBits, Stream Bytes} r
+  ->{g, IO, Exception} r
+withSocket receiveSize socket f =
+  withConnection (sizedSocket receiveSize socket) f
+
+withSocket.doc : Doc
+withSocket.doc =
+  {{
+  `` withSocket size socket c `` runs the computation `c` which encodes and
+  decodes data to and from the socket. The maximum receive size for the socket
+  is given by `size`.
+  }}
