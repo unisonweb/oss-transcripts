@@ -1,6 +1,6 @@
 # Xml
 
-This library provides various utilities for extracting data from XML documents, and editing them:
+This library provides various utilities for extracting data from XML documents, and editing them.
 
 ## Library contents list
 
