@@ -1,0 +1,4183 @@
+type Cursor
+  = Cursor ('{Stream XMLEvent} ()) XMLEvent ('{Stream XMLEvent} ())
+
+type Soup
+  = Soup Cursor
+
+type XMLError
+  = ParseError Nat Text
+  | StructureError Text
+
+type XMLEvent
+  = XMLDecl Nat Text Text Boolean
+  | Attribute Nat Text Text
+  | Processing Nat Text Text
+  | Text Nat Text
+  | OpenTag Nat Text
+  | CloseTag Nat Text
+  | Comment Nat Text
+  | CData Nat Text
+  | Doctype Nat Text
+  | Error Nat Text
+  | DocumentStart Nat
+  | DocumentEnd Nat
+
+type XMLNode
+  = XMLText Text
+  | XMLCData Text
+  | XMLElement Text (Map Text Text) [XMLNode]
+
+Cursor.collectAttributes :
+  Map Text Text -> Cursor ->{Throw XMLError} (Map Text Text, Cursor)
+Cursor.collectAttributes acc c =
+  match Cursor.current c with
+    Attribute _ name value ->
+      use Text ++
+      acc' = Map.insert name value acc
+      match nextEvent c with
+        None ->
+          throw
+            (StructureError
+              ("Unexpected end of stream after attribute " ++ name ++ ""))
+        Some c -> Cursor.collectAttributes acc' c
+    Error loc msg -> throw (ParseError loc msg)
+    _ -> (acc, c)
+
+Cursor.collectChildren :
+  Text -> [XMLNode] -> Cursor ->{Throw XMLError} ([XMLNode], Cursor)
+Cursor.collectChildren name acc c =
+  use Cursor collectChildren current
+  use List :+
+  use Text ++ ==
+  go acc c =
+    match nextEvent c with
+      None ->
+        throw
+          (StructureError
+            ("Unexpected end of stream while collecting children of element <"
+              ++ name
+              ++ ">. Last event: "
+              ++ toDebugText (current c)))
+      Some c -> collectChildren name acc c
+  match current c with
+    Text _ text -> go (acc :+ XMLText text) c
+    CData _ text -> go (acc :+ XMLCData text) c
+    OpenTag i childName ->
+      (child, c') = Cursor.parseNode c
+      match c' with
+        None ->
+          throw
+            (StructureError
+              ("Unexpected end of stream while collecting more children of element <"
+                ++ name
+                ++ ">"))
+        Some c -> collectChildren name (acc :+ child) c
+    CloseTag _ closeName| closeName == name  -> (acc, c)
+    Error loc msg -> throw (ParseError loc msg)
+    _ -> go acc c
+
+Cursor.current : Cursor -> XMLEvent
+Cursor.current = cases Cursor _ current _ -> current
+
+Cursor.current.modify : (XMLEvent ->{g} XMLEvent) -> Cursor ->{g} Cursor
+Cursor.current.modify f = cases
+  Cursor preceding current following -> Cursor preceding (f current) following
+
+Cursor.current.set : XMLEvent -> Cursor -> Cursor
+Cursor.current.set current1 = cases
+  Cursor preceding _ following -> Cursor preceding current1 following
+
+Cursor.currentList : Cursor -> [XMLEvent]
+Cursor.currentList = currentStream >> Stream.toList
+
+Cursor.currentList.doc : Doc
+Cursor.currentList.doc =
+  {{
+  Returns the list of events that follow the current event, including the
+  current event.
+
+  # Example
+
+    ```
+    fromXML "<a><b><c/></b></a>" |> currentList
+    ```
+
+  # See also
+
+    * {currentStream} which returns the elements as a lazy stream.
+    * {currentStream!} which emits the elements onto the stream in the present
+      scope.
+  }}
+
+Cursor.currentStream : Cursor -> '{Stream XMLEvent} ()
+Cursor.currentStream c =
+  use Stream +:
+  Cursor.current c +: following c
+
+Cursor.currentStream.doc : Doc
+Cursor.currentStream.doc = {{ The lazy version of {currentStream!}. }}
+
+Cursor.currentStream! : Cursor ->{Stream XMLEvent} ()
+Cursor.currentStream! c =
+  use Stream +:
+  (+:) (Cursor.current c) (following c) ()
+
+Cursor.currentStream!.doc : Doc
+Cursor.currentStream!.doc =
+  {{
+  Returns the stream of events that follow the current event, including the
+  current event.
+
+  # Example
+
+    ```
+    fromXML "<a><b><c/></b></a>" |> delay currentStream! |> toDelayedList
+    ```
+
+  # See also
+
+    * {currentList} which returns the events as a list.
+  }}
+
+Cursor.doc : Doc
+Cursor.doc =
+  {{
+  A {type Cursor} represents a position in an XML document. It consists of the
+  events that precede the current event, the current event, and the events that
+  follow the current event.
+
+  The {type Cursor} type provides a low-level interface to XML events, allowing
+  you to move through individual events and extract information from them
+  directly.
+
+  For a higher-level interface that operates on the level of XML nodes, see the
+  {type Soup} type.
+
+  For an even lower-level interface to the stream of XML events, see
+  {eventParser.parse}.
+
+  # Constructing a cursor
+
+    You can construct a cursor from a {type Stream} of {type XMLEvent} values:
+
+        @signature{Cursor.fromStream}
+
+    Or from a {type Text} containing an XML document:
+
+        @signature{fromXML}     @signature{fromXML}
+
+  # Extracting information from a cursor
+
+    Get the current event:
+
+        @signature{Cursor.current}
+
+    Get the stream of events that precede the current event, in reverse order:
+
+        @signature{preceding}
+
+    Get the stream of events that follow the current event, in the order that
+    they appear in the document:
+
+        @signature{following}
+
+    Get the stream of remaining events, indcluding the current event:
+
+        @signature{currentStream}     @signature{currentStream!}
+
+    Parse the current event (and possibly its surrounding context) as an XML
+    node:
+
+        @signature{parseNode}
+
+  # Moving the cursor
+
+    Move to the next event:
+
+        @signature{nextEvent}     @signature{nextEvent!}
+
+    Move to the previous event:
+
+        @signature{prevEvent}     @signature{prevEvent!}
+
+    Move to the next event that satisfies a given predicate:
+
+        @signature{Cursor.skipUntil}     @signature{skipUntil!}
+
+    Move to the previous event that satisfies a given predicate:
+
+        @signature{Cursor.rewindUntil}     @signature{rewindUntil!}
+
+    Move the cursor to the {OpenTag} event of the parent node of the node
+    represented by the current event:
+
+        @signature{up}
+
+  # Effectful operations on a cursor
+
+    Apply an effectful function to the next event in the stream:
+
+        @signature{withNextEvent}
+  }}
+
+Cursor.empty : Cursor
+Cursor.empty = Cursor (do ()) (DocumentStart 0) do emit (DocumentEnd 0)
+
+Cursor.empty.doc : Doc
+Cursor.empty.doc =
+  {{
+  The empty cursor, which contains a {DocumentStart} event immediately followed
+  by {DocumentEnd}.
+
+  # Example
+
+    ```
+    Cursor.empty |> currentList
+    ```
+  }}
+
+Cursor.findEnclosingOpen : Text -> Cursor ->{Throw XMLError} (Nat, Cursor)
+Cursor.findEnclosingOpen name c =
+  use Nat + -
+  use Text ++
+  go : Nat -> Nat -> Cursor -> (Nat, Cursor)
+  go need skipped c =
+    match (Cursor.current c, prevEvent c) with
+      (_, None) ->
+        throw
+          (StructureError
+            ("Unexpected beginning of stream looking for opening tag for <"
+              ++ name
+              ++ ">."))
+      (OpenTag _ oName, _)| oName Text.== name && need Nat.== 0  ->
+        (skipped, c)
+      (o@(OpenTag _ oName), Some cnext)| oName Text.== name  ->
+        go (need - 1) (skipped + 1) cnext
+      (o@(CloseTag _ cname), Some cnext)| cname Text.== name  ->
+        go (need + 1) (skipped + 1) cnext
+      (x, Some cnext) -> go need (skipped + 1) cnext
+  go 0 0 c
+
+Cursor.findEnclosingOpen.doc : Doc
+Cursor.findEnclosingOpen.doc =
+  {{
+  Finds the enclosing opening tag with the given name, skipping over any
+  open/close pairs that it finds with the same name. Returns the number of
+  events skipped and the cursor at the matching opening tag.
+
+  ```
+  Abort.toBug do
+    Throw.toBug do
+      (Cursor.fromStream do eventParser.parse "<a><a/><b>Hello</b></a>")
+        |> skipUntil! isXMLText
+        |> findEnclosingOpen "a"
+        |> at2
+        |> currentStream
+        |> Stream.toList
+  ```
+  }}
+
+Cursor.findMatchingClose : Text -> Cursor ->{Throw XMLError} (Nat, Cursor)
+Cursor.findMatchingClose name c =
+  use Nat + -
+  use Text ++
+  go : Nat -> Nat -> Cursor -> (Nat, Cursor)
+  go need skipped c =
+    match (Cursor.current c, nextEvent c) with
+      (_, None) ->
+        throw
+          (StructureError
+            ("Unexpected end of stream looking for closing tag for <"
+              ++ name
+              ++ ">."))
+      (o@(CloseTag _ cname), Some cnext)
+        | cname Text.== name && need Nat.== 0  -> (skipped + 1, cnext)
+        | cname Text.== name                   ->
+          go (need - 1) (skipped + 1) cnext
+      (o@(OpenTag _ cname), Some cnext)| cname Text.== name  ->
+        go (need + 1) (skipped + 1) cnext
+      (x, Some cnext) -> go need (skipped + 1) cnext
+  go 0 0 c
+
+Cursor.findMatchingClose.doc : Doc
+Cursor.findMatchingClose.doc =
+  {{
+  Finds the matching {CloseTag} event for a given tag name. The cursor must be
+  positioned after an {OpenTag} event for the given name. The cursor is
+  advanced past a {CloseTag} event for that name, skipping a matching number of
+  {OpenTag} and {CloseTag} events for the same name, to ensure the correct
+  matching tag is found.
+
+  Returns the number of events skipped, together with the cursor positioned on
+  the event after the matching {CloseTag}.
+  }}
+
+Cursor.following : Cursor -> '{Stream XMLEvent} ()
+Cursor.following = cases Cursor _ _ following -> following
+
+Cursor.following.modify :
+  ('{Stream XMLEvent} () ->{g} '{g1, Stream XMLEvent} ())
+  -> Cursor
+  ->{g} Cursor
+Cursor.following.modify f = cases
+  Cursor preceding current following -> Cursor preceding current (f following)
+
+Cursor.following.set : '{g, Stream XMLEvent} () -> Cursor -> Cursor
+Cursor.following.set following1 = cases
+  Cursor preceding current _ -> Cursor preceding current following1
+
+Cursor.fromStream : '{Stream XMLEvent} () -> Cursor
+Cursor.fromStream s = match Stream.uncons s with
+  Left _        -> Cursor.empty
+  Right (e, s') -> Cursor (do ()) e s'
+
+Cursor.fromStream.doc : Doc
+Cursor.fromStream.doc =
+  {{
+  Constructs a {type Cursor} from a {type Stream} of {type XMLEvent} values.
+  The cursor is positioned at the first event in the stream.
+
+  If the stream is empty, the {type Cursor} will contain a {DocumentStart}
+  event immediately followed by {DocumentEnd}.
+
+  # Example
+
+    ```
+    (Cursor.fromStream do eventParser.parse "<a><b><c/></b></a>")
+      |> currentList
+    ```
+  }}
+
+Cursor.fromXML : Text -> Cursor
+Cursor.fromXML = delay eventParser.parse >> Cursor.fromStream
+
+Cursor.fromXML.doc : Doc
+Cursor.fromXML.doc =
+  {{
+  Parses a given {type Text} string as XML and constructs a {type Cursor} for
+  navigating the XML events, with the cursor set to the first event.
+
+  # Example
+
+    ```
+    fromXML "<a><b><c/></b></a>" |> currentList
+    ```
+  }}
+
+Cursor.nextEvent : Cursor -> Optional Cursor
+Cursor.nextEvent c = match Stream.uncons (following c) with
+  Left _       -> None
+  Right (e, s) -> Some (Cursor (Cursor.current c Stream.+: preceding c) e s)
+
+Cursor.nextEvent.doc : Doc
+Cursor.nextEvent.doc =
+  {{
+  Advances the cursor to the next {type XMLEvent} in the stream.
+
+  Returns {None} if there is no next event.
+
+  # Example
+
+    ```
+    toOptional! do fromXML "<a><b><c/></b></a>" |> nextEvent! |> currentList
+    ```
+
+  # See also
+
+    * {nextEvent!} for a version of this that uses {type Abort} instead of
+      {type Optional}.
+    * {prevEvent} to rewind to the previous event.
+  }}
+
+Cursor.nextEvent! : Cursor ->{Abort} Cursor
+Cursor.nextEvent! c = match Stream.uncons (following c) with
+  Left _       -> abort
+  Right (e, s) -> Cursor (Cursor.current c Stream.+: preceding c) e s
+
+Cursor.nextEvent!.doc : Doc
+Cursor.nextEvent!.doc =
+  {{
+  Advances the cursor to the next {type XMLEvent} in the stream.
+
+  Calls {abort} if there is no next event.
+
+  # Example
+
+    ```
+    toOptional! do fromXML "<a><b><c/></b></a>" |> nextEvent! |> Cursor.current
+    ```
+
+  # See also
+
+    * {nextEvent} for a version of this that uses {type Optional} instead of
+      {type Abort}.
+    * {prevEvent!} to rewind to the previous event.
+  }}
+
+Cursor.parseNode : Cursor ->{Throw XMLError} (XMLNode, Optional Cursor)
+Cursor.parseNode cursor =
+  match Cursor.current cursor with
+    OpenTag ix name ->
+      (attributes, c') =
+        match nextEvent cursor with
+          None ->
+            throw
+              (StructureError
+                ("Unexpected end of stream after opening tag <"
+                  Text.++ name
+                  Text.++ "> at offset "
+                  Text.++ Nat.toText ix
+                  Text.++ "."))
+          Some c -> collectAttributes Map.empty c
+      (children, close) = Cursor.collectChildren name [] c'
+      (XMLElement name attributes children, nextEvent close)
+    Text _ t -> (XMLText t, nextEvent cursor)
+    CData _ t -> (XMLCData t, nextEvent cursor)
+    s@(DocumentStart _) ->
+      match Cursor.skipUntil isOpenTag cursor with
+        None ->
+          throw
+            (StructureError
+              "Unexpected end of stream after document start event.")
+        Some c -> Cursor.parseNode c
+    s@(XMLDecl _ _ _ _) ->
+      match Cursor.skipUntil isOpenTag cursor with
+        None ->
+          throw
+            (StructureError "Unexpected end of stream after XML declaration.")
+        Some c -> Cursor.parseNode c
+    Error loc msg -> throw (ParseError loc msg)
+    e ->
+      throw
+        (StructureError
+          ("No node at cursor. Current event: " Text.++ toDebugText e))
+
+Cursor.preceding : Cursor -> '{Stream XMLEvent} ()
+Cursor.preceding = cases Cursor preceding _ _ -> preceding
+
+Cursor.preceding.modify :
+  ('{Stream XMLEvent} () ->{g} '{g1, Stream XMLEvent} ())
+  -> Cursor
+  ->{g} Cursor
+Cursor.preceding.modify f = cases
+  Cursor preceding current following -> Cursor (f preceding) current following
+
+Cursor.preceding.set : '{g, Stream XMLEvent} () -> Cursor -> Cursor
+Cursor.preceding.set preceding1 = cases
+  Cursor _ current following -> Cursor preceding1 current following
+
+Cursor.prevEvent : Cursor -> Optional Cursor
+Cursor.prevEvent c = toOptional! do prevEvent! c
+
+Cursor.prevEvent.doc : Doc
+Cursor.prevEvent.doc =
+  {{
+  Rewinds the cursor to the previous {type XMLEvent} in the stream.
+
+  Returns {None} if there is no previous event.
+
+  # Example
+
+    ```
+    (toOptional! do fromXML "<a><b><c/></b></a>" |> nextEvent! |> nextEvent!)
+      |> Optional.flatMap prevEvent
+      |> Optional.map currentList
+    ```
+
+  # See also
+
+    * {prevEvent!} for a version of this that uses {type Abort} instead of
+      {type Optional}.
+    * {nextEvent} to advance to the next event.
+  }}
+
+Cursor.prevEvent! : Cursor ->{Abort} Cursor
+Cursor.prevEvent! c = match Stream.uncons (preceding c) with
+  Left _       -> abort
+  Right (e, s) -> Cursor s e (currentStream c)
+
+Cursor.prevEvent!.doc : Doc
+Cursor.prevEvent!.doc =
+  {{
+  Rewinds the cursor to the previous {type XMLEvent} in the stream.
+
+  Calls {abort} if there is no previous event.
+
+  # Example
+
+    ```
+    toOptional! do
+      fromXML "<a><b><c/></b></a>"
+        |> nextEvent!
+        |> nextEvent!
+        |> prevEvent!
+        |> currentList
+    ```
+
+  # See also
+
+    * {prevEvent} for a version of this that uses {type Optional} instead of
+      {type Abort}.
+    * {nextEvent} to advance to the next event.
+  }}
+
+Cursor.rewindToOpen : Cursor ->{Throw XMLError} Cursor
+Cursor.rewindToOpen c =
+  match Cursor.current c with
+    CloseTag _ name ->
+      match prevEvent c with
+        None ->
+          throw
+            (StructureError
+              ("Unexpected beginning of stream looking for opening tag for <"
+                Text.++ name
+                Text.++ ">."))
+        Some c -> at2 (findEnclosingOpen name c)
+    x ->
+      throw
+        (StructureError
+          ("Tried to rewind to the matching opening tag for an event that is not a closing tag: "
+            Text.++ toDebugText x))
+
+Cursor.rewindToOpen.doc : Doc
+Cursor.rewindToOpen.doc =
+  {{
+  Rewinds the {type Cursor} to the matching opening tag for the current closing
+  tag. If the current event is not a closing tag, this throws an
+  {type XMLError}.
+
+  # Example
+
+    ```
+    Abort.toBug do
+      Throw.toBug do
+        (Cursor.fromStream do eventParser.parse "<a><b>Hello</b></a>")
+          |> skipUntil! (isCloseTagNamed "b")
+          |> rewindToOpen
+          |> currentStream
+          |> Stream.toList
+    ```
+  }}
+
+Cursor.rewindUntil : (XMLEvent ->{g} Boolean) -> Cursor ->{g} Optional Cursor
+Cursor.rewindUntil p c =
+  loop c =
+    if p (Cursor.current c) then Some c
+    else
+      match prevEvent c with
+        None    -> None
+        Some c' -> loop c'
+  loop c
+
+Cursor.rewindUntil.doc : Doc
+Cursor.rewindUntil.doc =
+  {{
+  Rewinds the cursor to the previous event that satisfies the given predicate.
+
+  Returns {None} if there is no such event.
+
+  # Example
+
+    ```
+    x =
+      toOptional! do
+        fromXML "<a><b><c/></b></a>" |> skipUntil! (isCloseTagNamed "a")
+    c = Optional.flatMap (Cursor.rewindUntil (isOpenTagNamed "b")) x
+    Optional.map Cursor.current c
+    ```
+
+  # See also
+
+    * {rewindUntil!} for a version of this that uses {type Abort} instead of
+      {type Optional}.
+    * {Cursor.skipUntil} to advance the stream to the next event that satisfies
+      a predicate.
+    * {prevEvent} to rewind to the previous event.
+  }}
+
+Cursor.rewindUntil! : (XMLEvent -> Boolean) -> Cursor ->{Abort} Cursor
+Cursor.rewindUntil! p c =
+  loop c =
+    if p (Cursor.current c) then c
+    else
+      match prevEvent c with
+        None    -> abort
+        Some c' -> loop c'
+  loop c
+
+Cursor.rewindUntil!.doc : Doc
+Cursor.rewindUntil!.doc =
+  {{
+  Rewinds the cursor to the previous event that satisfies the given predicate.
+
+  Calls {abort} if there is no such event.
+
+  # Example
+
+    ```
+    toOptional! do
+      fromXML "<a><b><c/></b></a>"
+        |> skipUntil! (isCloseTagNamed "a")
+        |> rewindUntil! (isOpenTagNamed "b")
+        |> currentList
+    ```
+
+  # See also
+
+    * {Cursor.rewindUntil} for a version of this that uses {type Optional}
+      instead of {type Abort}.
+    * {skipUntil!} to advance the stream to the next event that satisfies a
+      predicate.
+    * {prevEvent!} to rewind to the previous event.
+  }}
+
+Cursor.skipToClose : Cursor ->{Throw XMLError} Cursor
+Cursor.skipToClose c =
+  match Cursor.current c with
+    OpenTag _ name ->
+      match nextEvent c with
+        None ->
+          throw
+            (StructureError
+              ("Unexpected end of stream looking for closing tag for <"
+                Text.++ name
+                Text.++ ">."))
+        Some c -> at2 (findMatchingClose name c)
+    x ->
+      throw
+        (StructureError
+          ("Tried to skip to the matching closing tag for an event that is not an opening tag: "
+            Text.++ toDebugText x))
+
+Cursor.skipToClose.doc : Doc
+Cursor.skipToClose.doc =
+  {{
+  Skips the {type Cursor} to just __after__ the matching closing tag for the
+  current opening tag. If the current event is not an opening tag, this throws
+  an {type XMLError}.
+
+  # Example
+
+    ```
+    Abort.toBug do
+      Throw.toBug do
+        (Cursor.fromStream do eventParser.parse "<a><b>Hello</b></a>")
+          |> skipUntil! (isOpenTagNamed "b")
+          |> skipToClose
+          |> currentStream
+          |> Stream.toList
+    ```
+  }}
+
+Cursor.skipUntil : (XMLEvent ->{g} Boolean) -> Cursor ->{g} Optional Cursor
+Cursor.skipUntil p c =
+  loop c =
+    if p (Cursor.current c) then Some c
+    else
+      match nextEvent c with
+        None    -> None
+        Some c' -> loop c'
+  loop c
+
+Cursor.skipUntil.doc : Doc
+Cursor.skipUntil.doc =
+  {{
+  Advances the cursor to the next event that satisfies the given predicate.
+
+  Returns {None} if there is no such event.
+
+  # Example
+
+    ```
+    x = fromXML "<a><b><c/></b></a>"
+    c = Cursor.skipUntil (isOpenTagNamed "b") x
+    Optional.map Cursor.current c
+    ```
+
+  # See also
+
+    * {skipUntil!} for a version of this that uses {type Abort} instead of
+      {type Optional}.
+    * {nextEvent} to advance to the next event.
+  }}
+
+Cursor.skipUntil! : (XMLEvent -> Boolean) -> Cursor ->{Abort} Cursor
+Cursor.skipUntil! p c =
+  loop c =
+    if p (Cursor.current c) then c
+    else
+      match nextEvent c with
+        None    -> abort
+        Some c' -> loop c'
+  loop c
+
+Cursor.skipUntil!.doc : Doc
+Cursor.skipUntil!.doc =
+  {{
+  Advances the cursor to the next event that satisfies the given predicate.
+
+  Calls {abort} if there is no such event.
+
+  # Example
+
+    ```
+    toOptional! do
+      fromXML "<a><b><c/></b></a>"
+        |> skipUntil! (isOpenTagNamed "b")
+        |> Cursor.current
+    ```
+
+  # See also
+
+    * {Cursor.skipUntil} for a version of this that uses {type Optional}
+      instead of {type Abort}.
+    * {nextEvent!} to advance to the next event.
+  }}
+
+Cursor.up : Cursor -> Optional Cursor
+Cursor.up c =
+  use Cursor current
+  go closeds c = match current c with
+    XMLDecl _ _ _ _ -> None
+    DocumentStart _ -> None
+    _               ->
+      match prevEvent c with
+        None   -> None
+        Some c ->
+          match current c with
+            OpenTag _ name  | Boolean.not (Set.contains name closeds) -> Some c
+            CloseTag _ name -> go (Set.insert name closeds) c
+            XMLDecl _ _ _ _ -> Some c
+            DocumentStart _ -> Some c
+            _               -> go closeds c
+  go Set.empty c
+
+Cursor.up.doc : Doc
+Cursor.up.doc =
+  {{
+  Moves the cursor to the parent of the current node. If the current node is
+  the root node, returns {None}.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    withXML xmlDoc (descendants >> Soup.toXML)
+    ```
+  }}
+
+Cursor.withNextEvent : (Cursor ->{e} ()) -> Cursor ->{e} ()
+Cursor.withNextEvent f c = match nextEvent c with
+  None    -> ()
+  Some c' -> f c'
+
+Cursor.withNextEvent.doc : Doc
+Cursor.withNextEvent.doc =
+  {{
+  Applies an effectful function after advancing the {type Cursor} by one event.
+  }}
+
+decodeEntities : Text -> Text
+decodeEntities t =
+  use Char fromNat toText
+  use Optional getOrElse
+  use Pattern + capture join
+  use Text drop
+  f = cases
+    ["amp"] -> "&"
+    ["lt"] -> "<"
+    ["gt"] -> ">"
+    ["quot"] -> "\""
+    ["apos"] -> "'"
+    [hex]| startsWith "#x" hex  ->
+      Nat.fromHex (drop 2 hex)
+        |> getOrBug ("invalid hex unicode character reference", hex)
+        |> fromNat
+        |> Optional.map toText
+        |> getOrElse ("#x" Text.++ hex)
+    [dec]| startsWith "#" dec  ->
+      Nat.fromText (drop 1 dec)
+        |> getOrBug ("invalid decimal unicode character reference", dec)
+        |> fromNat
+        |> Optional.map toText
+        |> getOrElse ("#" Text.++ dec)
+    x -> bug ("invalid entity reference", x)
+  p =
+    join
+      ([literal "&"]
+        List.++ [ List.foldRight
+                    (+)
+                    (capture (join [literal "#", some patterns.digit])
+                      + capture (join [literal "#x", some patterns.hexDigit]))
+                    (List.map
+                      (capture << literal) ["amp", "lt", "gt", "quot", "apos"])
+                ]
+        List.++ [literal ";"])
+  substituteAll p f t
+
+decodeEntities.doc : Doc
+decodeEntities.doc =
+  {{
+  {{ docExample 1 do text -> decodeEntities text }} decodes XML entity
+  references in `text` and returns the decoded string. XML entity references
+  begin with `&` and end with `;`.
+
+  {{
+  docCallout
+    (Some {{ ⚠️ }})
+    {{
+    {{ (docLink (docEmbedTermLink do decodeEntities)) }} only unescapes entity
+    references. It assumes that the provided string doesn't contain reserved
+    XML characters such as `<` that are unescaped.
+    }} }}
+
+  # Examples
+
+    ```
+    decodeEntities "I &lt;3 you."
+    ```
+
+    ```
+    decodeEntities "This string has no reserved characters."
+    ```
+
+    ```
+    decodeEntities
+      "This decodes an entity reference like &amp;, a numeric reference like &#38;, or a hex reference like &#x26;"
+    ```
+  }}
+
+test> decodeEntities.tests =
+  test.verify do
+    (input, expected) =
+      each
+        [ ("", "")
+        , ("a", "a")
+        , ("abc", "abc")
+        , ( "&amp;a&lt;b&gt;c&quot;d&apos;e&#38;&#252;&#9792;&#xfc;&#x2642;;"
+          , "&a<b>c\"d'e&ü♀ü♂;"
+          )
+        , ( "&amp;a&lt;b&gt;c&quot;d&apos;e&#38;&#252;&#9792;&#xfc;&#x2642;"
+          , "&a<b>c\"d'e&ü♀ü♂"
+          )
+        , ( "0&amp;a&lt;b&gt;c&quot;d&apos;e&#38;&#252;&#9792;&#xfc;&#x2642;;"
+          , "0&a<b>c\"d'e&ü♀ü♂;"
+          )
+        , ( "0&amp;a&lt;b&gt;c&quot;d&apos;e&#38;&#252;&#9792;&#xfc;&#x2642;"
+          , "0&a<b>c\"d'e&ü♀ü♂"
+          )
+        , ("&a", "&a")
+        , ("abc&def", "abc&def")
+        , ("&z;", "&z;")
+        , ("abc&a0x;", "abc&a0x;")
+        , ("abcd&;", "abcd&;")
+        , ("abc&#a0x;", "abc&#a0x;")
+        ]
+    ensureEqual expected (decodeEntities input)
+
+encodeEntities : Text -> Text
+encodeEntities =
+  replaceAll "&" "&amp;"
+    >> replaceAll "<" "&lt;"
+    >> replaceAll ">" "&gt;"
+    >> replaceAll "\"" "&quot;"
+    >> replaceAll "'" "&apos;"
+
+encodeEntities.doc : Doc
+encodeEntities.doc =
+  {{
+  Encodes XML entities in a string, replacing the following characters with
+  their respective entities:
+
+  * `&` with `&amp;`
+  * `<` with `&lt;`
+  * `>` with `&gt;`
+  * `"` with `&quot;`
+  * `'` with `&apos;`
+
+  # Example
+
+    ```
+    encodeEntities "<item>Hi there</item>"
+    ```
+  }}
+
+eventParser.lexer.patterns.attribute : Pattern Text
+eventParser.lexer.patterns.attribute =
+  Pattern.join [nameTokens.name, Pattern.capture patterns.eq, attValue]
+
+eventParser.lexer.patterns.cdata : Pattern Text
+eventParser.lexer.patterns.cdata =
+  Pattern.join
+    [ literal "<![CDATA["
+    , Pattern.capture (charUntil xmlChar "]]")
+    , literal "]]>"
+    ]
+
+eventParser.lexer.patterns.charData : Pattern Text
+eventParser.lexer.patterns.charData =
+  many (patterns.char (Class.not (in "<&")))
+
+eventParser.lexer.patterns.comment : Pattern Text
+eventParser.lexer.patterns.comment =
+  Pattern.join
+    [ literal "<!--"
+    , Pattern.capture (charUntil Class.any "-->")
+    , literal "-->"
+    ]
+
+eventParser.lexer.patterns.dtd.externalDoctype : Pattern Text
+eventParser.lexer.patterns.dtd.externalDoctype =
+  use Pattern join optional
+  Pattern.capture
+    (join
+      [ literal "<!DOCTYPE"
+      , whiteSpace
+      , nameTokens.name
+      , optional (join [whiteSpace, externalID])
+      , optional whiteSpace
+      , literal ">"
+      ])
+
+eventParser.lexer.patterns.dtd.internalDoctypeStart : Pattern Text
+eventParser.lexer.patterns.dtd.internalDoctypeStart =
+  use Pattern join optional
+  join
+    [ literal "<!DOCTYPE"
+    , whiteSpace
+    , nameTokens.name
+    , optional (join [whiteSpace, externalID])
+    , optional whiteSpace
+    , optional (literal "[")
+    ]
+
+eventParser.lexer.patterns.emptyElemTag : Pattern Text
+eventParser.lexer.patterns.emptyElemTag =
+  use Pattern join
+  join
+    [ literal "<"
+    , nameTokens.name
+    , many (join [Pattern.capture whiteSpace, patterns.attribute])
+    , Pattern.optional whiteSpace
+    , literal "/>"
+    ]
+
+eventParser.lexer.patterns.encName : Pattern Text
+eventParser.lexer.patterns.encName =
+  use Class + range
+  Pattern.capture
+    (Pattern.join
+      [ asciiLetter
+      , many
+          (patterns.char (range ?a ?z + range ?A ?Z + range ?0 ?9 + in "_-"))
+      ])
+
+eventParser.lexer.patterns.encodingDecl : Pattern Text
+eventParser.lexer.patterns.encodingDecl =
+  use Pattern + join
+  join
+    [ whiteSpace
+    , literal "encoding"
+    , patterns.eq
+    , join [literal "'", encName, literal "'"]
+        + join [literal "\"", encName, literal "\""]
+    ]
+
+eventParser.lexer.patterns.eq : Pattern Text
+eventParser.lexer.patterns.eq =
+  use Pattern optional
+  Pattern.join [optional whiteSpace, literal "=", optional whiteSpace]
+
+eventParser.lexer.patterns.etag : Pattern Text
+eventParser.lexer.patterns.etag =
+  Pattern.join
+    [literal "</", nameTokens.name, Pattern.optional whiteSpace, literal ">"]
+
+eventParser.lexer.patterns.externalID : Pattern Text
+eventParser.lexer.patterns.externalID =
+  use Pattern + join
+  join [literal "SYSTEM", whiteSpace, systemLiteral]
+    + join
+      [literal "PUBLIC", whiteSpace, pubidLiteral, whiteSpace, systemLiteral]
+
+eventParser.lexer.patterns.literals.attValue : Pattern Text
+eventParser.lexer.patterns.literals.attValue =
+  use Class not
+  use Pattern + capture join
+  use patterns char
+  join
+    [ literal "\""
+    , capture (many (reference + char (not (in "\"<"))))
+    , literal "\""
+    ]
+    + join
+      [ literal "'"
+      , capture (many (reference + char (not (in "'<"))))
+      , literal "'"
+      ]
+
+eventParser.lexer.patterns.literals.pubidChar : Class
+eventParser.lexer.patterns.literals.pubidChar =
+  use Class +
+  Class.hexDigit + in "-'()+,./:=?;!*#@$_% \r\n"
+
+eventParser.lexer.patterns.literals.pubidLiteral : Pattern Text
+eventParser.lexer.patterns.literals.pubidLiteral =
+  use Class -
+  use Pattern + capture join
+  use patterns char
+  join [literal "\"", capture (many (char pubidChar)), literal "\""]
+    + join
+      [literal "'", capture (many (char (pubidChar - in "'"))), literal "'"]
+
+eventParser.lexer.patterns.literals.systemLiteral : Pattern Text
+eventParser.lexer.patterns.literals.systemLiteral =
+  use Class not
+  use Pattern + capture join
+  use patterns char
+  join [literal "\"", capture (many (char (not (in "\"")))), literal "\""]
+    + join [literal "'", capture (many (char (not (in "'")))), literal "'"]
+
+eventParser.lexer.patterns.name.doc : Doc
+eventParser.lexer.patterns.name.doc =
+  {{ A {type Pattern} that matches an XML name. }}
+
+eventParser.lexer.patterns.nameTokens.name : Pattern Text
+eventParser.lexer.patterns.nameTokens.name =
+  use patterns char
+  Pattern.capture (Pattern.join [char nameStartChar, many (char nameChar)])
+
+eventParser.lexer.patterns.nameTokens.nameChar : Class
+eventParser.lexer.patterns.nameTokens.nameChar =
+  use Class + range
+  nameStartChar + in "-.·" + Class.digit + range ?̀ ?ͯ + range ?‿ ?⁀
+
+eventParser.lexer.patterns.nameTokens.nameStartChar : Class
+eventParser.lexer.patterns.nameTokens.nameStartChar =
+  use Class + range
+  in ":_"
+    + range ?A ?Z
+    + range ?a ?z
+    + range ?À ?Ö
+    + range ?Ø ?ö
+    + range ?ø ?˿
+    + range ?Ͱ ?ͽ
+    + range ?Ϳ ?῿
+    + range ?‌ ?‍
+    + range ?⁰ ?↏
+    + range ?Ⰰ ?⿯
+    + range ?、 ?퟿
+    + range ?豈 ?﷏
+    + range ?ﷰ ?�
+    + range ?𐀀 ?󯿿
+
+eventParser.lexer.patterns.processing : Pattern Text
+eventParser.lexer.patterns.processing =
+  use Pattern join
+  join
+    [ literal "<?"
+    , nameTokens.name
+    , Pattern.optional
+        (join [whiteSpace, Pattern.capture (charUntil xmlChar "?>")])
+    , literal "?>"
+    ]
+
+eventParser.lexer.patterns.references.charRef : Pattern Text
+eventParser.lexer.patterns.references.charRef =
+  use Pattern + capture join
+  join [literal "&#", capture (some patterns.digit), literal ";"]
+    + join [literal "&#x", capture (some patterns.hexDigit), literal ";"]
+
+eventParser.lexer.patterns.references.entityRef : Pattern Text
+eventParser.lexer.patterns.references.entityRef =
+  Pattern.join [literal "&", nameTokens.name, literal ";"]
+
+eventParser.lexer.patterns.references.peReference : Pattern Text
+eventParser.lexer.patterns.references.peReference =
+  Pattern.join [literal "%", nameTokens.name, literal ";"]
+
+eventParser.lexer.patterns.references.reference : Pattern Text
+eventParser.lexer.patterns.references.reference =
+  use Pattern +
+  entityRef + charRef
+
+eventParser.lexer.patterns.sdDecl : Pattern Text
+eventParser.lexer.patterns.sdDecl =
+  use Pattern + capture join
+  join
+    [ whiteSpace
+    , literal "standalone"
+    , patterns.eq
+    , join [literal "'", capture (literal "yes" + literal "no"), literal "'"]
+        + join
+          [literal "\"", capture (literal "yes" + literal "no"), literal "\""]
+    ]
+
+eventParser.lexer.patterns.stag : Pattern Text
+eventParser.lexer.patterns.stag =
+  use Pattern join
+  join
+    [ literal "<"
+    , nameTokens.name
+    , many (join [Pattern.capture whiteSpace, patterns.attribute])
+    , Pattern.optional whiteSpace
+    , literal ">"
+    ]
+
+eventParser.lexer.patterns.versionInfo : Pattern Text
+eventParser.lexer.patterns.versionInfo =
+  use Pattern + join
+  join
+    [ whiteSpace
+    , literal "version"
+    , patterns.eq
+    , join [literal "'", versionNum, literal "'"]
+        + join [literal "\"", versionNum, literal "\""]
+    ]
+
+eventParser.lexer.patterns.versionNum : Pattern Text
+eventParser.lexer.patterns.versionNum =
+  Pattern.capture (Pattern.join [literal "1.", some patterns.digit])
+
+eventParser.lexer.patterns.whiteSpace : Pattern Text
+eventParser.lexer.patterns.whiteSpace = some (patterns.char (in " \t\r\n"))
+
+eventParser.lexer.patterns.whiteSpace.doc : Doc
+eventParser.lexer.patterns.whiteSpace.doc =
+  {{ A {type Pattern} that matches at least one whitespace character. }}
+
+eventParser.lexer.patterns.xmlChar : Class
+eventParser.lexer.patterns.xmlChar =
+  use Class + range
+  in "\t\n\r" + range ?\s ?퟿ + range ? ?� + range ?𐀀 ?􏿿
+
+eventParser.lexer.patterns.xmlChar.doc : Doc
+eventParser.lexer.patterns.xmlChar.doc =
+  {{
+  A {type Class} that matches any valid XML character. A valid XML character is
+  any Unicode character, excluding the surrogate blocks, FFFE, and FFFF.
+  }}
+
+eventParser.lexer.patterns.xmlDecl : Pattern Text
+eventParser.lexer.patterns.xmlDecl =
+  use Pattern capture optional
+  Pattern.join
+    [ literal "<?xml"
+    , versionInfo
+    , capture (optional encodingDecl)
+    , capture (optional sdDecl)
+    , optional whiteSpace
+    , literal "?>"
+    ]
+
+eventParser.parse : Text ->{Stream XMLEvent} ()
+eventParser.parse input =
+  use Nat + -
+  use Pattern capture run
+  use Text != ++ == size
+  decodeText index encodedText = Text index (decodeEntities encodedText)
+  decodeAttribute index key encodedValue =
+    Attribute index key (decodeEntities encodedValue)
+  maybeElemTag index next =
+    ignore "Looking for an element tag"
+    match run stag next with
+      Some (tagName +: attributes, remainder) ->
+        emit (OpenTag index tagName)
+        go ix = cases
+          [sp1, k, eq, v] ++ atts ->
+            emit (decodeAttribute (ix + size sp1) k v)
+            go (ix + size sp1 + size k + size eq + size v) atts
+          _                       -> ()
+        go (index + size tagName + 1) attributes
+        findOpeningTag (index + size next - size remainder) remainder
+      _ ->
+        match run emptyElemTag next with
+          Some (tagName +: attributes, remainder) ->
+            emit (OpenTag index tagName)
+            go ix = cases
+              [sp1, k, eq, v] ++ atts ->
+                emit (Attribute (ix + size sp1) k v)
+                go (ix + size sp1 + size k + size eq + size v) atts
+              _                       -> ()
+            go (index + size tagName + 1) attributes
+            emit (CloseTag index tagName)
+            findOpeningTag (index + size next - size remainder) remainder
+          _ ->
+            match run etag next with
+              Some ([tagName], remainder) ->
+                emit (CloseTag index tagName)
+                findOpeningTag (index + size next - size remainder) remainder
+              _ -> emit (Error index "Malformed element tag")
+  findOpeningTag index input = match Text.findFirst (fromChar ?<) input with
+    (text, "")   ->
+      ignore "No more tags. All that remains is text"
+      when (text != "") do emit (decodeText index text)
+    (text, next) ->
+      ignore "Found a <. Maybe this is a tag."
+      indexOfOpeninTag = index + size text
+      when (text != "") do
+        ignore "There is text before the tag."
+        emit (decodeText indexOfOpeninTag text)
+      identifyOpening indexOfOpeninTag next
+  identifyOpening index next =
+    match Text.take 1 (Text.drop 1 next) with
+      "!" ->
+        ignore "Maybe a comment, cdata, or DTD"
+        if isMatch (literal "<!--") next then
+          match run patterns.comment next with
+            Some ([comment], remainder) ->
+              emit (Comment index comment)
+              findOpeningTag (index + size next - size remainder) remainder
+            _ -> emit (Error index "Malformed comment")
+        else
+          if isMatch (literal "<![CDATA[") next then
+            match run patterns.cdata next with
+              Some ([cdata], remainder) ->
+                emit (CData index cdata)
+                findOpeningTag (index + size next - size remainder) remainder
+              _                         -> emit (Error index "Malformed CDATA")
+          else
+            if isMatch (literal "<!DOCTYPE") next then
+              ignore "Must be a DTD"
+              maybeDTD index next
+            else emit (Error index "Malformed meta tag")
+      "?" ->
+        if isMatch (literal "<?xml") next then
+          match run xmlDecl next with
+            Some ([version, rawEncoding, rawSdDecl], remainder) ->
+              toDefault! (do emit (Error index "Malformed encoding")) do
+                encoding = match run encodingDecl rawEncoding with
+                  Some ([enc], _) -> enc
+                  None            -> ""
+                  _               -> abort
+                standalone = match run patterns.sdDecl rawSdDecl with
+                  Some ([sdDecl], _) -> sdDecl == "yes"
+                  _                  -> false
+                emit (XMLDecl index version encoding standalone)
+                findOpeningTag (index + size next - size remainder) remainder
+            _ -> emit (Error index "Malformed XML declaration")
+        else
+          match run processing next with
+            Some ([piTarget, piData], remainder) ->
+              emit (Processing index piTarget piData)
+              findOpeningTag (index + size next - size remainder) remainder
+            _ -> emit (Error index "Malformed processing instruction")
+      _ ->
+        ignore "Must be an element tag"
+        maybeElemTag index next
+  maybeDTD index next =
+    match run externalDoctype next with
+      Some ([doctype], remainder) ->
+        emit (Doctype index doctype)
+        findOpeningTag (index + size next - size remainder) remainder
+      _ ->
+        match run (capture internalDoctypeStart) next with
+          Some ([dtdStart], remainder) ->
+            go acc next =
+              match run (capture (charUntil Class.any "]")) next with
+                Some ([dtdText], remainder) ->
+                  match run
+                    (capture
+                      (Pattern.join
+                        [literal "]", Pattern.optional whiteSpace, literal ">"]))
+                    remainder with
+                    Some ([dtdEnd], remainder) ->
+                      dtd = acc ++ dtdText ++ dtdEnd
+                      emit (Doctype index dtd)
+                      findOpeningTag (index + size dtd) remainder
+                    x                          -> go (acc ++ dtdText) remainder
+                _ -> emit (Error index "Malformed DTD")
+            go dtdStart remainder
+          _ -> emit (Error index "Malformed DTD")
+  sz = size input
+  emit (DocumentStart sz)
+  findOpeningTag 0 input
+  emit (DocumentEnd sz)
+
+eventParser.parse.doc : Doc
+eventParser.parse.doc =
+  use Stream toList
+  use eventParser parse
+  {{
+  Parse an XML document into a {type Stream} of {type XMLEvent} values.
+
+  This provides a low-level forward-only interface to an XML document by
+  emitting {type XMLEvent} values as it parses the document. The events are
+  emitted in the order they appear in the document, and the parser does not
+  backtrack. The benefit is that the parser never needs to build a complete
+  in-memory representation of the XML structure in the document.
+
+  The events are:
+
+  * {DocumentStart} - Always the first event emitted.
+  * {XMLDecl} - The XML declaration.
+  * {Doctype} - The document type declaration, if present.
+  * {Comment} - A comment.
+  * {CData} - A CDATA section.
+  * {Processing} - A processing instruction.
+  * {OpenTag} - An opening tag.
+  * {Attribute} - An attribute.
+  * {CloseTag} - A closing tag.
+  * {Text} - Text between tags.
+  * {Error} - An error processing the document.
+  * {DocumentEnd} - Always the last event emitted.
+
+  See {type XMLEvent} for more information on the events.
+
+  # Example usage
+
+    The following example shows how to use the {parse} function to parse an XML
+    document and list the events emitted by the parser:
+
+    ```
+    toList do parse "<a><b x='y'/></a>"
+    ```
+
+    The following example shows how to find the `<a>` tags in an XML document:
+
+    ```
+    toList
+      ((do parse "<a><b x='y'/></a>") |> (Stream.filter cases
+        OpenTag _ "a" -> true
+        _             -> false))
+    ```
+
+  # Limitations
+
+    This parser aims to be a correct, but not necessarily complete,
+    implementation of the XML 1.0 specification. Current limitations include:
+
+    * It always assumes that the document is encoded in UTF-8. It does not
+      attempt to detect the encoding of the document.
+    * It does not attempt to parse any DTD declaration, but passes it through
+      as a single string in the {Doctype} event, to be parsed by a separate DTD
+      parser.
+    * It does not expand character references or entity references, but passes
+      them through as-is. It also doesn't generate any events for them.
+  }}
+
+examples.atomFeed : Text
+examples.atomFeed =
+  """
+  <?xml version="1.0" encoding="utf-8"?>
+  <feed xmlns="http://www.w3.org/2005/Atom">
+    <title>Example Feed</title>
+    <subtitle>A subtitle.</subtitle>
+    <link href="http://example.org/feed/" rel="self" />
+    <link href="http://example.org/" />
+    <updated>2003-12-13T18:30:02Z</updated>
+    <author>
+      <name>John Doe</name>
+      <email>johndoe@example.org</email>
+    </author>
+    <id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+    <entry>
+      <title>Atom-Powered Robots Run Amok</title>
+      <link href="http://example.org/2003/12/13/atom03" />
+      <link rel="edit" href="http://example.org/2003/12/13/atom03/edit"/>
+      <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+      <updated>2003-12-13T18:30:02Z</updated>
+      <summary>Some text.</summary>
+    </entry>
+  </feed>
+
+  """
+
+examples.atomFeed.soup : Soup
+examples.atomFeed.soup = parseXML atomFeed
+
+README : Doc
+README =
+  use eventParser parse
+  {{
+  # Streaming XML parser
+
+    This library provides various utilities for extracting data from XML
+    documents, and editing them:
+
+    1. An event-based parser, {parse}, that turns an XML {type Text} into a
+       {type Stream} of {type XMLEvent}s, without needing to parse the whole
+       document.
+    2. A {type Cursor} for low-level processing of the events, with facilities
+       to move through the stream in a semi-structured way.
+    3. A higher-level interface onto the stream, called {type Soup}, that
+       allows you to navigate and search an XML document, extract elements,
+       attributes, and text. It also lets you edit the document in a structured
+       way and render it back out as XML.
+
+    ## Getting started
+
+       For most data extraction use cases, {type Soup} is what you want. For
+       more fine-grained control, or to write your own XML parsers,
+       transformers, and validators, you can use {type Cursor} or {parse}
+       directly.
+
+       Please follow the links above for information on how to get started with
+       these types.
+
+    ## Limitations
+
+       The parser aims to be a correct, but not necessarily complete,
+       implementation of the XML 1.0 specification. Current limitations
+       include:
+
+       * It always assumes that the document is encoded in UTF-8. It does not
+         attempt to detect the encoding of the document.
+       * It does not attempt to parse any DTD declaration, but passes it
+         through as a single string in the {Doctype} event, to be parsed by a
+         separate DTD parser.
+       * It does not support custom entity definitions, but it does decode the
+         standard XML entities `&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&apos;`
+         in text content. It also decodes Unicode character references in
+         decimal and hexadecimal form, such as `&#38;`, `&#252;`, `&#9792;`,
+         `&#xfc;`, and `&#x2642;`. It totally ignores any other entity
+         references, and passes them through as-is.
+       * It does not generate any parser events for entity references.
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  This is a patch release of the XML library. It fixes a documentation bug in
+  {node.doc}.
+  }}
+
+(Soup.//) : Soup -> Text ->{Throw XMLError} Soup
+s Soup.// name =
+  match Stream.uncons (Each.toStream do s |> descendants |> named name) with
+    Left _ -> throw (StructureError ("No descendant named " Text.++ name))
+    Right (t, s) -> t
+
+Soup.//.doc : Doc
+Soup.//.doc =
+  {{
+  Moves the cursor of the {type Soup} to the first descendant of the current
+  location that has the given name.
+
+  # Example
+
+    This example moves the cursor to the first `div` element in the soup:
+
+    ```
+    xml = "<html><body><div>hello</div></body></html>"
+    Throw.toBug do parseXML xml // "div" |> Soup.toXML
+    ```
+  }}
+
+Soup.ancestors : Soup ->{Each} Soup
+Soup.ancestors = cases
+  s ->
+    catchWith (do Each.fail()) do
+      allowThrow do
+        p = parent s
+        emit p
+        toStream! do Soup.ancestors p
+
+Soup.ancestors.doc : Doc
+Soup.ancestors.doc =
+  {{
+  Yields the ancestors of the current node, in order from the parent to the
+  root.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> ancestors >> tagName)
+    ```
+  }}
+
+Soup.appendContents : Text -> Soup ->{Throw XMLError} Soup
+Soup.appendContents newText = cases
+  Soup c ->
+    use Cursor current
+    use Nat -
+    use Stream flatMap
+    newEvents =
+      do
+        ignore
+          (takeWhile!
+            (Boolean.not << isDocumentEnd)
+            (Stream.drop 1 do eventParser.parse newText))
+    match current c with
+      OpenTag ix name ->
+        match nextEvent c with
+          None -> Soup (Cursor (preceding c) (current c) newEvents)
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            (h, t) = Stream.splitAt (skip - 1) (currentStream next)
+            Soup
+              (Cursor
+                (preceding c)
+                (current c)
+                (Stream.fromList h
+                  Stream.++ newEvents
+                  Stream.++ (ignore << Stream.take 1 t)
+                  Stream.++ currentStream after))
+      DocumentStart sz ->
+        use Stream ++
+        f = cases
+          DocumentEnd sz -> newEvents ++ (do emit (DocumentEnd sz))
+          x              -> do emit x
+        Soup (Cursor (preceding c) (current c) (flatMap f (following c)))
+      XMLDecl _ _ _ _ ->
+        use Stream ++
+        f = cases
+          DocumentEnd sz -> newEvents ++ (do emit (DocumentEnd sz))
+          x              -> do emit x
+        Soup (Cursor (preceding c) (current c) (flatMap f (following c)))
+      x ->
+        throw
+          (StructureError
+            ("Tried to append to non-tag event " Text.++ toDebugText x))
+
+Soup.appendContents.doc : Doc
+Soup.appendContents.doc =
+  use Soup toXML
+  use Throw toBug
+  {{
+  Appends the given XML content to the contents of the current tag. The given
+  {type Text} is parsed and appended to the contents of the current tag in the
+  {type Soup}. If the current event in the stream is not a tag (or the root of
+  the document), this throws an {type XMLError}.
+
+  # Examples
+
+    ```
+    toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> appendContents ", World"
+        |> toXML
+    ```
+
+    ```
+    toBug do
+      parseXML "<a><b>Hello</b></a>" // "a"
+        |> appendContents "<c>Hi</c>"
+        |> Soup.root
+        |> toXML
+    ```
+  }}
+
+Soup.attribute : Text -> Soup ->{Throw XMLError} Text
+Soup.attribute name = cases
+  soup@(Soup c) ->
+    match Cursor.current c with
+      Error loc msg -> throw (ParseError loc msg)
+      DocumentStart _ -> Soup.attribute name (Soup.next soup)
+      XMLDecl _ _ _ _ -> Soup.attribute name (Soup.next soup)
+      OpenTag loc tagName ->
+        use Nat toText
+        use Text ++ ==
+        go c =
+          match Cursor.current c with
+            Attribute _ name' value| name == name'  -> value
+            Error loc msg -> throw (ParseError loc msg)
+            CloseTag _ closeName| closeName == tagName  ->
+              throw
+                (StructureError
+                  ("Tag "
+                    ++ tagName
+                    ++ " at offset "
+                    ++ toText loc
+                    ++ " has no attribute "
+                    ++ name))
+            _ ->
+              match nextEvent c with
+                None ->
+                  throw
+                    (StructureError
+                      ("Tag "
+                        ++ tagName
+                        ++ " at offset "
+                        ++ toText loc
+                        ++ " has no attribute "
+                        ++ name))
+                Some c' -> go c'
+        go c
+      _ ->
+        throw
+          (StructureError "Unable to get an attribute from a non-tag node.")
+
+Soup.attribute.doc : Doc
+Soup.attribute.doc =
+  use Soup attribute
+  {{
+  Returns the value of the attribute with the given name on the current context
+  of the {type Soup}, if it's an XML element. Otherwise throws an
+  {type XMLError}.
+
+  # Examples
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a foo=\"bar\"><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" |> attribute "foo")
+    ```
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" |> attribute "foo")
+    ```
+  }}
+
+Soup.attributes : Soup ->{Throw XMLError} Map Text Text
+Soup.attributes = cases
+  soup@(Soup c) ->
+    match Cursor.current c with
+      OpenTag ix name ->
+        match nextEvent c with
+          None ->
+            throw
+              (StructureError
+                ("Unexpected end of stream after opening tag <"
+                  Text.++ name
+                  Text.++ "> at offset "
+                  Text.++ Nat.toText ix
+                  Text.++ "."))
+          Some c -> at1 (collectAttributes Map.empty c)
+      _ -> Map.empty
+
+Soup.attributes.doc : Doc
+Soup.attributes.doc =
+  {{
+  Yields the attributes of the current node, or the empty {type Map} if the
+  node doesn't have any attributes.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c foo=\"bar\" baz=\"qux\"/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> Soup.attributes >> Map.toList)
+    ```
+  }}
+
+Soup.children : Soup ->{Each, Throw XMLError} Soup
+Soup.children = cases
+  Soup c ->
+    allowThrow do
+      match Cursor.current c with
+        OpenTag _ name ->
+          use Text ==
+          go parentName c =
+            match Cursor.current c with
+              OpenTag _ childName ->
+                emit (Soup c)
+                skipChildren c' =
+                  go parentName (at2 (findMatchingClose childName c'))
+                withNextEvent skipChildren c
+              CloseTag _ closeName| closeName == parentName  -> ()
+              Error loc msg -> throw (ParseError loc msg)
+              ev| isXMLNode ev  ->
+                emit (Soup c)
+                withNextEvent (go parentName) c
+              _ -> withNextEvent (go parentName) c
+          withNextEvent (go name) c
+        XMLDecl _ _ _ _ ->
+          match Cursor.skipUntil isOpenTag c with
+            None    -> ()
+            Some c' -> emit (Soup c')
+        DocumentStart _ ->
+          match Cursor.skipUntil isOpenTag c with
+            None    -> ()
+            Some c' -> emit (Soup c')
+        _ -> ()
+
+Soup.children.doc : Doc
+Soup.children.doc =
+  {{
+  Returns {type Each} of the {type Soup}s that are the children of the current
+  context of the {type Soup}.
+
+  # Example
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" |> Soup.children |> tagName)
+    ```
+  }}
+
+Soup.childTags : Soup ->{Each, Throw XMLError} Soup
+Soup.childTags = Soup.children >> Each.filter isTag
+
+Soup.childTags.doc : Doc
+Soup.childTags.doc =
+  use Each toList
+  use Soup children toXML
+  use Throw toBug
+  {{
+  Returns {type Each} of the {type Soup}s that are children of the current
+  context of the {type Soup}, as long as they point to a tag element.
+
+  # Example
+
+    ```
+    toBug do
+      toList do
+        parseXML "<a>Some text <b>more text</b></a>" // "a"
+          |> childTags
+          |> toXML
+    ```
+
+    Compare with {children} which returns **all** the children of the current
+    context:
+
+    ```
+    toBug do
+      toList do
+        parseXML "<a>Some text <b>more text</b></a>" // "a"
+          |> children
+          |> toXML
+    ```
+  }}
+
+Soup.contents : Soup ->{Throw XMLError} [XMLNode]
+Soup.contents s = node s |> XMLNode.children
+
+Soup.contents.doc : Doc
+Soup.contents.doc =
+  {{
+  Returns a list of {type XMLNode}s that are the children of the current
+  context of the {type Soup}.
+
+  # Example
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" // "b" |> contents |> List.map XMLNode.toXML)
+    ```
+  }}
+
+Soup.currentEvent : Soup -> XMLEvent
+Soup.currentEvent = cases Soup c -> Cursor.current c
+
+Soup.currentEvent.doc : Doc
+Soup.currentEvent.doc =
+  {{
+  Gets the current {type XMLEvent} from the underying {type Cursor} of the
+  {type Soup}.
+
+  # Examples
+
+    ```
+    currentEvent (parseXML "<a><b/></a>")
+    ```
+
+    ```
+    Throw.toBug do parseXML "<a><b/></a>" // "b" |> currentEvent
+    ```
+  }}
+
+Soup.descendants : Soup ->{Each, Throw XMLError} Soup
+Soup.descendants = cases
+  Soup c ->
+    allowThrow do
+      match Cursor.current c with
+        OpenTag _ name ->
+          use Nat + -
+          go need parentName c =
+            match Cursor.current c with
+              OpenTag pos childName ->
+                use Text ==
+                emit (Soup c)
+                withNextEvent
+                  (go
+                    (need + (if childName == parentName then 1 else 0))
+                    parentName)
+                  c
+              CloseTag pos closeName| closeName Text.== parentName  ->
+                if need Nat.== 0 then ()
+                else withNextEvent (go (need - 1) parentName) c
+              Error loc msg -> throw (ParseError loc msg)
+              ev| isXMLNode ev  ->
+                emit (Soup c)
+                withNextEvent (go need parentName) c
+              x -> withNextEvent (go need parentName) c
+          withNextEvent (go 0 name) c
+        Error loc msg -> throw (ParseError loc msg)
+        XMLDecl _ _ _ _ ->
+          match Cursor.skipUntil isOpenTag c with
+            None    -> ()
+            Some c' ->
+              emit (Soup c')
+              toStream! do Soup.descendants (Soup c')
+        DocumentStart _ ->
+          match Cursor.skipUntil isOpenTag c with
+            None    -> ()
+            Some c' ->
+              emit (Soup c')
+              toStream! do Soup.descendants (Soup c')
+        _ -> ()
+
+Soup.descendants.doc : Doc
+Soup.descendants.doc =
+  {{
+  Returns {type Each} of the {type Soup}s that are descendants of the current
+  context of the {type Soup}.
+
+  # Example
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" |> descendants |> Soup.toXML)
+    ```
+  }}
+
+test> Soup.descendants.test =
+  check
+    (withXML
+      "<a><a id='1'/><a id='2'/><a id='3'/><a id='4'/><a id='5'/></a>"
+      (x -> descendants x |> Soup.toXML)
+      === Right
+        [ "<a><a id='1'/><a id='2'/><a id='3'/><a id='4'/><a id='5'/></a>"
+        , "<a id='1'/>"
+        , "<a id='2'/>"
+        , "<a id='3'/>"
+        , "<a id='4'/>"
+        , "<a id='5'/>"
+        ])
+
+Soup.doc : Doc
+Soup.doc =
+  use Each filter
+  use Soup attribute attributes children insertAfter root text toXML
+  use Text ==
+  use Throw toBug
+  {{
+  A high-level interface onto an XML event stream, looslely inspired by
+  [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup).
+
+  {type Soup} lets you extract text, tags, attribute values, XML snippets, and
+  other information from an XML document. It also lets you modify the document
+  and render it back out as XML.
+
+  # Getting started
+
+    As a running example, we'll use the following XML document representing an
+    Atom feed:
+
+    {{ codeBlock "xml" atomFeed }}
+
+    ## Parsing
+
+       The first step is to parse the document into a {type Soup}. We can
+       render the {type Soup} back out as XML using {toXML}:
+
+       @typecheck ```
+       toBug do
+         soup = parseXML atomFeed
+         toXML soup
+       ```
+
+       This returns the {type Text}:
+
+       {{ codeBlock "xml" (toBug do parseXML atomFeed |> toXML) }}
+
+       The {toBug} function is here to ignore any errors.
+
+       We can catch errors and surface them as {type Either} values instead:
+
+       ```
+       toEither do parseXML "<root><></root>" |> toXML
+       ```
+
+       The parse error shows a brief description of what went wrong and the
+       offset at which it did.
+
+       We can navigate the document using the {type Soup}:
+
+       ```
+       toBug do atomFeed.soup // "title" |> toXML
+       ```
+
+       ```
+       toBug do atomFeed.soup // "title" |> tagName
+       ```
+
+       ```
+       toBug do atomFeed.soup // "title" |> text
+       ```
+
+       ```
+       toBug do atomFeed.soup // "title" |> parent |> tagName
+       ```
+
+       ```
+       toBug do atomFeed.soup // "link" |> toXML
+       ```
+
+       ```
+       toBug do atomFeed.soup // "link" |> attribute "href"
+       ```
+
+       ```
+       toBug do
+         Each.toList do atomFeed.soup |> descendants |> named "link" |> toXML
+       ```
+
+       ```
+       toBug do
+         Each.toList do
+           atomFeed.soup
+             |> descendants
+             |> withAttribute "rel" ((==) "self")
+             |> toXML
+       ```
+
+       We can get all the links in the feed:
+
+       ```
+       toBug do
+         Each.toList do
+           atomFeed.soup |> descendants |> named "link" |> attribute "href"
+       ```
+
+       We can get all the text between the markup tags (minus the parts that
+       are just spaces):
+
+       ```
+       toBug do atomFeed.soup |> trimmedTexts
+       ```
+
+  # The structure of {type Soup}
+
+    The {type Soup} type is a wrapper around a {type Cursor}, which points to a
+    particular place in a {type Stream} of {type XMLEvent}s. {type Soup}
+    provides a high-level interace onto the event stream.
+
+    Any portion of the {type Soup} can be turned into a structured
+    {type XMLNode} object, with {node}:
+
+    ```
+    toBug do parseXML "<root><a><b>1</b><b>2</b></a></root>" // "root" |> node
+    ```
+
+    ## Tags and attributes
+
+       If the cursor is pointing to an {OpenTag} event, then you can access
+       properties of the tag, such as its name and its attributes. The root of
+       the document is a special case (represented by a {DocumentStart} or
+       {XMLDecl} event), which has no name and no attributes, but can otherwise
+       be treated as a tag.
+
+       You can get the name of the current tag with {tagName}:
+
+       ```
+       toBug do
+         soup = parseXML "<p>The <b class='highlight'>Sun</b> is our star.</p>"
+         soup // "b" |> tagName
+       ```
+
+       You can get the value of an attribute with {attribute}:
+
+       ```
+       toBug do
+         soup =
+           parseXML "<p>Closest to the Sun is <b class='bold'>Mercury</b>.</p>"
+         soup // "b" |> attribute "class"
+       ```
+
+       You can get all the attributes as a {type Map} with {attributes}:
+
+       ```
+       toBug do
+         soup = parseXML "<p>Next is <b class='bold'>Venus</b>.</p>"
+         soup // "b" |> attributes |> Map.toList
+       ```
+
+    ## Extracting text
+
+       If the cursor is pointing to a {Text} node, or to an element whose only
+       content is a single {Text} node, then you can access the text with
+       {text}:
+
+       ```
+       toBug do
+         soup =
+           parseXML "<p>Our planet, <b class='bold'>Earth</b> is third.</p>"
+         soup // "b" |> text
+       ```
+
+       {CData} is also treated as text in this regard:
+
+       ```
+       toBug do
+         soup =
+           parseXML "<p><b class='bold'><![CDATA[Mars]]></b> is fourth.</p>"
+         soup // "b" |> text
+       ```
+
+       You can get all the text nodes in the current portion of the document:
+
+       ```
+       toBug do
+         soup =
+           parseXML "<p>The giant <b class='bold'>Jupiter</b> is fifth.</p>"
+         soup // "p" |> Soup.texts
+       ```
+
+       You can also get them trimmed of surrounding whitespace, removing the
+       text nodes that contain only space:
+
+       ```
+       toBug do
+         soup =
+           parseXML
+             "<p>The ringed planet <b class='bold'> Saturn </b> is sixth.</p>"
+         soup // "p" |> trimmedTexts
+       ```
+
+  # Navigating the XML tree
+
+    The {type Soup} type provides a number of ways to navigate the structure of
+    the XML document. We'll use the {atomFeed} document from above as a running
+    example in this section.
+
+    ## Moving down using tag names
+
+       The {//} function moves the cursor to the **first** descendant of the
+       current location that has the given name:
+
+       ```
+       toBug do atomFeed.soup // "title" |> toXML
+       ```
+
+       ```
+       toBug do atomFeed.soup // "email" |> toXML
+       ```
+
+       The {//} function returns a {type Soup}, so you can keep drilling down:
+
+       ```
+       toBug do atomFeed.soup // "author" // "name" |> toXML
+       ```
+
+       If you want to get **all** the descendants with a particular name, you
+       can use a combination of {descendants} and {named}:
+
+       ```
+       toBug do
+         Each.toList do atomFeed.soup |> descendants |> named "link" |> toXML
+       ```
+
+       {descendants} uses the {type Each} ability to iterate over multiple
+       results, and {named} filters the results to only those that are tags
+       with a particular name.
+
+       More sophisticated ways of searching the tree are described in the
+       sections below.
+
+    ## Getting child nodes
+
+       You can iterate over {type Each} of a node's children with the
+       {children} function:
+
+       ```
+       toBug do Each.toList do atomFeed.soup // "author" |> children |> toXML
+       ```
+
+       Note that this includes text nodes containing the indentation from the
+       original XML document.
+
+       To get only children that are tags, use {childTags}:
+
+       ```
+       toBug do Each.toList do atomFeed.soup // "author" |> childTags |> toXML
+       ```
+
+       To get only the children with a particular name, you can use {named}:
+
+       ```
+       toBug do
+         Each.toList do
+           atomFeed.soup // "feed" |> children |> named "entry" // "title"
+             |> toXML
+       ```
+
+       Alternately you can use {filter}:
+
+       ```
+       toBug do
+         Each.toList do
+           atomFeed.soup // "feed"
+             |> children
+             |> filter (child -> isTag child && tagName child == "entry")
+             // "title"
+             |> toXML
+       ```
+
+    ## Descendants
+
+       You can get all the descendants of a tag with {descendants}. This
+       iterates over its children, it's children's children, and so on:
+
+       ```
+       toBug do
+         Each.toList do atomFeed.soup // "author" |> descendants |> toXML
+       ```
+
+       You can filter for only the descendants you want using {filter} as
+       above.
+
+    ## Moving up the tree
+
+       You can get the parent node of the current node, if it exists:
+
+       ```
+       toBug do atomFeed.soup // "email" |> parent |> toXML
+       ```
+
+       And you can get {type Each} of the current node's ancestors, in order
+       from the parent to the root:
+
+       ```
+       toBug do Each.toList do atomFeed.soup // "email" |> ancestors |> tagName
+       ```
+
+       `` "[document]" `` is the {tagName} of the root of the document. Though
+       it's not technically a tag it's sometimes useful to get a name for it
+       rather than throwing an error.
+
+    ## Moving along a level of the tree
+
+       Consider an XML structure like this (ignoring whitespace for now):
+
+       ``` xml
+       <a>
+         <b>1</b>
+         <c>2</c>
+       </a>
+       ```
+
+       If you're at the `b` node containing the value `1`, you can move to the
+       `c` node with {nextSibling}:
+
+       ```
+       toBug do
+         soup = parseXML "<a><b>1</b><c>2</c></a>"
+         soup // "b" |> nextSibling |> toXML
+       ```
+
+       And you can move back with {previousSibling}:
+
+       ```
+       toBug do
+         soup = parseXML "<a><b>1</b><c>2</c></a>"
+         soup // "c" |> previousSibling |> toXML
+       ```
+
+       {{
+       docCallout
+         (Some {{ 💁 }})
+         {{
+         Note that the next or previous sibling of a node could be a text node.
+         }} }}
+
+    ## Moving in document order
+
+       If you need to move along the XML structure in document order (i.e. the
+       order in which the nodes appear in the original document), you can use
+       {nextElement}:
+
+       ```
+       toBug do
+         soup = parseXML "<ul><li>Item 1</li><li>Item 2</li></ul>"
+         soup // "li" |> nextElement |> toXML
+       ```
+
+       Note that while the {nextSibling} would be the second `li` element, the
+       {nextElement} is the text node inside the first `li` element, as that's
+       the next node in the document.
+
+       If the current element has children, then {nextElement} will be its
+       first child. Otherwise, if it has a {nextSibling}, it will be that. If
+       the current element has neither children nor a next sibling, the
+       {nextElement} will be the {nextSibling} of its {parent}, and so on.
+
+       You can go backwards using {previousElement}:
+
+       ```
+       toBug do
+         soup = parseXML "<ul><li>Item 1</li><li>Item 2</li></ul>"
+         soup // "li" |> previousElement |> toXML
+       ```
+
+       The {previousElement} will always be the same as {previousSibling} if
+       that exists, otherwise it will be the same as {parent}.
+
+  # Editing the tree
+
+    The {type Soup} type provides a number of ways to edit the structure of the
+    XML document.
+
+    ## Editing a tag
+
+       You can change the name of a tag:
+
+       ```
+       soup = "<html><b class='bold'>Hello</b></html>" |> parseXML
+       toBug do soup // "b" |> setTagName "strong" |> root |> toXML
+       ```
+
+       You can also change the tag's attributes:
+
+       ```
+       soup = "<html><b class='bold'>Hello</b></html>" |> parseXML
+       toBug do
+         soup // "b"
+           |> setAttribute "class" "bold italic"
+           |> setAttribute "id" "1"
+           |> root
+           |> toXML
+       ```
+
+       You can remove attributes:
+
+       ```
+       soup = "<html><b class='bold'>Hello</b></html>" |> parseXML
+       toBug do soup // "b" |> removeAttribute "class" |> root |> toXML
+       ```
+
+       And you can replace the whole list of attributes with a {type Map}:
+
+       ```
+       soup = "<html><b class='bold'>Hello</b></html>" |> parseXML
+       toBug do
+         soup // "b"
+           |> setAttributes (Map.fromList [("class", "italic"), ("id", "1")])
+           |> root
+           |> toXML
+       ```
+
+    ## Changing the contents of a tag
+
+       You can replace the contents of a tag:
+
+       ```
+       soup =
+         "<html><a href='http://example.com'>Old link text</a></html>"
+           |> parseXML
+       toBug do
+         soup // "a" |> setContents "<i>New link text</i>" |> root |> toXML
+       ```
+
+       This will run the given XML string through the parser and insert the
+       resulting {type XMLEvent} objects into the stream at the appropriate
+       place.
+
+       You can append to a tag's contents:
+
+       ```
+       soup = "<html><a>Hello</a></html>" |> parseXML
+       toBug do soup // "a" |> appendContents ", <i>World</i>" |> root |> toXML
+       ```
+
+       Or remove the contents entirely:
+
+       ```
+       soup = "<html><a>Hello</a></html>" |> parseXML
+       toBug do soup // "a" |> removeContents |> root |> toXML
+       ```
+
+    ## Inserting elements
+
+       {insertBefore} and {insertAfter} add content before and after the
+       current element, respectively:
+
+       ```
+       soup = "<html><b>Hello</b></html>" |> parseXML
+       toBug do
+         soup // "b"
+           |> insertBefore "<i>Well<i>, "
+           |> insertAfter ", World"
+           |> root
+           |> toXML
+       ```
+
+    ## Deleting elements
+
+       You can remove an element from the document, along with all of its
+       contents:
+
+       ```
+       soup =
+         parseXML "<html><a href='example.com'>Click <i>here</i></a></html>"
+       toBug do soup // "i" |> Soup.remove |> root |> toXML
+       ```
+
+    ## Wrapping and unwrapping
+
+       You can wrap an element in a new tag:
+
+       ```
+       soup = "<html><b>Hello</b></html>" |> parseXML
+       toBug do soup // "b" |> Soup.wrap "i" |> root |> toXML
+       ```
+
+       And you can unwrap an element, which effecetively removes it and
+       replaces it with its contents:
+
+       ```
+       soup =
+         "<html><a href='example.com'><i>Click here</i></a></html>" |> parseXML
+       toBug do soup // "i" |> Soup.unwrap |> root |> toXML
+       ```
+  }}
+
+Soup.findFirst : Text -> Soup ->{Throw XMLError} Soup
+Soup.findFirst name s = s // name
+
+Soup.findFirst.doc : Doc
+Soup.findFirst.doc =
+  {{
+  Yields the first descendant of the current node that has the given name, or
+  throws an {type XMLError} if no such descendant exists.
+
+  # Example
+
+    ```
+    xmlDoc = "<foo><bar><baz/></bar></foo>"
+    withXML xmlDoc (Soup.findFirst "baz" >> Soup.toXML)
+    ```
+
+  # See also
+
+    * {//} for an infix version of this that takes its arguments in the
+      opposite order.
+    * {descendants} which finds all descendants with the given name, not just
+      the first one.
+  }}
+
+Soup.fromStream : '{Stream XMLEvent} () -> Soup
+Soup.fromStream s = Soup (Cursor.fromStream s)
+
+Soup.fromStream.doc : Doc
+Soup.fromStream.doc =
+  {{
+  Constructs an {type Soup} from a {type Stream} of {type XMLEvent} values. The
+  sieve is positioned at the first event in the stream.
+
+  # Example
+
+    ```
+    Throw.toOptional do
+      "<a><b><c/></b></a>" |> delay eventParser.parse |> Soup.fromStream // "b"
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.getAttribute : Text -> Soup ->{Throw XMLError} Text
+Soup.getAttribute attr s =
+  match Map.get attr (Soup.attributes s) with
+    Some value -> value
+    None ->
+      throw (StructureError ("Attribute " Text.++ attr Text.++ " not found."))
+
+Soup.getAttribute.doc : Doc
+Soup.getAttribute.doc =
+  {{
+  Yields the value of the attribute named {arg attr} if it exists, otherwise
+  throws an {type XMLError}.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c foo=\"bar\" baz=\"qux\"/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> getAttribute "foo")
+    ```
+  }}
+
+Soup.getCursor : Soup ->{Abort} Cursor
+Soup.getCursor = cases
+  Soup c -> c
+  _      -> abort
+
+Soup.getCursor.doc : Doc
+Soup.getCursor.doc =
+  {{
+  Returns the underlying {type Cursor} that points to the {type Soup}'s current
+  place in the XML event stream.
+  }}
+
+Soup.hasAttribute : Text -> Soup ->{Throw XMLError} Boolean
+Soup.hasAttribute attr s = Map.contains attr (Soup.attributes s)
+
+Soup.hasAttribute.doc : Doc
+Soup.hasAttribute.doc =
+  {{
+  Yields `` true `` if the current node has an attribute with the given name,
+  otherwise ``false``.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c foo=\"bar\" baz=\"qux\"/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> hasAttribute "foo")
+    ```
+  }}
+
+Soup.hasAttributes : Soup ->{Throw XMLError} Boolean
+Soup.hasAttributes s = Boolean.not (Map.isEmpty (Soup.attributes s))
+
+Soup.hasAttributes.doc : Doc
+Soup.hasAttributes.doc =
+  {{
+  Yields `` true `` if the current node has any attributes, otherwise
+  ``false``.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c foo=\"bar\" baz=\"qux\"/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> hasAttributes)
+    ```
+  }}
+
+Soup.insertAfter : Text -> Soup ->{Throw XMLError} Soup
+Soup.insertAfter xml = cases
+  Soup c ->
+    match Cursor.current c with
+      OpenTag _ _ -> insertBefore xml (Soup (skipToClose c))
+      _ ->
+        match nextEvent c with
+          None ->
+            throw
+              (StructureError
+                "Can't insert content after the end of the document.")
+          Some c' ->
+            match Cursor.current c' with
+              DocumentStart _ -> Soup.insertAfter xml (Soup c')
+              XMLDecl _ _ _ _ -> Soup.insertAfter xml (Soup c')
+              _               -> insertBefore xml (Soup c')
+
+Soup.insertAfter.doc : Doc
+Soup.insertAfter.doc =
+  {{
+  Inserts the given XML content into the {type Soup}. The given {type Text} is
+  parsed and the resulting events are inserted after the current element in the
+  {type Soup}. If the {type Soup} is currently at the end of the document, this
+  throws an {type XMLError}.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> Soup.insertAfter "<c>Hi</c>"
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.insertBefore : Text -> Soup ->{Throw XMLError} Soup
+Soup.insertBefore newText = cases
+  Soup c ->
+    use Cursor current
+    use Stream ++
+    newEvents =
+      do
+        ignore
+          (takeWhile!
+            (Boolean.not << isDocumentEnd)
+            (Stream.drop 1 do eventParser.parse newText))
+    match current c with
+      DocumentStart _ ->
+        throw
+          (StructureError
+            "Can't insert content before the beginning of the document.")
+      XMLDecl _ _ _ _ ->
+        throw
+          (StructureError
+            "Can't insert content before the begining of the document")
+      _ ->
+        Soup
+          (Cursor
+            (Stream.fromList (List.reverse (Stream.toList newEvents))
+              ++ preceding c)
+            (current c)
+            (following c))
+
+Soup.insertBefore.doc : Doc
+Soup.insertBefore.doc =
+  {{
+  Inserts the given XML content into the {type Soup}. The given {type Text} is
+  parsed and the resulting events are inserted before the current element in
+  the {type Soup}. If the {type Soup} is currently at the document root, this
+  throws an {type XMLError}.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> insertBefore "<c>Hi</c>"
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.isTag : Soup -> Boolean
+Soup.isTag soup = match currentEvent soup with
+  OpenTag _ _ -> true
+  _           -> false
+
+Soup.isTag.doc : Doc
+Soup.isTag.doc =
+  use Throw toBug
+  {{
+  Checks if there is an XML element under the {type Cursor} of the {type Soup}
+  and whether it's an XML tag.
+
+  # Examples
+
+    ```
+    toBug do parseXML "<a><b/></a>" |> isTag
+    ```
+
+    ```
+    toBug do parseXML "<a><b/></a>" // "a" |> isTag
+    ```
+  }}
+
+Soup.isText : Soup -> Boolean
+Soup.isText = cases
+  Soup c ->
+    match Cursor.current c with
+      Text _ _  -> true
+      CData _ _ -> true
+      _         -> false
+
+Soup.isText.doc : Doc
+Soup.isText.doc =
+  {{
+  Returns true if the current context of the {type Soup} is a text or CDATA
+  node.
+  }}
+
+Soup.matchName : (Text -> Boolean) -> Soup ->{Each, Throw XMLError} Soup
+Soup.matchName p = cases
+  s@(Soup (Cursor _ (DocumentStart _) _)) -> Soup.matchName p (Soup.next s)
+  s@(Soup (Cursor _ (XMLDecl _ _ _ _) _)) -> Soup.matchName p (Soup.next s)
+  s@(Soup (Cursor _ (OpenTag _ name) _)) ->
+    if p name then each [s] else Each.fail()
+  _ -> Each.fail()
+
+Soup.matchName.doc : Doc
+Soup.matchName.doc =
+  {{
+  Yields the descendants of the current node that have a name that satisfies
+  the given predicate.
+
+  # Example
+
+    ```
+    xmlDoc = "<foo><bar><baz/></bar></foo>"
+    withXML xmlDoc (descendants >> matchName (startsWith "ba") >> tagName)
+    ```
+  }}
+
+Soup.named : Text -> Soup ->{Each, Throw XMLError} Soup
+Soup.named name = cases
+  soup@(Soup c) ->
+    match Cursor.current c with
+      OpenTag _ tagName | tagName Text.== name -> each [Soup c]
+      DocumentStart _   -> Soup.named name (Soup.next soup)
+      XMLDecl _ _ _ _   -> Soup.named name (Soup.next soup)
+      _                 -> Each.fail()
+
+Soup.named.doc : Doc
+Soup.named.doc =
+  {{
+  Yields the current node if it is a tag with the given name, otherwise yields
+  nothing.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    withXML xmlDoc (descendants >> named "b" >> Soup.toXML)
+    ```
+  }}
+
+Soup.next : Soup ->{Throw XMLError} Soup
+Soup.next = cases
+  Soup c ->
+    Abort.toThrow
+      (StructureError
+      "User requested next XML event, but the stream was empty.")
+      do Soup (nextEvent! c)
+
+Soup.next.doc : Doc
+Soup.next.doc =
+  {{
+  Advances the {type Soup} to the next event in the stream.
+
+  Throws an {type XMLError} if there is no next event.
+
+  # Example
+
+    ```
+    withXML "<root><a/><b/><c/></root>" (Soup.next >> Soup.toXML)
+    ```
+
+  # See also
+
+    * {Soup.previous} to rewind to the previous event.
+  }}
+
+Soup.nextElement : Soup ->{Throw XMLError} Soup
+Soup.nextElement = cases s -> Soup.skipUntil isXMLNode (Soup.next s)
+
+Soup.nextElement.doc : Doc
+Soup.nextElement.doc =
+  {{
+  Yields the next XML element in the document, in depth-first order. If the
+  current element has any children, the next element is its first child. If
+  not, then the {nextElement} is the same as {nextSibling} (if it exists). If
+  the current element has no children and no next sibling, then the next
+  element is the next sibling of the first ancestor that has one.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b>Hello</b></a><></root>"
+    withXML xmlDoc (descendants >> named "b" >> nextElement >> Soup.toXML)
+    ```
+  }}
+
+Soup.nextSibling : Soup ->{Throw XMLError} Soup
+Soup.nextSibling = cases
+  s@(Soup c) ->
+    match Cursor.current c with
+      OpenTag _ name -> Soup (skipToClose c)
+      event| isStructural event  ->
+        c' =
+          Abort.toThrow
+            (StructureError "No next sibling, reached the end of the stream.")
+            do skipUntil! isStructural (nextEvent! c)
+        match Cursor.current c' with
+          CloseTag _ _ -> throw (StructureError "No next sibling found.")
+          _            -> Soup c'
+      _ -> Soup.nextSibling (Soup.skipUntil isStructural s)
+
+Soup.nextSibling.doc : Doc
+Soup.nextSibling.doc =
+  use Soup toXML
+  use Throw toBug
+  {{
+  Yields the next sibling of the current node, if it exists, otherwise
+  {type Throw}s an {type XMLError}.
+
+  # Examples
+
+    ```
+    soup = parseXML "<root><a/><b/><c/></root>"
+    toBug do soup // "b" |> nextSibling |> toXML
+    ```
+
+    ```
+    soup = parseXML "<toor><a/><b><b><b/></b></b><c/></root>"
+    toBug do soup // "b" |> nextSibling |> toXML
+    ```
+  }}
+
+Soup.node : Soup ->{Throw XMLError} XMLNode
+Soup.node = cases Soup c -> at1 (parseNode c)
+
+Soup.node.doc : Doc
+Soup.node.doc =
+  {{
+  Extracts an {type XMLNode} from the current context of the {type Soup}.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      soup = parseXML "<a><b><c>Hello</c></b><d/></a>"
+      soup // "b" // "c" |> node
+    ```
+  }}
+
+Soup.parent : Soup ->{Throw XMLError} Soup
+Soup.parent = cases
+  Soup c ->
+    match up c with
+      Some c -> Soup c
+      None ->
+        throw
+          (StructureError
+            "Unable to get the parent of a sieve at the root node.")
+
+Soup.parent.doc : Doc
+Soup.parent.doc =
+  {{
+  Yields the parent of the current node, if it exists, otherwise throws an
+  {type XMLError}.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> parent >> Soup.toXML)
+    ```
+  }}
+
+Soup.parseXML : Text -> Soup
+Soup.parseXML xml = Soup.fromStream do eventParser.parse xml
+
+Soup.parseXML.doc : Doc
+Soup.parseXML.doc =
+  {{
+  Parses the given XML text and returns an {type Soup} over it.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    Throw.toOptional do parseXML xmlDoc // "b" |> Soup.toXML
+    ```
+  }}
+
+Soup.previous : Soup -> Soup
+Soup.previous = cases Soup c -> toDefaultValue! (Soup c) do Soup (prevEvent! c)
+
+Soup.previous.doc : Doc
+Soup.previous.doc =
+  use Soup next
+  {{
+  Rewinds the {type Soup} to the previous event in the stream.
+
+  Throws an {type XMLError} if there is no such event.
+
+  # Example
+
+    ```
+    withXML
+      "<root><a/><b/><c/></root>" (next >> next >> Soup.previous >> Soup.toXML)
+    ```
+
+  # See also
+
+    * {next} to advance to the next event.
+  }}
+
+Soup.previousElement : Soup ->{Throw XMLError} Soup
+Soup.previousElement = cases s -> Soup.rewindUntil isXMLNode (Soup.previous s)
+
+Soup.previousElement.doc : Doc
+Soup.previousElement.doc =
+  use Soup toXML
+  {{
+  Yields the previous XML element in the document, in depth-first order. If the
+  current element has a {previousSibling}, then {previousElement} is that
+  sibling. If not, then {previousElement} is the same as {parent}.
+
+  # Examples
+
+    ```
+    xmlDoc = "<root><a><b/><c/></a><d/></root>"
+    withXML xmlDoc (descendants >> named "c" >> previousElement >> toXML)
+    ```
+
+    ```
+    xmlDoc = "<root><a><b/><c/></a><d/></root>"
+    withXML xmlDoc (descendants >> named "b" >> previousElement >> toXML)
+    ```
+  }}
+
+Soup.previousSibling : Soup ->{Throw XMLError} Soup
+Soup.previousSibling = cases
+  s@(Soup c) ->
+    match Cursor.current c with
+      CloseTag _ _ -> Soup.previousSibling (Soup (rewindToOpen c))
+      event| isStructural event  ->
+        c' =
+          Abort.toThrow
+            (StructureError
+            "No previous sibling, reached the beginning of the stream.")
+            do rewindUntil! isStructural (prevEvent! c)
+        match Cursor.current c' with
+          CloseTag _ _ -> Soup (rewindToOpen c')
+          OpenTag _ _  -> throw (StructureError "No previous sibling found.")
+          _            -> Soup c'
+      _ -> Soup.previousSibling (Soup.rewindUntil isStructural s)
+
+Soup.previousSibling.doc : Doc
+Soup.previousSibling.doc =
+  {{
+  Yields the previous sibling of the current node, if it exists, otherwise
+  {type Throw}s an {type XMLError}.
+
+  # Example
+
+    ```
+    soup = parseXML "<root><a/><b/><c/></root>"
+    Throw.toBug do soup // "b" |> previousSibling |> Soup.toXML
+    ```
+  }}
+
+Soup.remainingEvents! : Soup ->{Stream XMLEvent} ()
+Soup.remainingEvents! = cases Soup c -> currentStream! c
+
+Soup.remainingEvents!.doc : Doc
+Soup.remainingEvents!.doc =
+  {{
+  Returns the events remaining on the stream of XML events for the underlying
+  {type Cursor}, including the current event.
+
+  See {currentStream!}.
+  }}
+
+Soup.remove : Soup ->{Throw XMLError} Soup
+Soup.remove = cases
+  Soup c ->
+    match Cursor.current c with
+      OpenTag ix name ->
+        match nextEvent c with
+          None      -> Soup (Cursor (preceding c) (Cursor.current c) do ())
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            use Cursor current
+            cnew = Cursor (preceding c) (current after) (following after)
+            match current after with
+              CloseTag _ cname -> Soup (rewindToOpen cnew)
+              _                -> Soup cnew
+      DocumentStart _ ->
+        throw (StructureError "Can't remove the DocumentStart event.")
+      DocumentEnd _ ->
+        throw (StructureError "Can't remove the DocumentEnd event.")
+      _ ->
+        match Stream.uncons (following c) with
+          Left _ ->
+            match Stream.uncons (preceding c) with
+              Left _ ->
+                throw
+                  (StructureError "Nothing to remove: stream can't be empty")
+              Right (p, ps) -> Soup (Cursor ps p do ())
+          Right (a, as) -> Soup (Cursor (preceding c) a as)
+
+Soup.remove.doc : Doc
+Soup.remove.doc =
+  use Soup remove toXML
+  use Throw toBug
+  {{
+  Removes the current event from the {type Soup}. If the current event is a
+  tag, this also removes the matching closing tag and all content between.
+
+  The {type Cursor} of the {type Soup} is moved to the following sibling node
+  if it exists, or to the parent node if the removed node had no following
+  siblings.
+
+  # Examples
+
+    ```
+    toBug do parseXML "<a><b>Hello</b></a>" // "b" |> remove |> toXML
+    ```
+
+    ```
+    toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> Soup.next
+        |> remove
+        |> Soup.root
+        |> toXML
+    ```
+  }}
+
+Soup.removeAttribute : Text -> Soup -> Soup
+Soup.removeAttribute k = cases
+  Soup c ->
+    (OpenTag ix _) = Cursor.current c
+    use Text ==
+    p = cases
+      Attribute _ name _ -> name == k
+      _                  -> false
+    Soup
+      (Cursor
+        (preceding c) (Cursor.current c) (Stream.dropWhile p (following c)))
+
+Soup.removeAttribute.doc : Doc
+Soup.removeAttribute.doc =
+  {{
+  Removes the given attribute from the current tag. If the current event is not
+  a tag, this throws an {type XMLError}.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b x='1'>Hello</b></a>" // "b"
+        |> removeAttribute "x"
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.removeContents : Soup ->{Throw XMLError} Soup
+Soup.removeContents = cases
+  Soup c ->
+    match Cursor.current c with
+      OpenTag _ name ->
+        match nextEvent c with
+          None -> Soup (Cursor (preceding c) (Cursor.current c) do ())
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            (Soup onClose) = Soup.previous (Soup after)
+            Soup
+              (Cursor
+                (preceding c)
+                (Cursor.current c)
+                ((do ignore (takeWhile! isAttribute (currentStream next)))
+                  Stream.++ (Cursor.current onClose
+                    Stream.+: following onClose)))
+      _ -> Soup c
+
+Soup.removeContents.doc : Doc
+Soup.removeContents.doc =
+  {{
+  Removes the contents of the current tag. If the current event is not a tag,
+  it's left alone.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b class='x'>Hello</b></a>" // "b"
+        |> removeContents
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.rewindUntil : (XMLEvent -> Boolean) -> Soup ->{Throw XMLError} Soup
+Soup.rewindUntil p = cases
+  Soup c ->
+    Abort.toThrow
+      (StructureError "Rewind reached the beginning of the stream.")
+      do Soup (rewindUntil! p c)
+
+Soup.rewindUntil.doc : Doc
+Soup.rewindUntil.doc =
+  use Soup skipUntil
+  {{
+  Rewinds the {type Soup} to the previous event that satisfies the given
+  predicate.
+
+  Throws an {type XMLError} if there is no such event.
+
+  # Example
+
+    ```
+    withXML
+      "<a><b><c/></b></a>"
+      (skipUntil (isCloseTagNamed "a")
+        >> Soup.rewindUntil (isOpenTagNamed "b")
+        >> Soup.toXML)
+    ```
+
+  # See also
+
+    * {skipUntil} to advance the stream to the next event that satisfies a
+      predicate.
+    * {Soup.next} to advance to the next event.
+  }}
+
+Soup.root : Soup -> Soup
+Soup.root = cases
+  s@(Soup (Cursor pre cur post)) ->
+    match List.reverse (Stream.toList pre) with
+      first +: rest ->
+        Soup
+          (Cursor
+            (do ())
+            first
+            (Stream.fromList rest Stream.++ (do emit cur) Stream.++ post))
+      [] -> s
+
+Soup.root.doc : Doc
+Soup.root.doc = {{ Moves the cursor to the root of the document. }}
+
+Soup.setAttribute : Text -> Text -> Soup ->{Throw XMLError} Soup
+Soup.setAttribute attrName attrValue = cases
+  Soup c ->
+    match Cursor.current c with
+      OpenTag _ tagName ->
+        match nextEvent c with
+          None ->
+            throw
+              (StructureError
+                ("Unexpected end of stream after open tag " Text.++ tagName))
+          Some attrBegin ->
+            (attrs, c') = collectAttributes Map.empty attrBegin
+            use Stream ++ +:
+            newAttrs = Map.insert attrName attrValue attrs
+            newEvents =
+              Map.foldRightWithKey
+                (k v s -> Attribute 0 k v +: s) (do ()) newAttrs
+            Soup
+              (Cursor
+                (preceding c)
+                (Cursor.current c)
+                (newEvents ++ currentStream c'))
+      t ->
+        throw
+          (StructureError
+            ("Cannot set attribute on a non-tag event: " Text.++ toDebugText t))
+
+Soup.setAttribute.doc : Doc
+Soup.setAttribute.doc =
+  {{
+  Sets the value of an attribute on the current tag. If the attribute does not
+  exist, it is added. If the attribute exists, its value is replaced.
+
+  # Example
+
+    ```
+    toEither do
+      parseXML "<a href='http://example.com'>Example</a>" // "a"
+        |> setAttribute "href" "http://example.org"
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.setAttributes : Map Text Text -> Soup -> Soup
+Soup.setAttributes m = cases
+  Soup c ->
+    (OpenTag ix _) = Cursor.current c
+    use Stream ++
+    s = do Map.foreach m (k v -> emit (Attribute ix k v))
+    Soup
+      (Cursor
+        (preceding c)
+        (Cursor.current c)
+        (s ++ Stream.dropWhile isAttribute (following c)))
+
+Soup.setAttributes.doc : Doc
+Soup.setAttributes.doc =
+  {{
+  Sets the attributes of the current tag. If the current event is not a tag,
+  this throws an {type XMLError}.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> setAttributes (Map.fromList [("x", "1"), ("y", "2")])
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.setContents : Text -> Soup ->{Throw XMLError} Soup
+Soup.setContents newText = cases
+  Soup c ->
+    use Cursor current
+    use Nat -
+    use Stream drop
+    newEvents =
+      do
+        ignore
+          (takeWhile!
+            (Boolean.not << isDocumentEnd)
+            (drop 1 do eventParser.parse newText))
+    match current c with
+      OpenTag ix name ->
+        match nextEvent c with
+          None -> Soup (Cursor (preceding c) (current c) newEvents)
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            Soup
+              (Cursor
+                (preceding c)
+                (current c)
+                ((do ignore (takeWhile! isAttribute (currentStream next)))
+                  Stream.++ newEvents
+                  Stream.++ drop (skip - 1) (currentStream next)
+                  Stream.++ currentStream after))
+      DocumentStart sz -> Soup (Cursor (preceding c) (current c) newEvents)
+      XMLDecl _ _ _ _ -> Soup (Cursor (preceding c) (current c) newEvents)
+      x ->
+        throw
+          (StructureError
+            ("Tried to set the contents of non-tag event "
+              Text.++ toDebugText x))
+
+Soup.setContents.doc : Doc
+Soup.setContents.doc =
+  use Soup toXML
+  use Throw toBug
+  {{
+  Sets the XML contents of the current tag. The given {type Text} is parsed,
+  and everything inside the current tag is replaced with the parsed content. If
+  the current event in the stream is not a tag (or the root of the document),
+  this throws an {type XMLError}.
+
+  If the current event is an {OpenTag}, this also finds the matching closing
+  tag and replaces everything between them with the new contents.
+
+  # Examples
+
+    ```
+    toBug do
+      parseXML "<a><b class='x'>Hello</b></a>" // "b"
+        |> setContents "Goodbye"
+        |> toXML
+    ```
+
+    ```
+    toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> setContents "<c>Hi</c>"
+        |> Soup.root
+        |> toXML
+    ```
+  }}
+
+Soup.setTagName : Text -> Soup ->{Throw XMLError} Soup
+Soup.setTagName newName = cases
+  Soup c ->
+    match Cursor.current c with
+      OpenTag ix oldName ->
+        match nextEvent c with
+          None -> Soup (Cursor (preceding c) (OpenTag ix newName) do ())
+          Some next ->
+            (skip, after) = findMatchingClose oldName next
+            (h, t) = Stream.splitAt skip (currentStream next)
+            match List.last h with
+              Some (CloseTag ixc _) ->
+                Soup
+                  (Cursor
+                    (preceding c)
+                    (OpenTag ix newName)
+                    (Stream.fromList (List.take (List.size h Nat.- 1) h)
+                      Stream.++ (do emit (CloseTag ixc newName))
+                      Stream.++ currentStream after))
+              _ -> bug "Found a close tag and lost it again!"
+      x ->
+        throw
+          (StructureError
+            ("Tried to set the name on non-tag event " Text.++ toDebugText x))
+
+Soup.setTagName.doc : Doc
+Soup.setTagName.doc =
+  {{
+  Set the name of the current tag. If the current event in the stream is not a
+  tag, this throws an {type XMLError}.
+
+  If the current event is an {OpenTag}, this also finds the matching closing
+  tag and changes its name as well.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> setTagName "c"
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.skipUntil : (XMLEvent -> Boolean) -> Soup ->{Throw XMLError} Soup
+Soup.skipUntil p = cases
+  Soup c ->
+    Abort.toThrow (StructureError "Reached the end of the stream.") do
+      Soup (skipUntil! p c)
+
+Soup.tagName : Soup ->{Throw XMLError} Text
+Soup.tagName = cases
+  soup@(Soup c) ->
+    match Cursor.current c with
+      OpenTag _ name -> name
+      CloseTag _ name -> name
+      XMLDecl _ _ _ _ -> "[document]"
+      DocumentStart _ -> "[document]"
+      _ ->
+        throw
+          (StructureError
+            "Unable to get the name of an XML element that is not a tag.")
+
+Soup.tagName.doc : Doc
+Soup.tagName.doc =
+  {{
+  Yields the name of the current node if it's an XML tag, otherwise throws an
+  {type XMLError}.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a><b><c/></b></a></root>"
+    withXML xmlDoc (descendants >> named "c" >> tagName)
+    ```
+  }}
+
+Soup.text : Soup ->{Throw XMLError} Text
+Soup.text = cases
+  Soup c ->
+    match Cursor.current c with
+      Text _ t -> t
+      CData _ t -> t
+      Error loc msg -> throw (ParseError loc msg)
+      OpenTag loc name ->
+        use Nat toText
+        use Stream uncons
+        use Text ++
+        mightBeText t s =
+          match uncons s with
+            Left _ -> t
+            Right (Text _ t', s') -> mightBeText (t ++ t') s'
+            Right (CData _ t', s') -> mightBeText (t ++ t') s'
+            Right (Error loc msg, _) -> throw (ParseError loc msg)
+            Right (CloseTag _ _, _) -> t
+            Right (Attribute _ _ _, s') -> mightBeText t s'
+            Right _ ->
+              throw
+                (StructureError
+                  ("Tag "
+                    ++ name
+                    ++ " at offset "
+                    ++ toText loc
+                    ++ " has non-text content."))
+        match uncons (following c) with
+          Left _ ->
+            throw
+              (StructureError
+                ("No text in tag " ++ name ++ " at offset " ++ toText loc))
+          Right (Text _ t, s) -> mightBeText t s
+          Right (CData _ t, s) -> mightBeText t s
+          Right (Error loc msg, _) -> throw (ParseError loc msg)
+          Right (Attribute _ _ _, s) -> mightBeText "" s
+          Right _ ->
+            throw
+              (StructureError
+                ("Tag "
+                  ++ name
+                  ++ " at offset "
+                  ++ toText loc
+                  ++ " has non-text content."))
+      _ -> throw (StructureError "Unable to get text from a non-text node.")
+
+Soup.text.doc : Doc
+Soup.text.doc =
+  use Soup text
+  {{
+  Returns the text of the current context of the {type Soup}, if it's either a
+  text node, a CDATA section, or an XML element that contains a single text
+  node. Otherwise throws an {type XMLError}.
+
+  # Examples
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" // "b" // "c" |> text)
+    ```
+
+    ```
+    withXML
+      "<?xml version=\"1.0\"?><a><b><c>Hello</c></b><d/></a>"
+      (sieve -> sieve // "a" // "b" |> text)
+    ```
+  }}
+
+Soup.texts : Soup ->{Throw XMLError} [Text]
+Soup.texts sieve = Each.toList do
+  node = descendants sieve
+  guard (isText node)
+  Soup.text node
+
+Soup.texts.doc : Doc
+Soup.texts.doc =
+  {{
+  Returns a list of the text contents of all the descendants of the current
+  context of the {type Soup}.
+
+  # Example
+
+    ```
+    withXML "<a><b><c>Hello</c></b>World<d/></a>" Soup.texts
+    ```
+
+  # See also
+
+    * XMLSieve.trimmedTexts - a version of this that trims whitespace.
+    * XMLSieve.text - gets the text content of the current node only.
+  }}
+
+Soup.toXML : Soup ->{Throw XMLError} Text
+Soup.toXML = cases
+  Soup c ->
+    use Nat +
+    use Stream take
+    use Text ++ ==
+    go acc endTag s =
+      match Stream.uncons s with
+        Left _ -> acc ++ endTag
+        Right (ev, next) ->
+          match ev with
+            XMLDecl _ ver enc std ->
+              acc' =
+                "<?xml version='"
+                  ++ ver
+                  ++ (if enc == "" then "" else "' encoding='" ++ enc ++ "'")
+                  ++ (" standalone='" ++ (if std then "yes" else "no" ++ "'"))
+                  ++ "?>"
+              go (acc ++ acc') "" next
+            OpenTag _ name -> go (acc ++ endTag ++ "<" ++ name) ">" next
+            Text _ text -> go (acc ++ endTag ++ encodeEntities text) "" next
+            Comment _ text ->
+              go (acc ++ endTag ++ "<!--" ++ text ++ "-->") "" next
+            Processing _ target data ->
+              go
+                (acc ++ endTag ++ "<?" ++ target ++ " " ++ data ++ "?>")
+                ""
+                next
+            Doctype _ dtd -> go (acc ++ endTag ++ dtd) "" next
+            CData _ text ->
+              go (acc ++ endTag ++ "<![CDATA[" ++ text ++ "]]>") "" next
+            CloseTag _ name ->
+              go
+                (acc ++ (if endTag == "" then "</" ++ name ++ ">" else "/>"))
+                ""
+                next
+            Attribute _ name value ->
+              go
+                (acc ++ " " ++ name ++ "='" ++ encodeEntities value ++ "'")
+                ">"
+                next
+            Error ix msg -> throw (ParseError ix msg)
+            DocumentStart _ -> go acc "" next
+            DocumentEnd _ -> acc ++ endTag
+    match Cursor.current c with
+      OpenTag _ name  ->
+        match nextEvent c with
+          None    -> "<" ++ name ++ "/>"
+          Some c' ->
+            (skip, after) = findMatchingClose name c'
+            go "" "" (take (skip + 1) (currentStream c))
+      DocumentStart _ -> go "" "" (currentStream c)
+      XMLDecl _ _ _ _ -> go "" "" (currentStream c)
+      DocumentEnd _   -> ""
+      _               -> go "" "" (take 1 (currentStream c))
+
+Soup.toXML.doc : Doc
+Soup.toXML.doc =
+  {{
+  Converts the current node of the {type Soup} to XML text.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    withXML xmlDoc (descendants >> named "b" >> Soup.toXML)
+    ```
+  }}
+
+Soup.tracingErrors : Text -> '{Each, Throw XMLError} a -> Optional [a]
+Soup.tracingErrors xml f = traceErrors xml do Each.toList f
+
+Soup.tracingErrors.doc : Doc
+Soup.tracingErrors.doc =
+  {{
+  Runs the given computation on the given XML Document. Returns the results as
+  a {type List} if it throws no error, otherwise returns {None} and traces the
+  error to the console.
+
+  # Example
+
+    @typecheck ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    traceErrors xmlDoc do
+      Each.toList do parseXML xmlDoc |> descendants |> named "b" |> Soup.toXML
+    ```
+  }}
+
+Soup.trimmedTexts : Soup ->{Throw XMLError} [Text]
+Soup.trimmedTexts sieve = Each.toList do
+  node = descendants sieve
+  guard (isText node)
+  trimmed = trim (Soup.text node)
+  guard (Boolean.not (Text.isEmpty trimmed))
+  trimmed
+
+Soup.trimmedTexts.doc : Doc
+Soup.trimmedTexts.doc =
+  {{
+  Returns a list of the text contents of all the descendants of the current
+  context of the {type Soup}, trimmed of whitespace.
+
+  # Example
+
+    ```
+    withXML "<a><b><c>Hello</c></b>World<d/></a>" trimmedTexts
+    ```
+
+  # See also
+
+    * XMLSieve.texts - gets the text contents without trimming.
+    * XMLSieve.text - gets the text content of the current node only.
+  }}
+
+Soup.unwrap : Soup ->{Throw XMLError} Soup
+Soup.unwrap = cases
+  Soup c@(Cursor pre cur fol) ->
+    match cur with
+      OpenTag ix name ->
+        match nextEvent c with
+          None ->
+            throw
+              (StructureError
+                ("Unexpected end of stream looking for closing tag for <"
+                  Text.++ name
+                  Text.++ ">."))
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            Soup
+              (Cursor
+                pre
+                (Cursor.current next)
+                ((do ignore (Stream.take (skip Nat.- 2) (following next) ()))
+                  Stream.++ currentStream after))
+      x -> Soup c
+
+Soup.unwrap.doc : Doc
+Soup.unwrap.doc =
+  {{
+  Unwraps the current tag, splicing its contents into the parent. If the
+  current event is not a tag, this leaves it alone.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> Soup.unwrap
+        |> Soup.root
+        |> Soup.toXML
+    ```
+  }}
+
+Soup.withAttribute :
+  Text -> (Text -> Boolean) -> Soup ->{Each, Throw XMLError} Soup
+Soup.withAttribute name pred = cases
+  soup@(Soup c') ->
+    match Cursor.current c' with
+      DocumentStart _ -> Soup.withAttribute name pred (Soup.next soup)
+      XMLDecl _ _ _ _ -> Soup.withAttribute name pred (Soup.next soup)
+      OpenTag _ tagName ->
+        use Each fail
+        use Text ==
+        go c =
+          match Cursor.current c with
+            Attribute _ name' value| name == name'  ->
+              if pred value then each [Soup c'] else fail()
+            Error loc msg -> throw (ParseError loc msg)
+            Attribute _ _ _ ->
+              match nextEvent c with
+                None    -> fail()
+                Some c' -> go c'
+            _ -> fail()
+        match nextEvent c' with
+          None    -> fail()
+          Some c' -> go c'
+      _ -> Each.fail()
+
+Soup.withAttribute.doc : Doc
+Soup.withAttribute.doc =
+  {{
+  Yields the current node if it's a tag and has an attribute with the given
+  name whose value matches the predicate. Otherwise yields nothing.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b/><c attr=\"value\"/></root>"
+    withXML
+      xmlDoc
+      (descendants
+        >> withAttribute "attr" (isMatch (literal "value"))
+        >> Soup.toXML)
+    ```
+  }}
+
+Soup.withXML : Text -> (Soup ->{Each, Throw XMLError} a) -> Either Text [a]
+Soup.withXML xml f =
+  sieve = Soup.fromStream do eventParser.parse xml
+  Either.mapLeft (inContext xml) (toEither do Each.toList do f sieve)
+
+Soup.withXML.doc : Doc
+Soup.withXML.doc =
+  {{
+  Parses the given XML text and runs the given function on it. If the function
+  throws an {type XMLError}, the error is converted to a {type Text} and
+  returned as a {Left}. Otherwise, the result of the function is returned as a
+  {Right}.
+
+  # Example
+
+    ```
+    xmlDoc = "<root><a/><b>Some text</b><b>More text</b><c/></root>"
+    withXML xmlDoc (descendants >> named "b" >> Soup.toXML)
+    ```
+  }}
+
+Soup.wrap : Text -> Soup ->{Throw XMLError} Soup
+Soup.wrap tag = cases
+  Soup c@(Cursor pre cur fol) ->
+    match cur with
+      OpenTag ix name ->
+        match nextEvent c with
+          None ->
+            throw
+              (StructureError
+                ("Unexpected end of stream looking for closing tag for <"
+                  Text.++ name
+                  Text.++ ">."))
+          Some next ->
+            (skip, after) = findMatchingClose name next
+            Soup
+              (Cursor
+                pre
+                (OpenTag ix tag)
+                (cur Stream.+: Stream.take skip fol
+                  Stream.++ (do emit (CloseTag 0 tag))
+                  Stream.++ currentStream after))
+      x ->
+        Soup
+          (Cursor
+            pre (OpenTag 0 tag) (cur Stream.+: (CloseTag 0 tag Stream.+: fol)))
+
+Soup.wrap.doc : Doc
+Soup.wrap.doc =
+  use Soup root toXML wrap
+  use Throw toBug
+  {{
+  Wraps the current element in a new tag with the given name. The cursor of the
+  {type Soup} is moved to the new tag.
+
+  # Examples
+
+    ```
+    toBug do parseXML "<a><b>Hello</b></a>" // "b" |> wrap "c" |> root |> toXML
+    ```
+
+    ```
+    toBug do
+      parseXML "<a><b>Hello</b></a>" // "b"
+        |> Soup.next
+        |> wrap "c"
+        |> root
+        |> toXML
+    ```
+  }}
+
+test> tests.cdataBug =
+  test.verify do
+    ignore
+      (Throw.toException (failure "Failed to parse CDATA") do
+        parseXML
+          "<script type=\"text/javascript\">// <![CDATA[ (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),   m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)   })(window,document,'script','//www.google-analytics.com/analytics.js','ga');    ga('create', 'UA-42606639-1', 'vsvc.lt');   ga('send', 'pageview'); // ]]></script>"
+          |> Soup.toXML)
+
+tests.docs.xml1 : Text
+tests.docs.xml1 =
+  """
+  <?xml version="1.0"?>
+  <!DOCTYPE root [
+      <!ELEMENT root (emptyElement, elementWithChildren, cdataSection, elementWithAttributes, nsElement)>
+      <!ELEMENT emptyElement EMPTY>
+      <!ELEMENT elementWithChildren (childElement*)>
+      <!ELEMENT childElement (#PCDATA)>
+      <!ATTLIST elementWithChildren attribute CDATA #IMPLIED>
+      <!ELEMENT cdataSection (#PCDATA)>
+      <!ELEMENT elementWithAttributes EMPTY>
+      <!ATTLIST elementWithAttributes attribute1 CDATA #IMPLIED
+                                    attribute2 CDATA #IMPLIED>
+      <!ELEMENT nsElement xmlns:anyNamespace CDATA #IMPLIED>
+      <!ENTITY myentity "entity replacement text">
+  ]>
+  <root xmlns:example="http://www.example.com">
+      <!-- This is a comment -->
+      <?target instruction?>
+      <emptyElement/>
+      <elementWithChildren attribute="value">
+          <childElement>Text content</childElement>
+          <childElement>More text content</childElement>
+      </elementWithChildren>
+      <cdataSection><![CDATA[This is some <b>unescaped</b> markup within a CDATA section.]]></cdataSection>
+      <elementWithAttributes attribute1="value1" attribute2="value2"/>
+      <nsElement xmlns="http://www.example.com">Namespaced element</nsElement>
+      <example:nsElement>Namespaced element using a prefix</example:nsElement>
+      <escapedCharacters>&lt;example&gt;escaped characters&lt;/example&gt;</escapedCharacters>
+      <userDefinedEntity>&myentity;</userDefinedEntity>
+  </root>
+  """
+
+test> tests.entityDecoding =
+  test.verify do
+    xml =
+      "<ETag someAttribute=\"This has &lt; special chars &#x26; in it.\">&#34;d1b050f0928afeb5ba134476f562782c&#34;</ETag>"
+    soup = parseXML xml
+    Throw.toException (failure "failed to parse XML data") do
+      etag = soup // "ETag"
+      ensureEqual (etag |> Soup.text) "\"d1b050f0928afeb5ba134476f562782c\""
+      ensureEqual
+        (etag |> Soup.attribute "someAttribute")
+        "This has < special chars & in it."
+
+test> tests.laxAmpersand =
+  test.verify do
+    ignore
+      (Throw.toException (failure "Failed to parse ampersand") do
+        parseXML
+          "<iframe src=\"//www.facebook.com/plugins/likebox.php?href=http://www.facebook.com/sportinis.vairavimas&locale=lt_LT&amp;width=200&amp;height=226&amp;colorscheme=light&amp;show_faces=true&amp;border_color=white&amp;stream=false&amp;header=false\" scrolling=\"no\" frameborder=\"0\" style=\"border:none; overflow:hidden; width:200px; height:226px;\" allowTransparency=\"true\"></iframe>"
+          |> Soup.toXML)
+
+XMLError.doc : Doc
+XMLError.doc =
+  {{
+  The type of errors that can occur when parsing XML.
+
+  * {ParseError} indicates that the XML is not well-formed.
+  * {StructureError} indicates that the XML didn't have the expected structure.
+  }}
+
+XMLError.inContext : Text -> XMLError -> Text
+XMLError.inContext xml = cases
+  ParseError n t ->
+    (before, after) = Text.splitAt n xml
+    (_, lineHead) = Text.findLast (fromChar ?\n) before
+    (lineTail, _) = Text.findFirst (fromChar ?\n) after
+    lineHead
+      Text.++ lineTail
+      Text.++ "\n"
+      Text.++ Text.repeat (Text.size lineHead) " "
+      Text.++ "^\n"
+      Text.++ t
+  StructureError t -> t
+
+XMLError.inContext.doc : Doc
+XMLError.inContext.doc =
+  {{
+  Converts an {type XMLError} to a {type Text} representation, including a
+  context of the XML that caused the error.
+
+  # Example
+
+    ```
+    xmlDoc = "<note><to>Mal-2</to><>Everything is permitted!</body></note>"
+    lines (catchWith (inContext xmlDoc) do parseXML xmlDoc |> Soup.toXML)
+    ```
+  }}
+
+XMLError.toText : XMLError -> Text
+XMLError.toText = cases
+  ParseError n t ->
+    "Parse error at offset " Text.++ Nat.toText n Text.++ ": " Text.++ t
+  StructureError t -> t
+
+XMLError.toText.doc : Doc
+XMLError.toText.doc =
+  {{
+  Converts an {type XMLError} to a {type Text} representation.
+
+  # Example
+
+    ```
+    XMLError.toText (ParseError 0 "Unexpected end of input")
+    ```
+  }}
+
+XMLError.traceErrors : Text -> '{e, Throw XMLError} a ->{e} Optional a
+XMLError.traceErrors xml f =
+  catchWith
+    (e -> "\n" Text.++ inContext xml e |> flip Debug.trace () |> (do None))
+    do Some f()
+
+XMLError.traceErrors.doc : Doc
+XMLError.traceErrors.doc =
+  {{
+  Runs a computation that may throw an {type XMLError}, and if it does, prints
+  the error to the console.
+
+  # Example
+
+    @typecheck ```
+    xmlDoc = "<note><to>Mal-2</to><>Everything is permitted!</body></note>"
+    traceErrors xmlDoc do parseXML xmlDoc |> Soup.toXML
+    ```
+  }}
+
+XMLEvent.doc : Doc
+XMLEvent.doc =
+  {{
+  An event emitted by the {eventParser.parse} function.
+
+  * {DocumentStart} - The start of the XML document. This is always the first
+    event emitted. It contains the offset of the last character of the
+    document, plus one.
+  * {XMLDecl} - The XML declaration. This is always the first event emitted.
+    Arguments are:
+    * The index of the start of the declaration in the document.
+    * The XML version.
+    * The encoding declaration.
+    * Whether the document is standalone (``false`` if the declaration is
+      missing).
+  * {Doctype} - The document type declaration, if present. Arguments are:
+    * The index of the start of the `<!DOCTYPE` keyword in the document.
+    * The text of the doctype declaration, including the `<!DOCTYPE` and `>`
+      delimiters.
+  * {Comment} - A comment. Arguments are:
+    * The index of the start of the `<!--` delimiter in the document.
+    * The text of the comment, **not** including the `<!--` and `-->`
+      delimiters.
+  * {CData} - A CDATA section. Arguments are:
+    * The index of the start of the `<![CDATA[` delimiter in the document.
+    * The text of the CDATA section, **not** including the `<![CDATA[` and
+      `]]>` delimiters.
+  * {Processing} - A processing instruction. Arguments are:
+    * The index of the start of the `<?` delimiter in the document.
+    * The target of the processing instruction, identifying the processor that
+      should process the instruction.
+    * The content of the processing instruction.
+  * {OpenTag} - An opening tag. Arguments are:
+    * The index of the start of the tag in the document.
+    * The name of the tag.
+  * {Attribute} - An attribute. Arguments are:
+    * The index of the start of the attribute name in the document.
+    * The name of the attribute.
+    * The value of the attribute.
+  * {CloseTag} - A closing tag. This is either an explicit closing tag, or an
+    implicit closing tag for an empty element. An implicit closing tag is
+    always emitted immediately after the last {Attribute} event for an empty
+    element (or immediately after the {OpenTag} event if the empty element has
+    no attributes). Arguments are:
+    * The index of the start of the closing tag in the document.
+    * The name of the tag.
+  * {Text} - Text between tags. Arguments are:
+    * The index of the start of the text in the document.
+    * The text.
+  * {Error} - An error processing the document. Arguments are:
+    * The index of the start of the text in the document.
+    * The error message.
+  * {DocumentEnd} - This is always the last event emitted. It contains the
+    offset of the last character of the document, plus one.
+  }}
+
+XMLEvent.isAttribute : XMLEvent -> Boolean
+XMLEvent.isAttribute = cases
+  Text _ _         -> false
+  OpenTag _ _      -> false
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> true
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isAttribute.doc : Doc
+XMLEvent.isAttribute.doc =
+  {{
+  Checks if the given {type XMLEvent} represents an attribute of an XML
+  element.
+  }}
+
+XMLEvent.isCloseTag : XMLEvent -> Boolean
+XMLEvent.isCloseTag = cases
+  Text _ _         -> false
+  OpenTag _ _      -> false
+  CloseTag _ _     -> true
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isCloseTag.doc : Doc
+XMLEvent.isCloseTag.doc =
+  {{
+  Checks if the given {type XMLEvent} represents the closing tag of an XML
+  element.
+  }}
+
+XMLEvent.isCloseTagNamed : Text -> XMLEvent -> Boolean
+XMLEvent.isCloseTagNamed name = cases
+  CloseTag _ name' -> name Text.== name'
+  _                -> false
+
+XMLEvent.isCloseTagNamed.doc : Doc
+XMLEvent.isCloseTagNamed.doc =
+  {{
+  Returns true if the {type XMLEvent} is a {CloseTag} with the given name.
+  }}
+
+XMLEvent.isDocumentEnd : XMLEvent -> Boolean
+XMLEvent.isDocumentEnd = cases
+  DocumentEnd _ -> true
+  _             -> false
+
+XMLEvent.isDocumentStart : XMLEvent -> Boolean
+XMLEvent.isDocumentStart = cases
+  DocumentStart _ -> true
+  _               -> false
+
+XMLEvent.isError : XMLEvent -> Boolean
+XMLEvent.isError = cases
+  Text _ _         -> false
+  OpenTag _ _      -> false
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> true
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isError.doc : Doc
+XMLEvent.isError.doc =
+  {{
+  Checks if the given {type XMLEvent} represents an error in the XML document.
+  }}
+
+XMLEvent.isOpenTag : XMLEvent -> Boolean
+XMLEvent.isOpenTag = cases
+  Text _ _         -> false
+  OpenTag _ _      -> true
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isOpenTag.doc : Doc
+XMLEvent.isOpenTag.doc =
+  {{
+  Indicates whether the given {type XMLEvent} represents the opening tag of an
+  XML element.
+  }}
+
+XMLEvent.isOpenTagNamed : Text -> XMLEvent -> Boolean
+XMLEvent.isOpenTagNamed name = cases
+  Text _ _         -> false
+  OpenTag _ name'  -> name Text.== name'
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isOpenTagNamed.doc : Doc
+XMLEvent.isOpenTagNamed.doc =
+  {{
+  Checks if the given {type XMLEvent} represents the opening tag of an XML
+  element with the given name.
+  }}
+
+XMLEvent.isProcessing : XMLEvent -> Boolean
+XMLEvent.isProcessing = cases
+  Text _ _         -> false
+  OpenTag _ _      -> false
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> true
+  Comment _ _      -> false
+  CData _ _        -> false
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isProcessing.doc : Doc
+XMLEvent.isProcessing.doc =
+  {{
+  Checks if the given {type XMLEvent} represents a processing instruction in an
+  XML document.
+  }}
+
+XMLEvent.isStructural : XMLEvent -> Boolean
+XMLEvent.isStructural = cases
+  Text _ _         -> true
+  OpenTag _ _      -> true
+  CloseTag _ _     -> true
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> true
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isStructural.doc : Doc
+XMLEvent.isStructural.doc =
+  {{
+  Checks if the given {type XMLEvent} represents a structural element in an XML
+  document. This is true for {Text}, {OpenTag}, {CloseTag}, and {CData} events.
+  }}
+
+XMLEvent.isXMLNode : XMLEvent -> Boolean
+XMLEvent.isXMLNode = cases
+  Text _ _         -> true
+  OpenTag _ _      -> true
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> true
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isXMLNode.doc : Doc
+XMLEvent.isXMLNode.doc =
+  {{
+  Indicates whether the given {type XMLEvent} represents the beginning of an
+  XML node in a document. This is true for {Text}, {OpenTag}, and {CData}
+  events.
+  }}
+
+XMLEvent.isXMLText : XMLEvent -> Boolean
+XMLEvent.isXMLText = cases
+  Text _ _         -> true
+  OpenTag _ _      -> false
+  CloseTag _ _     -> false
+  Attribute _ _ _  -> false
+  Processing _ _ _ -> false
+  Comment _ _      -> false
+  CData _ _        -> true
+  XMLDecl _ _ _ _  -> false
+  Doctype _ _      -> false
+  Error _ _        -> false
+  DocumentStart _  -> false
+  DocumentEnd _    -> false
+
+XMLEvent.isXMLText.doc : Doc
+XMLEvent.isXMLText.doc =
+  {{
+  Indicates whether the given {type XMLEvent} represents character data in an
+  XML document. True for {Text} and {CData} events.
+  }}
+
+XMLNode.addAttribute : Text -> Text -> XMLNode ->{Throw XMLError} XMLNode
+XMLNode.addAttribute = cases
+  key, value, XMLElement name attrs children ->
+    XMLElement name (Map.insert key value attrs) children
+  _, _, _ ->
+    throw (StructureError "Can't add an attribute to a non-element node")
+
+XMLNode.addAttribute.doc : Doc
+XMLNode.addAttribute.doc =
+  {{
+  Adds an attribute to an XML element, returning a new XML element with the
+  attribute added.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      item = elementNamed "item"
+      itemWithTitle = addAttribute "title" "Hi there" item
+      itemWithTitle |> XMLNode.toXML
+    ```
+  }}
+
+XMLNode.attributes : XMLNode -> Map Text Text
+XMLNode.attributes = cases
+  XMLElement _ attrs _ -> attrs
+  _                    -> Map.empty
+
+XMLNode.attributes.doc : Doc
+XMLNode.attributes.doc =
+  {{
+  Returns the attributes of an XML element as a map from attribute names to
+  attribute values.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      parseXML "<item id='123'>Hi there</item>"
+        |> node
+        |> XMLNode.attributes
+        |> Map.toList
+    ```
+  }}
+
+XMLNode.children : XMLNode -> [XMLNode]
+XMLNode.children = cases
+  XMLElement _ _ children -> children
+  _                       -> []
+
+XMLNode.children.doc : Doc
+XMLNode.children.doc = {{ Returns the child nodes of an {type XMLNode}. }}
+
+XMLNode.doc : Doc
+XMLNode.doc =
+  use Throw toBug
+  use XMLNode toXML
+  {{
+  Represents a node in an XML document.
+
+  There are three types of nodes:
+
+  * An {XMLElement} is an element node with a name, attributes, and child
+    nodes.
+  * An {XMLText} node represents a string of text between the markup in the
+    document.
+  * An {XMLCData} node represents a CDATA section in the document (a string of
+    text that is not parsed as markup).
+
+  # Constructing XML nodes
+
+    Nodes can be constructed using the above constructors, but you can also
+    extract an {type XMLNode} from {type Soup}:
+
+        @signature{node}
+
+    This will return the node currently under the cursor, along with all its
+    children and attributes if it is an element node. For example:
+
+    ```
+    toBug do parseXML "<item>Hi there</item>" |> node
+    ```
+
+    You can also create an {type XMLNode} with no children or attributes using
+    the {elementNamed} function:
+
+        @signature{elementNamed}
+
+    ```
+    elementNamed "item"
+    ```
+
+    Then you can add children and attributes to the element using the
+    {addChild} and {addAttribute} functions:
+
+        @signature{addChild}     @signature{addAttribute}
+
+    ```
+    toBug do
+      elementNamed "item"
+        |> addChild (elementNamed "title" |> addChild (XMLText "Hi there"))
+        |> addAttribute "id" "123"
+        |> toXML
+    ```
+
+  # Extracting information from XML nodes
+
+    Get the children of an XML node:
+
+        @signature{XMLNode.children}
+
+    Get the attributes of an XML element:
+
+        @signature{XMLNode.attributes}
+
+  # Converting to text
+
+    Get the XML representation of an {type XMLNode}:
+
+        @signature{toXML}
+  }}
+
+XMLNode.elementNamed : Text -> XMLNode
+XMLNode.elementNamed name = XMLElement name Map.empty []
+
+XMLNode.elementNamed.doc : Doc
+XMLNode.elementNamed.doc =
+  {{
+  Creates an XML element with the given name and no attributes or children.
+
+  # Example
+
+    ```
+    elementNamed "item" |> XMLNode.toXML
+    ```
+  }}
+
+XMLNode.toXML : XMLNode -> Text
+XMLNode.toXML = cases
+  XMLElement name attrs children ->
+    use Text ++ ==
+    attrToXML acc name value =
+      acc ++ " " ++ name ++ "='" ++ encodeEntities value ++ "'"
+    attrXML = Map.foldLeftWithKey attrToXML "" attrs
+    childXML = List.foldLeft (++) "" (List.map XMLNode.toXML children)
+    if childXML == "" then "<" ++ name ++ attrXML ++ "/>"
+    else "<" ++ name ++ attrXML ++ ">" ++ childXML ++ "</" ++ name ++ ">"
+  XMLText text -> encodeEntities text
+  XMLCData text -> "<![CDATA[" Text.++ text Text.++ "]]>"
+
+XMLNode.toXML.doc : Doc
+XMLNode.toXML.doc =
+  use Map empty
+  {{
+  Converts an {type XMLNode} to XML text.
+
+  # Example
+
+    ```
+    doc =
+      XMLElement
+        "a"
+        empty
+        [ XMLElement "b" empty [XMLElement "c" empty [XMLText "Hello"]]
+        , XMLElement "d" empty []
+        ]
+    XMLNode.toXML doc
+    ```
+  }}
+
+XMLNode.XMLElement.addChild : XMLNode -> XMLNode ->{Throw XMLError} XMLNode
+XMLNode.XMLElement.addChild child = cases
+  XMLElement name attrs children ->
+    XMLElement name attrs (children List.++ [child])
+  _ -> throw (StructureError "Can't add a child to a non-element node")
+
+XMLNode.XMLElement.addChild.doc : Doc
+XMLNode.XMLElement.addChild.doc =
+  {{
+  Adds a child node to an XML element, returning a new XML element with the
+  child added as the last child.
+
+  # Example
+
+    ```
+    Throw.toBug do
+      item = elementNamed "item"
+      title = elementNamed "title"
+      titleText = XMLText "Hi there"
+      titleWithText = addChild title titleText
+      itemWithTitle = addChild item titleWithText
+      itemWithTitle |> XMLNode.toXML
+    ```
+  }}
