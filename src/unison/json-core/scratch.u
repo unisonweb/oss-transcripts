@@ -1,0 +1,574 @@
+type Json
+  = Null
+  | Boolean Boolean
+  | Object [(Text, Json)]
+  | Number.Unparsed Text
+  | Text Text
+  | Array [Json]
+
+type Json.ParseError
+  = ParseError Text Nat Text
+
+Json.array : [Json] -> Json
+Json.array = Array
+
+Json.boolean : Boolean -> Json
+Json.boolean = Boolean
+
+Json.catchFromText : Text -> Either Failure Json
+Json.catchFromText txt = catch do Json.fromText txt
+
+Json.catchUnconsText : Text -> Either Failure (Json, Text)
+Json.catchUnconsText txt = catch do unconsText txt
+
+Json.doc : Doc
+Json.doc =
+  {{
+  A JSON syntax tree type, useful as a common type for JSON encoding / decoding
+  libraries.
+
+  For maximum flexibility:
+
+  * Numbers are stored unparsed (the JSON spec only specifies the syntax for
+    numbers, not their semantics).
+  * Objects are represented as ordered lists of tuples (the JSON spec allows
+    duplicate fields).
+
+  See
+  [the JSON spec](https://www.ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf)
+  for more details.
+
+      @signatures{Json.toText, catchFromText}
+
+  Also see the {Readme} for more usage examples.
+  }}
+
+Json.float : Float -> Json
+Json.float n = Unparsed (Float.toText n)
+
+Json.fromText : Text ->{Exception} Json
+Json.fromText txt = at1 (unconsText txt)
+
+test> Json.fromText.tests.emptyArray = verify do
+  json = each ["[]", "[\n]\n", "[\n\n]\n", " [\n    \n]\n"]
+  ensuring do catchFromText json === Right (Array [])
+
+test> Json.fromText.tests.emptyObject = verify do
+  json = each ["{}", "{\n}\n", "{\n\n}\n", " {\n    \n}\n"]
+  ensuring do catchFromText json === Right (Object [])
+
+Json.int : Int -> Json
+Json.int n = Unparsed (Int.toText n)
+
+Json.nat : Nat -> Json
+Json.nat n = Unparsed (Nat.toText n)
+
+Json.null : Json
+Json.null = Null
+
+Json.object : [(Text, Json)] -> Json
+Json.object = Object
+
+Json.ParseError : Text -> a -> Failure
+Json.ParseError msg a = Failure (typeLink ParseError) msg (Any a)
+
+Json.ParseError.doc : Doc
+Json.ParseError.doc =
+  {{
+  A parse error when producing a {type Json} from {type Text}. Fields:
+
+      @signatures{ParseError.message, ParseError.position, remainder}
+  }}
+
+Json.ParseError.message : ParseError -> Text
+Json.ParseError.message = cases ParseError.ParseError msg _ _ -> msg
+
+Json.ParseError.message.doc : Doc
+Json.ParseError.message.doc = {{ The error message. }}
+
+Json.ParseError.position : ParseError -> Nat
+Json.ParseError.position = cases ParseError.ParseError _ pos _ -> pos
+
+Json.ParseError.position.doc : Doc
+Json.ParseError.position.doc = {{ The position of the failure. }}
+
+Json.ParseError.raiseFailure : ParseError ->{Exception} r
+Json.ParseError.raiseFailure e =
+  Exception.raise (Failure (typeLink ParseError) (ParseError.toText e) (Any e))
+
+Json.ParseError.remainder : ParseError -> Text
+Json.ParseError.remainder = cases ParseError.ParseError _ _ rem -> rem
+
+Json.ParseError.remainder.doc : Doc
+Json.ParseError.remainder.doc =
+  {{ The remainder of the text after the position of failure. }}
+
+Json.ParseError.toText : ParseError -> Text
+Json.ParseError.toText = cases
+  ParseError.ParseError msg pos rem ->
+    use Text ++
+    takeLine txt = match Text.indexOf "\n" txt with
+      None   -> txt
+      Some i -> Text.take i txt
+    "JSON parsing error at position "
+      ++ Nat.toText pos
+      ++ ": "
+      ++ msg
+      ++ "\n  Remainder of line: "
+      ++ takeLine rem
+
+Json.ParseError.toText.doc : Doc
+Json.ParseError.toText.doc =
+  {{ Convert a {type ParseError} to human readable text. }}
+
+test> Json.tests.controlChars = verify do
+  use Json fromText toText
+  use Nat +
+  use Text ++
+  j = "[\"\\u0000abc\",\"\\u0001bac\",\"\\u001fjja\",\"\\u0011koo\"]"
+  j2 = fromText j |> toText
+  ensureEqual j j2
+  n = each (Nat.range 0 (31 + 1))
+  match Char.fromNat n with
+    None    -> ()
+    Some ch -> guard (is (Class.not (in "\n\r\t\b\f")) ch)
+  str = "\"\\u00" ++ controlCharToHex n ++ "\""
+  str' = fromText str |> toText
+  ensureEqual str str'
+
+test> Json.tests.parsing =
+  verify do
+    use Json array boolean float nat text
+    ex1 =
+      """
+      [true, 2,false,  null]
+
+      """
+    ensureEqual
+      (catchFromText ex1)
+      (Right (array [boolean true, nat 2, boolean false, null]))
+    ex2 =
+      """
+      [true, { "name" : "Alice",
+             "age" : 42, "favorites" : ["apples",
+            "ice cream"] } , 3,  null]
+
+      """
+    ex2Json =
+      array
+        [ boolean true
+        , object
+            [ ("name", text "Alice")
+            , ("age", nat 42)
+            , ("favorites", array [text "apples", text "ice cream"])
+            ]
+        , nat 3
+        , null
+        ]
+    ensureEqual (catchFromText ex2) (Right ex2Json)
+    ex3 =
+      """
+      [-1.0, 2.0e19]
+
+      """
+    ensureEqual (catchFromText ex3) (Right (array [float -1.0, float 2.0e19]))
+
+test> Json.tests.roundtripTextEsc1 = verify do
+  roundtrip j =
+    parsed = Json.fromText (Json.toText j)
+    ensureEqual j parsed
+  j = each [Text "\"", Text "\r\n/", Text "\f\t\b", Text "😀"]
+  roundtrip j
+
+test> Json.tests.unicodeHex =
+  verify do
+    use Char fromNat toText
+    use Json text
+    j =
+      """
+      ["\u05d0" , "\u25B7"]
+
+      """
+    match (fromNat 1488, fromNat 9655) with
+      (Some c1, Some c2) ->
+        ensureEqual
+          (catchFromText j)
+          (Right (Json.array [text (toText c1), text (toText c2)]))
+      _ -> Each.fail()
+
+Json.text : Text -> Json
+Json.text = Text
+
+Json.toText : Json -> Text
+Json.toText = cases
+  Null -> "null"
+  Boolean true -> "true"
+  Boolean false -> "false"
+  Unparsed numTxt -> numTxt
+  Text txt -> literalForm txt
+  Array js -> "[" Text.++ Text.join "," (List.map Json.toText js) Text.++ "]"
+  Object kvs ->
+    use Text ++
+    entry = cases (k, v) -> literalForm k ++ ":" ++ Json.toText v
+    "{" ++ Text.join "," (List.map entry kvs) ++ "}"
+
+Json.toText.doc : Doc
+Json.toText.doc =
+  use Json nat text toText
+  {{
+  Converts a {type Json} to compact {type Text} with no extra spacing.
+
+  ```
+  json = Json.array [null, nat 42, text "hello\nworld!"]
+  toText json
+  ```
+
+  ```
+  json = object [("name", text "Gandalf"), ("age", nat 2019)]
+  toText json
+  ```
+  }}
+
+Json.tryFromText : Text -> Either ParseError Json
+Json.tryFromText txt = toEither do at1 (unconsTextOrThrow txt)
+
+Json.tryUnconsText : Text -> Either ParseError (Json, Text)
+Json.tryUnconsText txt = toEither do unconsTextOrThrow txt
+
+Json.unconsText : Text ->{Exception} (Json, Text)
+Json.unconsText txt =
+  handle unconsTextOrThrow txt
+  with cases
+    { p }            -> p
+    { throw e -> _ } -> ParseError.raiseFailure e
+
+Json.unconsTextOrThrow : Text ->{Throw ParseError} (Json, Text)
+Json.unconsTextOrThrow txt =
+  use Nat -
+  use Pattern +
+  use Text ++ == drop size take uncons
+  use patterns digit
+  numberish =
+    capture
+      (Pattern.join
+        [ Pattern.optional (chars "-")
+        , digit
+        , many (notChars "{}[],:\" \n\r\t\b")
+        ])
+  numberStart.pattern = charRange ?- ?- + digit
+  originalText = txt
+  error : Text -> Text ->{Throw ParseError} x
+  error msg rem =
+    throw (ParseError.ParseError msg (size originalText - size rem) rem)
+  array txt =
+    go : [Json] -> Text -> (Json, Text)
+    go acc txt =
+      txt0 = dropLeadingWhitespace txt
+      match uncons txt0 with
+        Some (?], rem) -> (Array acc, rem)
+        None           -> error "unexpected eof while parsing an object" txt
+        _              ->
+          (elem, rem2) = root0 txt0
+          rem3 = dropLeadingWhitespace rem2
+          match uncons rem3 with
+            Some (?,, rem3) -> go (acc :+ elem) (dropLeadingWhitespace rem3)
+            Some (?], rem3) -> (Array (acc :+ elem), rem3)
+            _               -> error "expected ',' or ']'" rem3
+    go [] txt
+  root0 txt =
+    match uncons txt with
+      None -> error "unexpected end of file" txt
+      Some (?{, txt) -> obj txt
+      Some (?[, txt) -> array txt
+      Some (?n, txt') ->
+        if take 3 txt' == "ull" then (Null, drop 3 txt')
+        else error "expected null" txt'
+      Some (?t, txt') ->
+        if take 3 txt' == "rue" then (Boolean true, drop 3 txt')
+        else error "expected true" txt
+      Some (?f, txt') ->
+        if take 4 txt' == "alse" then (Boolean false, drop 4 txt')
+        else error "expected false" txt
+      Some (?\", _) ->
+        match parseTextLiteral txt with
+          None            -> error "expected text literal" txt
+          Some (lit, txt) -> (Text lit, txt)
+      _
+        | isMatch numberStart.pattern txt  ->
+          match Pattern.run numberish txt with
+            Some ([n], txt) -> (Unparsed n, txt)
+            _               -> error ("unknown token: " ++ take 10 txt) txt
+        | otherwise                        ->
+          error ("unknown token: " ++ take 10 txt) txt
+  obj txt =
+    go : [(Text, Json)] -> Text -> (Json, Text)
+    go acc txt =
+      txt0 = dropLeadingWhitespace txt
+      match uncons txt0 with
+        Some (?}, rem) -> (Object acc, rem)
+        None           -> error "unexpected eof while parsing an object" txt
+        _              ->
+          (elem, rem2) = entry0 txt0
+          rem3 = dropLeadingWhitespace rem2
+          match uncons rem3 with
+            Some (?,, rem3) -> go (acc :+ elem) rem3
+            Some (?}, rem3) -> (Object (acc :+ elem), rem3)
+            _               -> error "expected ','" rem3
+    go [] txt
+  entry0 txt = match parseTextLiteral txt with
+    None             -> error "expected text literal" txt
+    Some (key, txt0) ->
+      txt = dropLeadingWhitespace txt0
+      match uncons txt with
+        Some (?:, txt) ->
+          (value, rem) = root txt
+          ((key, value), rem)
+        _              -> error "expected ':'" txt
+  root txt0 =
+    txt = dropLeadingWhitespace txt0
+    root0 txt
+  entry txt0 = entry0 (dropLeadingWhitespace txt0)
+  root txt
+
+Json.util.dropLeadingWhitespace : Text -> Text
+Json.util.dropLeadingWhitespace t = match Pattern.run (many space) t with
+  None        -> t
+  Some (_, t) -> t
+
+Json.util.hexCharToNat : Char -> Nat
+Json.util.hexCharToNat = cases
+  ?0 -> 0
+  ?1 -> 1
+  ?2 -> 2
+  ?3 -> 3
+  ?4 -> 4
+  ?5 -> 5
+  ?6 -> 6
+  ?7 -> 7
+  ?8 -> 8
+  ?9 -> 9
+  ?a -> 10
+  ?b -> 11
+  ?c -> 12
+  ?d -> 13
+  ?e -> 14
+  ?f -> 15
+  ?A -> 10
+  ?B -> 11
+  ?C -> 12
+  ?D -> 13
+  ?E -> 14
+  ?F -> 15
+  _  -> 0
+
+Json.util.hexCodepoint : Text -> Char
+Json.util.hexCodepoint digits =
+  use Nat * +
+  go k n rem = match Text.unsnoc rem with
+    None           -> n
+    Some (rem, ch) -> go (k * 16) (n + k * hexCharToNat ch) rem
+  fromNat.impl (go 1 0 digits)
+
+Json.util.parseTextLiteral : Text -> Optional (Text, Text)
+Json.util.parseTextLiteral t =
+  use List ++
+  use Pattern + run
+  use Text ==
+  textBody.pattern = capture (many (notChars "\"\\"))
+  textEscape.pattern = Pattern.join [chars "\\", capture (chars "\"\\/bfnrt")]
+  hexDigit.pattern = charRange ?0 ?9 + charRange ?a ?f + charRange ?A ?F
+  textUnicodeEscape.pattern =
+    Pattern.join
+      [literal "\\u", capture (Pattern.replicate 4 4 hexDigit.pattern)]
+  go acc t =
+    match run textBody.pattern t with
+      None -> bug "impossible - many patterns always succeed"
+      Some (acc2, t)
+        | Text.take 1 t == "\""  ->
+          Some (Text.join "" (acc ++ acc2), Text.drop 1 t)
+        | otherwise              ->
+          acc' = acc ++ acc2
+          match run textEscape.pattern t with
+            Some (["f"], t) -> go (acc' :+ "\f") t
+            Some (["n"], t) -> go (acc' :+ "\n") t
+            Some (["r"], t) -> go (acc' :+ "\r") t
+            Some (["t"], t) -> go (acc' :+ "\t") t
+            Some (["b"], t) -> go (acc' :+ "\b") t
+            Some (["/"], t) -> go (acc' :+ "/") t
+            Some (["\""], t) -> go (acc' :+ "\"") t
+            Some (["\\"], t) -> go (acc' :+ "\\") t
+            _ ->
+              match run textUnicodeEscape.pattern t with
+                Some ([digits], t) ->
+                  go (acc' :+ fromCharList [hexCodepoint digits]) t
+                _ -> None
+  match Text.uncons t with
+    Some (?\", t) -> go [] t
+    _             -> None
+
+Readme : Doc
+Readme =
+  use Json array nat text toText
+  {{
+  This minimal library provides a basic {type Json} syntax tree, and some
+  convenience functions for converting to and from {type Text}:
+
+      @signatures{toText, Json.fromText, tryFromText}
+
+  This library doesn't try to provide any sort of nicer abstraction for writing
+  decoders or encoders. It's intended that other libraries can build on top of
+  this one to provide that functionality.
+
+  # Tutorial
+
+    You can use functions like {nat}, {text}, and {array} to construct a
+    {type Json} tree directly: {{
+    docAside
+      {{
+      The {type Json} type leaves numbers unparsed to give encoders and
+      decoders more flexibility. The
+      [JSON spec](https://www.json.org/json-en.html) just determines the syntax
+      of numbers, not their implementation.
+      }} }}
+
+    ```
+    array
+      [nat 1, text "🤖", null, object [("name", text "Alice"), ("age", nat 42)]]
+    ```
+
+    The @inlineSignature{toText} function converts a {type Json} to {type Text}
+    with no extra spaces and escaping all {type Text} properly:
+
+    ```
+    json = array [nat 1, text "\n🤖\n", null, object [("name", text "Fred")]]
+    toText json
+    ```
+
+    Here's a basic example showing how parsing works:
+
+    ```
+    txt =
+      """
+      [1,
+       true,
+       false,
+       2.2e12,
+       { "name": "Alice", "age" : 42 }
+      ]
+
+      """
+    tryFromText txt
+    ```
+
+    {{
+    docAside
+      {{
+      You can use {unconsText} or {tryUnconsText} if you'd additionally like
+      the remainder of the {type Text} after the root {type Json} value is
+      parsed.
+      }} }}
+
+    Here's another example:
+
+    ```
+    txt =
+      """
+      {
+        "a" : 1,
+        "b" : 2,
+        "c": [1,null,3]
+      }
+
+      """
+    tryFromText txt
+    ```
+
+    Parse errors are thrown as values of type {type ParseError}, and include
+    the position of the error and an excerpt of the remainding text:
+
+    ```
+    txt =
+      """
+      [1,
+       true,
+       flse, "<- this is an error!",
+       null]
+
+      """
+    tryFromText txt
+    ```
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes = {{ Upgrade to base version 2.9.1 }}
+
+util.Text.controlCharToHex : Nat -> Text
+util.Text.controlCharToHex n =
+  use Nat and
+  use Text ++
+  toHexChar (and (Nat.shiftRight n 4) 15) ++ toHexChar (and n 15)
+
+util.Text.literalForm : Text -> Text
+util.Text.literalForm txt =
+  use Class +
+  use Nat <=
+  use Text ++
+  onef = getOrBug "0x1f" (Char.fromNat 31)
+  pat =
+    capture
+      (many (char (Class.not (in "\"\\\\/\b\f\n\r\t" + Class.range ?\0 onef))))
+  esc : Text -> Text -> Text
+  esc acc txt =
+    match Pattern.run pat txt with
+      None -> acc
+      Some ([prefix], rest) ->
+        match Text.uncons rest with
+          None -> acc ++ prefix
+          Some (ch, suffix) ->
+            encodeCh : Text
+            encodeCh =
+              match ch with
+                ?\" -> "\\\""
+                ?\\ -> "\\\\"
+                ?\b -> "\\b"
+                ?\f -> "\\f"
+                ?\n -> "\\n"
+                ?\r -> "\\r"
+                ?\t -> "\\t"
+                ch ->
+                  n = Char.toNat ch
+                  if n <= 31 then "\\u00" ++ controlCharToHex n
+                  else Char.toText ch
+            esc (acc ++ prefix ++ encodeCh) (Text.drop 1 rest)
+      Some (wat, rest) ->
+        bug ("somehow pattern captured too much or too little", wat)
+  "\"" ++ esc "" txt ++ "\""
+
+util.Text.literalForm.doc : Doc
+util.Text.literalForm.doc =
+  {{
+  The
+  [JSON Spec](https://www.ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf)
+  says that certain characters MUST be escaped inside strings. This function
+  escapes them.
+  }}
+
+util.Text.toHexChar : Nat -> Text
+util.Text.toHexChar = cases
+  0  -> "0"
+  1  -> "1"
+  2  -> "2"
+  3  -> "3"
+  4  -> "4"
+  5  -> "5"
+  6  -> "6"
+  7  -> "7"
+  8  -> "8"
+  9  -> "9"
+  10 -> "a"
+  11 -> "b"
+  12 -> "c"
+  13 -> "d"
+  14 -> "e"
+  15 -> "f"
+  n  -> bug ("not a hex digit", n)

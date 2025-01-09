@@ -3669,3 +3669,10 @@ This is the official Unison Cloud client library. It contains functions for depl
                                         ->{WebSockets} Either
                                           Failure ()
 ```
+
+## Code examples
+
+``` ucm
+@unison/cloud/main> edit 1-1600
+```
+

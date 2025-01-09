@@ -949,3 +949,10 @@ This is a high-level HTTP server library for Unison. It contains utilities for w
   513. up.codec.DecodeError.toFailure : DecodeError -> Failure
   514. up.codec.DecodeError.toFailure.doc : Doc
 ```
+
+## Code examples
+
+``` ucm
+@unison/routes/main> edit 1-600
+```
+

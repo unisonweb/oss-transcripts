@@ -562,3 +562,10 @@ This project provides an ability and interpreter for easily adding OAuth2 authen
   106. utils.http.redirect : URI ->{Route} ()
   107. utils.pathToUriParser : Path -> Parser a a
 ```
+
+## Code examples
+
+``` ucm
+@unison/auth/main> edit 1-500
+```
+

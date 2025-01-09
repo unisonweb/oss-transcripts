@@ -1034,3 +1034,9 @@ This library is a playground for expressing distributed data types via the Remot
   539. VectorClock.VectorClock : Map k (Nat, Expiring)
                                  -> VectorClock k
 ```
+
+## Code examples
+
+``` ucm
+@unison/distributed-extra/main> edit 1-5000
+```

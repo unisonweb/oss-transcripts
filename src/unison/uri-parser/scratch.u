@@ -1,0 +1,1910 @@
+ability ParseQuery where
+  queryParseFailure : QueryParseFailure ->{ParseQuery} a
+  getParameter : Text ->{ParseQuery} [Text]
+
+type ParseQuery.QueryParseFailure
+  = MalformedQuery Text
+  | MissingParameter Text
+  | InvalidParameter InvalidQueryParameter
+
+type ParseQuery.QueryParseFailure.InvalidParameterCause
+  = IncorrectCount Nat
+  | Invalid
+
+type ParseQuery.QueryParseFailure.InvalidQueryParameter
+  = { key : Text,
+      expected : Expected,
+      actual : [Text],
+      cause : InvalidParameterCause }
+
+type Parser a b
+  = Parser (State a ->{Throw QueryParseFailure} [State b])
+
+type Parser.examples.BlogRoute
+  = Blog Nat
+  | Topic Text
+  | User Text
+  | Comment Text Nat
+
+type Parser.Expected
+  = Exact Text
+  | Meta Text
+
+type Parser.PathParseFailure
+  = { expected : Expected, actual : [Text], committed : [Text] }
+
+type Parser.State value
+  = { visited : [Text],
+      unvisited : [Text],
+      params : Map Text [Text],
+      frag : Optional Text,
+      committed : Boolean,
+      value : Either Expected value }
+
+type Parser.UriParseFailure
+  = BadPath [PathParseFailure]
+  | BadUri Text
+  | BadQuery QueryParseFailure
+
+type Parser.UriParseFailure.InvalidUri
+  =
+
+devGuide : Doc
+devGuide =
+  {{
+  This central type of the URI parser is the {type Parser} type:
+
+      @source{type Parser}
+
+  A parser takes in the current {type State} and produces a list of
+  {type State} values. Each {type State} value represents the result of a
+  parser that was tried using e.g. {Parser.oneOf}. The first {type State} that
+  has no unvisited segments is the one that succeeded, and its value is the
+  result of the parser. If all {type State} values have unvisited segments (or
+  if the list is empty) then the parser failed.
+
+  The {type State} type is defined like this:
+
+      @source{type State}
+
+  The {type State} type represents the current state of the parser. It has five
+  fields:
+
+  * {visited} - the segments that have been visited so far
+  * {unvisited} - the segments that haven't been visited yet
+  * {params} - the query parameters
+  * {frag} - the fragment
+  * {State.value} - the value of the parser. This could be either a function
+    that takes in the parsed values of some remaining segments, or the final
+    value of the parser.
+  }}
+
+ParseQuery.boolean : Text ->{ParseQuery} Optional Boolean
+ParseQuery.boolean key =
+  ParseQuery.custom key cases
+    ["true"] -> Some true
+    ["false"] -> Some false
+    [] -> None
+    [x] ->
+      InvalidParameter (InvalidQueryParameter key (Meta "Boolean") [x] Invalid)
+        |> queryParseFailure
+    _ ->
+      InvalidParameter
+        (InvalidQueryParameter key (Meta "Boolean") [] (IncorrectCount 1))
+        |> queryParseFailure
+
+ParseQuery.boolean.doc : Doc
+ParseQuery.boolean.doc =
+  {{
+  Parses a query parameter with the given name into a {type Boolean}. The
+  parameter must have a single value and it must be either `` "true" `` or
+  ``"false"``. Otherwise this parser fails. If the parameter is missing, this
+  parser returns {None}.
+
+  # Example
+
+    ```
+    catch do
+      parseQueryString (do ParseQuery.boolean "paginate") "?paginate=true"
+    ```
+  }}
+
+ParseQuery.custom : Text -> ([Text] ->{g} a) ->{g, ParseQuery} a
+ParseQuery.custom key f = f (getParameter key)
+
+ParseQuery.custom.doc : Doc
+ParseQuery.custom.doc =
+  use ParseQuery custom nat
+  {{
+  Constructs a custom query string parameter parser.
+
+  # Examples
+
+    The {nat} parser is defined using {custom}:
+
+        @source{nat}
+
+    The following parses a multi-valued parameter:
+
+    ```
+    catch do
+      parseQueryString (do custom "tags" id) "?tags=foo&tags=bar&tags=baz"
+    ```
+  }}
+
+ParseQuery.customSingle :
+  Text -> Expected -> (Text ->{g} Optional a) ->{g, ParseQuery} Optional a
+ParseQuery.customSingle key expected f =
+  ParseQuery.custom key cases
+    [n] ->
+      match f n with
+        Some v -> Some v
+        None ->
+          InvalidParameter (InvalidQueryParameter key expected [n] Invalid)
+            |> queryParseFailure
+    [] -> None
+    vs ->
+      InvalidParameter
+        (InvalidQueryParameter key expected vs (IncorrectCount 1))
+        |> queryParseFailure
+
+ParseQuery.doc : Doc
+ParseQuery.doc =
+  use ParseQuery nat
+  use Parser & /
+  use Text ++
+  {{
+  This ability parses the query parameters of a URI.
+
+  # Typical usage
+
+    ```
+    format = cases
+      user, (search, page) ->
+        "Requested user comments for "
+          ++ user
+          ++ " containing '"
+          ++ search
+          ++ "', page "
+          ++ Nat.toText page
+    q = do
+      use Optional getOrElse
+      searchTerm = ParseQuery.text "search" |> getOrElse ""
+      page = nat "page" |> getOrElse 0
+      (searchTerm, page)
+    parseTextMaybe
+      (Parser.map format (s "users" / Parser.text / s "comments" & q))
+      "/users/bob/comments?search=actually&page=4"
+    ```
+
+  # Running a parser
+
+    You can run a parser on a {type Text} query string:
+
+        @signature{parseQueryString}
+
+    Run a parser on a {type RawQuery}:
+
+        @signature{parseRawQuery}
+
+    Run a parser on a {type Query}:
+
+        @signature{ParseQuery.parseQuery}
+
+    Or you can incorporate it into a URI parser:
+
+        @signatures{Parser.query, &}
+
+    You can also run a query on a multimap of {type Text} keys and values:
+
+        @signature{ParseQuery.run}
+
+  # Accessing query parameters
+
+    You can request the raw text values of a named parameter:
+
+        @signature{getParameter}
+
+    You can ask for the {type Text}, {type Nat}, {type Int}, or {type Float}
+    value of a numeric parameter:
+
+        @signatures{ParseQuery.text, nat, ParseQuery.int, ParseQuery.float}
+
+    You can also write your own custom parser to do whatever you want:
+
+        @signature{ParseQuery.custom}
+  }}
+
+ParseQuery.float : Text ->{ParseQuery} Optional Float
+ParseQuery.float key = customSingle key (Meta "Float") Float.fromText
+
+ParseQuery.float.doc : Doc
+ParseQuery.float.doc =
+  {{
+  Parses a query parameter with the given name into a {type Float}. The
+  parameter must have a single value and it must be a valid {type Float}.
+  Otherwise this parser fails. If the parameter is missing, this parser returns
+  {None}.
+
+  # Example
+
+    ```
+    catch do parseQueryString (do ParseQuery.float "price") "?price=10.99"
+    ```
+  }}
+
+ParseQuery.int : Text ->{ParseQuery} Optional Int
+ParseQuery.int key = customSingle key (Meta "Int") Int.fromText
+
+ParseQuery.int.doc : Doc
+ParseQuery.int.doc =
+  {{
+  Parses a query parameter with the given name into an {type Int}. The
+  parameter must have a single value and it must be a valid {type Int}.
+  Otherwise this parser returns {None}.
+
+  # Example
+
+    ```
+    catch do parseQueryString (do ParseQuery.int "page") "?page=10"
+    ```
+  }}
+
+ParseQuery.nat : Text ->{ParseQuery} Optional Nat
+ParseQuery.nat key = customSingle key (Meta "Nat") Nat.fromText
+
+ParseQuery.nat.doc : Doc
+ParseQuery.nat.doc =
+  {{
+  Parses a query parameter with the given name into a {type Nat}. The parameter
+  must have a single value and it must be a valid {type Nat}. Otherwise this
+  parser returns {None}.
+
+  # Example
+
+    ```
+    catch do parseQueryString (do ParseQuery.nat "page") "?page=10"
+    ```
+  }}
+
+ParseQuery.parseQuery : '{ParseQuery} a -> Query ->{Exception} a
+ParseQuery.parseQuery p = cases Query q -> ParseQuery.run p q
+
+ParseQuery.parseQuery.doc : Doc
+ParseQuery.parseQuery.doc =
+  use Optional toAbort
+  {{
+  Runs a {type ParseQuery} parser against a {type Query}.
+
+  # Example
+
+    ```
+    catch do
+      toOptional! do
+        (URI _ _ _ rawq _) = parseOptional "/blog?page=10" |> toAbort
+        q = fromRawQuery rawq |> toAbort
+        ParseQuery.parseQuery (do ParseQuery.nat "page") q |> toAbort
+    ```
+  }}
+
+ParseQuery.parseQueryString : '{ParseQuery} a -> Text ->{Exception} a
+ParseQuery.parseQueryString p s =
+  use Char ==
+  parseRawQuery p (RawQuery (Text.dropWhile (c -> c == ??) s))
+
+ParseQuery.parseQueryString.doc : Doc
+ParseQuery.parseQueryString.doc =
+  {{
+  Runs a {type ParseQuery} parser against a query string.
+
+  # Example
+
+    ```
+    catch do parseQueryString (do ParseQuery.nat "page") "?page=10"
+    ```
+  }}
+
+ParseQuery.parseRawQuery : '{ParseQuery} a -> RawQuery ->{Exception} a
+ParseQuery.parseRawQuery p q =
+  m =
+    match fromRawQuery q with
+      Some (Query q) -> q
+      None ->
+        Exception.raise
+          (Failure
+            (typeLink QueryParseFailure)
+            "Malformed query"
+            (Any (MalformedQuery (RawQuery.encode q))))
+  ParseQuery.run p m
+
+ParseQuery.parseRawQuery.doc : Doc
+ParseQuery.parseRawQuery.doc =
+  {{
+  Runs a {type ParseQuery} parser against a {type RawQuery}.
+
+  # Example
+
+    ```
+    match parseOptional "/blog?page=10" with
+      Some (URI _ _ _ q _) ->
+        Some (catch do parseRawQuery (do ParseQuery.nat "page") q)
+      None -> None
+    ```
+  }}
+
+ParseQuery.QueryParseFailure.InvalidParameterCause.doc : Doc
+ParseQuery.QueryParseFailure.InvalidParameterCause.doc =
+  {{
+  A {type InvalidParameterCause} value represents the reason why a query
+  parameter is invalid.
+
+  * {Invalid} - The parameter had the wrong type of value.
+  * {IncorrectCount} - The parameter contains the wrong number of values.
+  }}
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual :
+  InvalidQueryParameter -> [Text]
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual = cases
+  InvalidQueryParameter _ _ actual _ -> actual
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual.modify :
+  ([Text] ->{g} [Text]) -> InvalidQueryParameter ->{g} InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual.modify f = cases
+  InvalidQueryParameter key expected actual cause ->
+    InvalidQueryParameter key expected (f actual) cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual.set :
+  [Text] -> InvalidQueryParameter -> InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.actual.set actual1 = cases
+  InvalidQueryParameter key expected _ cause ->
+    InvalidQueryParameter key expected actual1 cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause :
+  InvalidQueryParameter -> InvalidParameterCause
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause = cases
+  InvalidQueryParameter _ _ _ cause -> cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause.modify :
+  (InvalidParameterCause ->{g} InvalidParameterCause)
+  -> InvalidQueryParameter
+  ->{g} InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause.modify f = cases
+  InvalidQueryParameter key expected actual cause ->
+    InvalidQueryParameter key expected actual (f cause)
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause.set :
+  InvalidParameterCause -> InvalidQueryParameter -> InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.cause.set cause1 = cases
+  InvalidQueryParameter key expected actual _ ->
+    InvalidQueryParameter key expected actual cause1
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected :
+  InvalidQueryParameter -> Expected
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected = cases
+  InvalidQueryParameter _ expected _ _ -> expected
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected.modify :
+  (Expected ->{g} Expected)
+  -> InvalidQueryParameter
+  ->{g} InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected.modify f = cases
+  InvalidQueryParameter key expected actual cause ->
+    InvalidQueryParameter key (f expected) actual cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected.set :
+  Expected -> InvalidQueryParameter -> InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.expected.set expected1 = cases
+  InvalidQueryParameter key _ actual cause ->
+    InvalidQueryParameter key expected1 actual cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key :
+  InvalidQueryParameter -> Text
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key = cases
+  InvalidQueryParameter key _ _ _ -> key
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key.modify :
+  (Text ->{g} Text) -> InvalidQueryParameter ->{g} InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key.modify f = cases
+  InvalidQueryParameter key expected actual cause ->
+    InvalidQueryParameter (f key) expected actual cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key.set :
+  Text -> InvalidQueryParameter -> InvalidQueryParameter
+ParseQuery.QueryParseFailure.InvalidQueryParameter.key.set key1 = cases
+  InvalidQueryParameter _ expected actual cause ->
+    InvalidQueryParameter key1 expected actual cause
+
+ParseQuery.QueryParseFailure.InvalidQueryParameter.toText :
+  InvalidQueryParameter -> Text
+ParseQuery.QueryParseFailure.InvalidQueryParameter.toText = cases
+  InvalidQueryParameter key expected actual cause ->
+    match cause with
+      Invalid ->
+        "Invalid query parameter "
+          Text.++ key
+          Text.++ ": expected "
+          Text.++ Expected.toText expected
+          Text.++ " but got "
+          Text.++ Text.join ", " actual
+      IncorrectCount n ->
+        "Incorrect number of values for query parameter "
+          Text.++ key
+          Text.++ ": expected "
+          Text.++ Nat.toText n
+          Text.++ " but got "
+          Text.++ Text.join ", " actual
+
+ParseQuery.QueryParseFailure.toText : QueryParseFailure -> Text
+ParseQuery.QueryParseFailure.toText = cases
+  InvalidParameter p -> InvalidQueryParameter.toText p
+  MalformedQuery e   -> "Malformed query: " Text.++ e
+  MissingParameter p -> "Missing parameter: " Text.++ p
+
+ParseQuery.required : (Text ->{ParseQuery} Optional b) -> Text ->{ParseQuery} b
+ParseQuery.required p name = match p name with
+  Some v -> v
+  None   -> queryParseFailure (MissingParameter name)
+
+ParseQuery.run : '{ParseQuery} a -> Map Text [Text] ->{Exception} a
+ParseQuery.run q m =
+  h = cases
+    { getParameter key -> k } -> handle k (Multimap.lookup key m) with h
+    { queryParseFailure e -> _ } ->
+      Exception.raiseFailure
+        (typeLink QueryParseFailure) (QueryParseFailure.toText e) e
+    { a } -> a
+  handle q() with h
+
+ParseQuery.run.doc : Doc
+ParseQuery.run.doc =
+  {{
+  Runs a {type ParseQuery} parser against a multimap of query parameters.
+
+  # Example
+
+    ```
+    m = Map.fromList [("a", ["one", "two", "three"]), ("b", ["four"])]
+    catch do ParseQuery.run (do ParseQuery.nat "a") m
+    ```
+  }}
+
+ParseQuery.text : Text ->{ParseQuery} Optional Text
+ParseQuery.text key = ParseQuery.custom key cases
+  [t] -> Some t
+  []  -> None
+  vs  -> None
+
+ParseQuery.text.doc : Doc
+ParseQuery.text.doc =
+  {{
+  Parses a query parameter with the given name into a {type Text}. The
+  parameter must have a single value. Otherwise this parser returns {None}.
+
+  # Example
+
+    ```
+    catch do parseQueryString (do ParseQuery.text "q") "?q=foo"
+    ```
+  }}
+
+ParseQuery.tryRun :
+  '{ParseQuery} a -> Map Text [Text] -> Either QueryParseFailure a
+ParseQuery.tryRun q m =
+  h = cases
+    { getParameter key -> k }    -> handle k (Multimap.lookup key m) with h
+    { queryParseFailure e -> _ } -> Left e
+    { a }                        -> Right a
+  handle q() with h
+
+(Parser.&) : Parser a (query -> b) -> '{ParseQuery} query -> Parser a b
+parser Parser.& queryParser =
+  use Parser /
+  parser / Parser.query queryParser
+
+Parser.&.doc : Doc
+Parser.&.doc =
+  use Parser & /
+  {{
+  `` p & q `` combines a {type Parser} `p` with a {type ParseQuery} parser for
+  a query string (or part of a query string).
+
+  It's equivalent to `` p / Parser.query q ``
+
+  # Example
+
+    ```
+    parseTextMaybe (s "blog" & (do ParseQuery.nat "page")) "/blog?page=2"
+    ```
+
+  # See also
+
+    {.Parser.query} - turns a {type ParseQuery} parser into a regular
+    {type Parser}.
+  }}
+
+(Parser./) : Parser a b -> Parser b c -> Parser a c
+(Parser./) = cases
+  Parser parseBefore, Parser parseAfter ->
+    Parser (state -> List.flatMap parseAfter (parseBefore state))
+
+Parser./.doc : Doc
+Parser./.doc =
+  use Parser /
+  {{
+  `` x / y `` is a parser for a URI path consisting of some segments parsed by
+  `x` followed by some segments parsed by `y`.
+
+  # Examples
+
+    ```
+    parseTextMaybe
+      (s "foo" / s "bar" / s "baz" / Parser.map () top) "foo/bar/baz"
+    ```
+
+    ```
+    parseTextMaybe (s "foo" / Parser.text / s "baz") "foo/bar/baz"
+    ```
+  }}
+
+(Parser.<|>) : Parser a b -> Parser a b -> Parser a b
+a Parser.<|> b = Parser.oneOf [a, b]
+
+Parser.<|>.doc : Doc
+Parser.<|>.doc =
+  use Parser / <|> text
+  {{
+  Combines two parsers into one that tries them both. If the first parser
+  doesn't succeed, the second parser is tried.
+
+  # Example
+
+    ```
+    p1 = s "users" / text
+    p2 = s "posts" / text
+    [ parseTextMaybe (p1 <|> p2) "/users/bob"
+    , parseTextMaybe (p1 <|> p2) "/posts/92ijj29"
+    ]
+    ```
+
+    Note that all the parsers have to have the same type. You can transform
+    them to agree on the type, with {Parser.map}.
+  }}
+
+(Parser.=>) : Parser a b -> a -> Parser (b -> c) c
+(Parser.=>) = flip Parser.map
+
+Parser.=>.doc : Doc
+Parser.=>.doc =
+  use Parser /
+  {{
+  Transforms a path parser.
+
+  # Examples
+
+    ```
+    "/user/bob/comment/42"
+      |> parseTextMaybe
+        (s "user" / Parser.text / s "comment" / Parser.nat
+          |> Parser.map Tuple.pair)
+    ```
+  }}
+
+Parser.custom : Text -> (Text -> Optional a) -> Parser (a -> b) b
+Parser.custom tipe stringToSomething =
+  use List +:
+  go = cases
+    State visited unvisited params frag committed (Right value) ->
+      failIfCommitted =
+        if committed then
+          [State visited unvisited params frag true (Left (Meta tipe))]
+        else []
+      match unvisited with
+        [] -> failIfCommitted
+        next +: rest ->
+          match stringToSomething next with
+            Some nextValue ->
+              [ State
+                  (next +: visited)
+                  rest
+                  params
+                  frag
+                  committed
+                  (Right (value nextValue))
+              ]
+            None -> failIfCommitted
+    State visited unvisited params frag committed (Left e) ->
+      [State visited unvisited params frag committed (Left e)]
+  Parser go
+
+Parser.custom.doc : Doc
+Parser.custom.doc =
+  use Parser custom
+  {{
+  Creates a custom path segment parser.
+
+  # Examples
+
+    Here's how the {Parser.nat} parser is defined using {custom}:
+
+    ```
+    nat : Parser (Nat -> a) a
+    nat = custom "Nat" Nat.fromText
+    parseTextMaybe nat "/38"
+    ```
+
+    You could define a parser that only matches segments that end with
+    `".css"`, like this:
+
+    ```
+    css =
+      custom
+        "CSS_FILE"
+        (segment -> (if endsWith ".css" segment then Some segment else None))
+    parseTextMaybe css "/style.css"
+    ```
+  }}
+
+Parser.doc : Doc
+Parser.doc =
+  use Parser & / <|> custom map nat oneOf query
+  use Tuple pair
+  {{
+  A {type Parser} is a parser that can parse a {type URI} and produce some
+  value.
+
+  # Typical usage
+
+    ```
+    parseTextMaybe
+      (s "videos" & (do ParseQuery.text "v")) "/videos?v=dQw4w9WgXcQ"
+    ```
+
+  # Parsing path segments
+
+    The {top} parser matches the top-level path:
+
+    ```
+    parseTextMaybe (noCapture top) "/"
+    ```
+
+    The {s} parser matches a segment with the exact given name:
+
+    ```
+    parseTextMaybe (noCapture (s "foo" / s "bar")) "/foo/bar/"
+    ```
+
+    You can capture the name of a segment, with {Parser.text}:
+
+    ```
+    parseTextMaybe (s "users" / Parser.text) "/users/bob"
+    ```
+
+    Capture the value of a segment as an {type Int}, {type Nat}, or
+    {type Float}:
+
+    ```
+    parseTextMaybe (s "posts" / nat) "/posts/38"
+    ```
+
+    ```
+    parseTextMaybe (s "posts" / Parser.int) "/posts/38"
+    ```
+
+    ```
+    parseTextMaybe
+      (s "products" / s "byPrice" / Parser.float) "/products/byPrice/4.99"
+    ```
+
+    Capture the value of a segment with a custom parser using {custom}:
+
+    ```
+    css =
+      custom
+        "CSS_FILE"
+        (segment -> (if endsWith ".css" segment then Some segment else None))
+    parseTextMaybe css "/style.css"
+    ```
+
+    Combine path segment parsers into a path parser with the {/} function:
+
+    ```
+    parseTextMaybe (noCapture (s "foo" / s "bar")) "/foo/bar/"
+    ```
+
+  # Parsing the query string
+
+    A query parser is any computation that uses the {type ParseQuery} ability.
+    See the documentation for that type.
+
+    Combine a path segment parser of type {type Parser} with a
+    {type ParseQuery} parser using the {&} function:
+
+    ```
+    s "videos" & (do ParseQuery.text "v") |> parseTextMaybe
+      <| "/videos?v=dQw4w9WgXcQ"
+    ```
+
+    You can also convert a {type ParseQuery} parser into a {type Parser} using
+    the {query} function:
+
+    ```
+    parseTextMaybe (query do ParseQuery.text "v") "?v=dQw4w9WgXcQ"
+    ```
+
+  # Running a parser
+
+    These functions can be used to run a parser:
+
+        @signatures{parseMaybe, parseTextMaybe, matches, matchesText, Parser.parse, parseText, tryParse}
+
+    Note that in order to run a parser with these functions, it needs to return
+    exactly one value. If your parser captures zero or many values, see the
+    section on Transforming Parsers for how to transform it into one that
+    produces one value.
+
+    {parseTextMaybe} runs a parser on the given {type Text}, which must be a
+    valid URI. It returns {None} if the URI is invalid or if the parser doesn't
+    match.
+
+    ```
+    s "videos" / Parser.text & (do ParseQuery.text "quality") => pair
+      |> parseTextMaybe
+      <| "/videos/dQw4w9WgXcQ?quality=1080p"
+    ```
+
+    {parseMaybe} does the same, but parses a {type URI} rather than {type Text}
+    input.
+
+    {matchesText} and {matches} return `` true `` or `` false `` depending on
+    whether the parser matches, instead of returning the parsed value.
+
+    ## Handling errors
+
+       { tryParse } returns an {type Either} value. If the parser succeeds, it
+       returns the parsed value. If the parser fails, it returns a list of
+       {type UriParseFailure} values. Each {type UriParseFailure} value
+       contains the segments that were visited before the failure, the segment
+       that caused the failure, and the expected segments. You can use
+       {UriParseFailure.toText} to get a human-readable description of the
+       failure.
+
+       { parseExcept } is like { tryParse }, but it raises an {type Exception}
+       if the parser fails. If you {catch} the exception, the resulting
+       {type Failure} contains the text of the error message and the list of
+       {type UriParseFailure} values.
+
+       { parseTextExcept } is like { parseExcept }, but it takes a {type Text}
+       instead of a {type URI}.
+
+  # Transforming parsers
+
+    If a parser captures no values, you should pass it to {noCapture} before
+    running it. This will return `` Some() `` if it matches and `` None ``
+    otherwise:
+
+    ```
+    s "blog" |> noCapture |> parseTextMaybe <| "/blog"
+    ```
+
+    If a parser captures more than one value, use {map} to combine those values
+    into one. {map} accepts a function of the same arity as the parser:
+
+    ```
+    p = map pair (s "users" / Parser.text / s "comments" / nat)
+    parseTextMaybe p "/users/bob/comments/42"
+    ```
+
+    You can also use {=>}, which is an infix version of {map} that takes its
+    arguments in the opposite order:
+
+    ```
+    p = s "users" / Parser.text / s "comments" / nat => pair
+    parseTextMaybe p "/users/bob/comments/42"
+    ```
+
+  # Combining parsers
+
+    You can combine parsers using the {<|>} function, which returns a parser
+    that matches if either of the given parsers match:
+
+    ```
+    use Parser text
+    p1 = s "users" / text
+    p2 = s "posts" / text
+    [ parseTextMaybe (p1 <|> p2) "/users/bob"
+    , parseTextMaybe (p1 <|> p2) "/posts/92ijj29"
+    ]
+    ```
+
+    {oneOf} lets you combine a whole list of parsers this way:
+
+    ```
+    parseTextMaybe
+      (oneOf [s "users" / Parser.text, s "posts" / Parser.text]) "/posts/2i9i2"
+    ```
+
+    This picks the first parser that succeeds. Note that all the parsers have
+    to have the same type. You can transform them with {map} before passing
+    them to {oneOf} or {<|>}.
+  }}
+
+Parser.Expected.toText : Expected -> Text
+Parser.Expected.toText = cases
+  Exact s -> s
+  Meta n  -> "{" Text.++ n Text.++ "}"
+
+Parser.float : Parser (Float -> a) a
+Parser.float = Parser.custom "Float" Float.fromText
+
+Parser.float.doc : Doc
+Parser.float.doc =
+  {{
+  A path segment parser that matches a {type Float} number.
+
+  # Examples
+
+    ```
+    parseTextMaybe Parser.float "/3.14"
+    ```
+  }}
+
+Parser.int : Parser (Int -> a) a
+Parser.int = Parser.custom "Int" Int.fromText
+
+Parser.int.doc : Doc
+Parser.int.doc =
+  use Parser int
+  {{
+  A path segment parser that matches an {type Int} number.
+
+  # Examples
+
+    ```
+    parseTextMaybe int "/38"
+    ```
+
+    ```
+    parseTextMaybe int "/-38"
+    ```
+  }}
+
+Parser.map : a -> Parser a b -> Parser (b -> c) c
+Parser.map subValue = cases
+  Parser parseArg ->
+    Parser cases
+      State visited unvisited params frag committed (Right value) ->
+        State visited unvisited params frag committed (Right subValue)
+          |> parseArg
+          |> List.map (State.map value)
+      State visited unvisited params frag committed (Left e) ->
+        [State visited unvisited params frag committed (Left e)]
+
+Parser.matches : Parser (a ->{g} a) a -> URI -> Boolean
+Parser.matches p uri = match parseMaybe p uri with
+  None   -> false
+  Some _ -> true
+
+Parser.matches.doc : Doc
+Parser.matches.doc =
+  use Parser /
+  {{
+  Returns `` true `` if the given parser matches the given {type URI}.
+
+  # Example
+
+    ```
+    s "users" / Parser.text |> matches |> Optional.map
+      <| parseOptional "/users/bob"
+    ```
+  }}
+
+Parser.matchesText : Parser (a ->{g} a) a -> Text -> Boolean
+Parser.matchesText p t = match parseTextMaybe p t with
+  None   -> false
+  Some _ -> true
+
+Parser.matchesText.doc : Doc
+Parser.matchesText.doc =
+  use Parser /
+  {{
+  Returns `` true `` if the given parser matches the given {type Text}.
+
+  # Example
+
+    ```
+    s "users" / Parser.text |> matchesText <| "/users/bob"
+    ```
+  }}
+
+Parser.nat : Parser (Nat -> a) a
+Parser.nat = Parser.custom "Nat" Nat.fromText
+
+Parser.nat.doc : Doc
+Parser.nat.doc =
+  {{
+  A path segment parser that matches a {type Nat} number.
+
+  # Example
+
+    ```
+    parseTextMaybe Parser.nat "/38"
+    ```
+  }}
+
+Parser.noCapture : Parser () b -> Parser (b -> c) c
+Parser.noCapture = Parser.map()
+
+Parser.noCapture.doc : Doc
+Parser.noCapture.doc =
+  {{
+  Converts a parser that captures no values into a form accepted by the
+  {Parser.parse} and {parseText} functions.
+
+  # Example
+
+    ```
+    s "blog" |> noCapture |> parseTextMaybe <| "/blog"
+    ```
+
+    This returns `` Some() `` if the parser matches and `` None `` otherwise.
+  }}
+
+Parser.oneOf : [Parser a b] -> Parser a b
+Parser.oneOf parsers =
+  Parser
+    (state ->
+      Each.toList do
+        (Parser parser) = each parsers
+        each (parser state))
+
+Parser.oneOf.doc : Doc
+Parser.oneOf.doc =
+  use Parser / nat text
+  {{
+  Creates a {type Parser} that tries a bunch of parsers, picking the first one
+  that succeeds.
+
+  # Examples
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    [ "/topic/wolf"
+    , "/topic/"
+    , "/blog/42"
+    , "/blog/wolf"
+    , "/user/sam"
+    , "/user/bob/comment/42"
+    , "/user/"
+    ]
+      |> List.map (parseTextMaybe route)
+    ```
+  }}
+
+Parser.optional : Parser a b -> Parser a b
+Parser.optional = cases
+  Parser parseArg ->
+    Parser
+      (s -> let
+        use State.committed set
+        states = parseArg (set false s)
+        List.map (set (State.committed s)) states)
+
+Parser.optional.doc : Doc
+Parser.optional.doc =
+  {{
+  Marks a parser as optional, meaning that if it doesn't match it's not an
+  error, even if the larger parser it's part of is committed via
+  {Parser.required}.
+
+  You can use this to tightly control the error-handling behavior of your
+  parser.
+  }}
+
+Parser.parse : Parser (a ->{g} a) a -> URI ->{Exception} Optional a
+Parser.parse p uri =
+  match tryParse p uri with
+    Left (BadPath []) -> None
+    Left e ->
+      Exception.raiseFailure
+        (typeLink UriParseFailure) (UriParseFailure.toText e) e
+    Right v -> Some v
+
+Parser.parse.doc : Doc
+Parser.parse.doc =
+  use Parser / nat text
+  {{
+  Runs a parser on a {type URI}, raising an {type Exception} if the parser
+  fails.
+
+  # Example
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    uris =
+      [ "/topic/wolf"
+      , "/topic/"
+      , "/blog/42"
+      , "/blog/wolf"
+      , "/user/sam"
+      , "/user/bob/comment/42"
+      , "/user/"
+      ]
+        |> List.filterMap parseOptional
+    catch do List.map (Parser.parse route) uris
+    ```
+  }}
+
+Parser.parseMaybe : Parser (a ->{g} a) a -> URI -> Optional a
+Parser.parseMaybe p uri =
+  Optional.flatMap getFirstMatch (Throw.toOptional do Parser.run p uri)
+
+Parser.parseMaybe.doc : Doc
+Parser.parseMaybe.doc =
+  use Parser / nat text
+  {{
+  Parses a {type URI} using a {type Parser}. `` parseMaybe p uri `` runs the
+  parser `p` on the path, query parameters, and fragment of the `uri`,
+  returning the parsed value if the parser succeeds and {None} otherwise.
+
+  # Example
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    [ "/topic/wolf"
+    , "/topic/"
+    , "/blog/42"
+    , "/blog/wolf"
+    , "/user/sam"
+    , "/user/bob/comment/42"
+    , "/user/"
+    ]
+      |> List.map (parseTextMaybe route)
+    ```
+  }}
+
+Parser.ParseQuery.QueryParseFailure.doc : Doc
+Parser.ParseQuery.QueryParseFailure.doc =
+  use ParseQuery required text
+  use Parser &
+  {{
+  A {type QueryParseFailure} value represents a failure to parse a
+  {type Query}.
+
+  # Example
+
+    A query parser can mark a query parameter as "required", meaning that if it
+    doesn't match, the whole parser fails with a {type QueryParseFailure}. The
+    parser becomes "committed" to the query up to that point, meaning that if
+    the parser fails, the error message will include the query parameters that
+    were visited before the failure.
+
+    Here's an example of a parser with required parameters:
+
+    ```
+    catch do
+      parseText
+        (s "users" & (do required do text "search")) "/users?search=foo"
+    ```
+
+    This means that if the parser sees `/users`, then it must see a `search`
+    query parameter. If it doesn't, the parser fails with a
+    {type QueryParseFailure}.
+
+    Here's how that parser might fail if the URI doesn't match the required
+    structure:
+
+    ```
+    catch do parseText (s "users" & (do required do text "search")) "/users"
+    ```
+
+  # Structure of a QueryParseFailure value
+
+    A {type QueryParseFailure} value can be one of the following:
+
+    * {MissingParameter} - The given query doesn't contain the given parameter.
+    * {InvalidParameter} - The given query contains the given parameter, but
+      the value is invalid (see {type InvalidQueryParameter}).
+    * {MalformedQuery} - The given {type RawQuery} value is malformed.
+  }}
+
+Parser.ParseQuery.QueryParseFailure.InvalidQueryParameter.doc : Doc
+Parser.ParseQuery.QueryParseFailure.InvalidQueryParameter.doc =
+  {{
+  A {type InvalidQueryParameter} value represents a query parameter that is
+  present but has an invalid value.
+
+  The {key} field contains the name of the parameter, and the
+  {InvalidQueryParameter.expected} field says what that parameter was expected
+  to be.
+
+  The {InvalidQueryParameter.actual} field contains the actual values of the
+  parameter, and the {cause} field says why those values are invalid.
+  }}
+
+Parser.parseText : Parser (a ->{g} a) a -> Text ->{Exception} Optional a
+Parser.parseText p uriText =
+  match parseOptional uriText with
+    Some uri -> Parser.parse p uri
+    None -> Exception.raiseFailure (typeLink InvalidUri) "Invalid URI" uriText
+
+Parser.parseText.doc : Doc
+Parser.parseText.doc =
+  use Parser / nat text
+  {{
+  Runs a parser on a {type Text} URI, raising an {type Exception} if the parser
+  doesn't match.
+
+  # Example
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    uris =
+      [ "/topic/wolf"
+      , "/topic/"
+      , "/blog/42"
+      , "/blog/wolf"
+      , "/user/sam"
+      , "/user/bob/comment/42"
+      , "/user/"
+      ]
+    catch do List.map (parseText route) uris
+    ```
+  }}
+
+Parser.parseTextMaybe : Parser (a ->{g} a) a -> Text -> Optional a
+Parser.parseTextMaybe p uriText =
+  parseOptional uriText |> Optional.flatMap (parseMaybe p)
+
+Parser.parseTextMaybe.doc : Doc
+Parser.parseTextMaybe.doc =
+  use Parser /
+  {{
+  Runs a {type Parser} on a {type Text} by first parsing that into a
+  {type URI}.
+
+  # Examples
+
+    ```
+    Optional.flatten
+      (parseTextMaybe
+        (s "videos" / (Parser.query do ParseQuery.text "v"))
+        "/videos?v=dQw4w9WgXcQ")
+    ```
+  }}
+
+Parser.PathParseFailure.actual : PathParseFailure -> [Text]
+Parser.PathParseFailure.actual = cases PathParseFailure _ actual _ -> actual
+
+Parser.PathParseFailure.actual.modify :
+  ([Text] ->{g} [Text]) -> PathParseFailure ->{g} PathParseFailure
+Parser.PathParseFailure.actual.modify f = cases
+  PathParseFailure expected actual committed ->
+    PathParseFailure expected (f actual) committed
+
+Parser.PathParseFailure.actual.set :
+  [Text] -> PathParseFailure -> PathParseFailure
+Parser.PathParseFailure.actual.set actual1 = cases
+  PathParseFailure expected _ committed ->
+    PathParseFailure expected actual1 committed
+
+Parser.PathParseFailure.committed : PathParseFailure -> [Text]
+Parser.PathParseFailure.committed = cases
+  PathParseFailure _ _ committed -> committed
+
+Parser.PathParseFailure.committed.modify :
+  ([Text] ->{g} [Text]) -> PathParseFailure ->{g} PathParseFailure
+Parser.PathParseFailure.committed.modify f = cases
+  PathParseFailure expected actual committed ->
+    PathParseFailure expected actual (f committed)
+
+Parser.PathParseFailure.committed.set :
+  [Text] -> PathParseFailure -> PathParseFailure
+Parser.PathParseFailure.committed.set committed1 = cases
+  PathParseFailure expected actual _ ->
+    PathParseFailure expected actual committed1
+
+Parser.PathParseFailure.doc : Doc
+Parser.PathParseFailure.doc =
+  {{
+  A {type PathParseFailure} value represents a failure to parse a path segment.
+  It contains the path segments that were visited before the failure, the
+  segment that caused the failure, and the expected segments.
+
+  * {PathParseFailure.expected} contains the segment that was expected at the
+    point of failure.
+  * {PathParseFailure.actual} contains the segments that were actually seen at
+    the point of failure.
+  * {PathParseFailure.committed} contains the segments that were visited before
+    the failure.
+  }}
+
+Parser.PathParseFailure.expected : PathParseFailure -> Expected
+Parser.PathParseFailure.expected = cases
+  PathParseFailure expected _ _ -> expected
+
+Parser.PathParseFailure.expected.modify :
+  (Expected ->{g} Expected) -> PathParseFailure ->{g} PathParseFailure
+Parser.PathParseFailure.expected.modify f = cases
+  PathParseFailure expected actual committed ->
+    PathParseFailure (f expected) actual committed
+
+Parser.PathParseFailure.expected.set :
+  Expected -> PathParseFailure -> PathParseFailure
+Parser.PathParseFailure.expected.set expected1 = cases
+  PathParseFailure _ actual committed ->
+    PathParseFailure expected1 actual committed
+
+Parser.PathParseFailure.toText : PathParseFailure -> Text
+Parser.PathParseFailure.toText = cases
+  PathParseFailure expected actual committed ->
+    use Text ++ join
+    visited = join "/" committed
+    found = visited ++ "/" ++ join "/" actual
+    f = cases
+      Exact s -> visited ++ "/" ++ s
+      Meta n  -> visited ++ "/{" ++ n ++ "}"
+    exp = f expected
+    "Expected " ++ exp ++ " but got " ++ found
+
+Parser.PathParseFailure.toText.doc : Doc
+Parser.PathParseFailure.toText.doc =
+  {{
+  Converts a {type PathParseFailure} value into a human-readable description of
+  the failure.
+
+  # Example
+
+    ```
+    PathParseFailure (Exact "foo") ["baz"] ["foo", "bar"]
+      |> PathParseFailure.toText
+    ```
+  }}
+
+Parser.query : '{ParseQuery} query -> Parser (query -> a) a
+Parser.query q =
+  Parser cases
+    State visited unvisited params frag committed value ->
+      match tryRun q params with
+        Left e -> throw e
+        Right que ->
+          [ State
+              visited
+              unvisited
+              params
+              frag
+              committed
+              (Either.mapRight (x -> x que) value)
+          ]
+
+Parser.query.doc : Doc
+Parser.query.doc =
+  use ParseQuery text
+  use Parser & /
+  {{
+  Turns a {type ParseQuery} parser, that parses a {type URI} query string, into
+  a {type Parser}.
+
+  This can be useful if you need query parameters but aren't parsing any path
+  segments.
+
+  # Examples
+
+    ```
+    parseTextMaybe (Parser.query do text "v") "?v=dQw4w9WgXcQ"
+    ```
+
+    You can also use `` p & q `` instead of ``p / query q``. The two parsers in
+    this example are equivalent:
+
+    ```
+    Each.toList do
+      p =
+        each
+          [s "watch" & (do text "v"), s "watch" / (Parser.query do text "v")]
+      each
+        (Optional.toList
+          (Optional.flatten (parseTextMaybe p "watch?v=dQw4w9WgXcQ")))
+    ```
+  }}
+
+Parser.required : Parser a b -> Parser a b
+Parser.required = cases
+  Parser parseArg ->
+    Parser cases
+      s ->
+        use State.committed set
+        states = parseArg (set true s)
+        List.map (set (State.committed s)) states
+
+Parser.required.doc : Doc
+Parser.required.doc =
+  use Parser / <|> nat required
+  {{
+  Marks a path parser as "required", meaning that if it doesn't match, the
+  whole parser fails with a {type UriParseFailure} when run with
+  {Parser.parse}, {tryParse}, {parseText}, or {tryParseText}. The parser
+  becomes "committed" to the path up to that point, meaning that if the parser
+  fails, the error message will include the path segments that were visited
+  before the failure.
+
+  You can use this to tightly control the error-handling behavior of your
+  parser.
+
+  # Example
+
+    The following parser matches either `/foo/{Nat}` or `/bar/{Nat}` and
+    returns the {type Nat} value. However, instead of falling back to the
+    second parser if the first one doesn't contain a {type Nat} after `/foo/`,
+    it fails with a {type UriParseFailure} if `foo` isn't followed by a
+    {type Nat}:
+
+    ```
+    catch do
+      parseText (s "foo" / required nat <|> (s "bar" / required nat)) "/foo/4"
+    ```
+
+    ```
+    catch do
+      parseText (s "foo" / required nat <|> (s "bar" / required nat)) "/bar/9"
+    ```
+
+    ```
+    catch do
+      parseText
+        (s "foo" / required nat <|> (s "bar" / required nat)) "/foo/bar"
+    ```
+
+    Without {required}, the parser would fall back to the second parser if the
+    first one didn't match, and simply return {None} if the second one didn't
+    match either:
+
+    ```
+    catch do parseText (s "foo" / nat <|> (s "bar" / nat)) "/foo/bar"
+    ```
+  }}
+
+Parser.rest : Parser ([Text] -> o) o
+Parser.rest =
+  Parser cases
+    State visited unvisited params frag committed (Right value) ->
+      [ State
+          (visited List.++ List.reverse unvisited)
+          []
+          params
+          frag
+          committed
+          (Right (value unvisited))
+      ]
+    State visited unvisited params frag committed (Left failure) ->
+      [State visited unvisited params frag committed (Left failure)]
+
+Parser.rest.doc : Doc
+Parser.rest.doc =
+  use Parser /
+  {{
+  A parser that captures the rest of the path segments as a list of {type Text}
+  values.
+
+  # Example
+
+    ```
+    parseTextMaybe (s "blog" / rest) "/blog/2021/01/01"
+    ```
+  }}
+
+Parser.restAsText : Parser (Text -> c) c
+Parser.restAsText = Parser.map (Text.join "/") rest
+
+Parser.restAsText.doc : Doc
+Parser.restAsText.doc =
+  use Parser /
+  {{
+  A parser that captures the rest of the path segments as a single {type Text}
+  value.
+
+  # Example
+
+    ```
+    parseTextMaybe (s "blog" / restAsText) "/blog/2021/01/01"
+    ```
+  }}
+
+Parser.root : Parser a a
+Parser.root = Parser cases
+  s@(State visited [] params frag committed value)   -> [s]
+  s@(State visited [""] params frag committed value) -> [s]
+  _                                                  -> []
+
+Parser.root.doc : Doc
+Parser.root.doc =
+  {{
+  A URI {type Parser} that matches the root of the URI. This parser matches the
+  empty string or a single forward slash.
+
+  # Example
+
+    This example matches the root of a URI and returns {type Unit}:
+
+    ```
+    parseTextMaybe (noCapture Parser.root) "/"
+    ```
+  }}
+
+Parser.run : Parser (a ->{g} a) a -> URI ->{Throw QueryParseFailure} [State a]
+Parser.run = cases
+  Parser p, uri ->
+    (Query m) =
+      match fromRawQuery (URI.query uri) with
+        Some q -> q
+        None   -> throw (MalformedQuery (RawQuery.encode (URI.query uri)))
+    state0 =
+      State
+        []
+        (segments (URI.path uri))
+        m
+        (Text.nonempty (fragmentText uri))
+        false
+        (Right id)
+    p state0
+
+Parser.run.doc : Doc
+Parser.run.doc =
+  use Parser / parse
+  {{
+  This is a low-level function that you probably don't need to use. It's used
+  by e.g. {parseMaybe}, {parseTextMaybe}, {tryParse}, and {parse} to run a
+  {type Parser} on a {type URI}.
+
+  `` parseMaybe p uri `` runs the parser `p` on the path, query parameters, and
+  fragment of the `uri`, returning a list of {type State} values. Each
+  {type State} value represents the result of a parser that was tried using
+  e.g. {Parser.oneOf}. The first {type State} that has no unvisited segments is
+  the one that succeeded, and its value is the result of the parser. If all
+  {type State} values have unvisited segments (or if the list is empty) then
+  the parser didn't match. If the parser failed, the {type State} value
+  contains the segments that were visited before the failure, the segment that
+  caused the failure, and the next {type Expected} segment.
+
+  # Example
+
+    ```
+    toEither do
+      List.flatMap
+        (Parser.run (s "foo" / s "bar" / Parser.nat))
+        (Optional.toList (parseOptional "/foo/bar/42"))
+    ```
+
+  # See also
+
+    * {parseMaybe} - runs a parser on a {type URI}, returning {None} if the
+      parser fails or doesn't match.
+    * {parseTextMaybe} - runs a parser on a {type Text} URI, returning {None}
+      if the parser doesn't match.
+    * {matches} - returns `` true `` if a parser matches a {type URI}.
+    * {matchesText} - returns `` true `` if a parser matches a {type Text} URI.
+    * {parse} - runs a parser on a {type URI}, raising an {type Exception} if
+      the parser fails.
+    * {parseText} - runs a parser on a {type Text} URI, raising an
+      {type Exception} if the parser doesn't match.
+    * {tryParse} - runs a parser on a {type URI}, returning an {type Either}
+      value with the parsed value or a list of {type UriParseFailure} values.
+  }}
+
+Parser.s : Text -> Parser a a
+Parser.s str =
+  use List +:
+  use Text ==
+  go = cases
+    State visited unvisited params frag committed value ->
+      match unvisited with
+        [] ->
+          if committed then
+            [State visited unvisited params frag committed (Left (Exact str))]
+          else []
+        next +: rest ->
+          if next == str then
+            [State (next +: visited) rest params frag committed value]
+          else
+            if committed then
+              [ State
+                  visited unvisited params frag committed (Left (Exact str))
+              ]
+            else []
+  Parser go
+
+Parser.s.doc : Doc
+Parser.s.doc =
+  use Parser / nat
+  {{
+  Parses a segment of the path if it matches a given {type Text} exactly.
+
+  # Examples
+
+    ```
+    parseTextMaybe (s "blog" / nat) "/blog/42"
+    ```
+
+    ```
+    parseTextMaybe (s "blog" / nat) "/user/2"
+    ```
+  }}
+
+Parser.State.committed : State value -> Boolean
+Parser.State.committed = cases State _ _ _ _ committed _ -> committed
+
+Parser.State.committed.modify :
+  (Boolean ->{g} Boolean) -> State value ->{g} State value
+Parser.State.committed.modify f = cases
+  State visited unvisited params frag committed value ->
+    State visited unvisited params frag (f committed) value
+
+Parser.State.committed.set : Boolean -> State value -> State value
+Parser.State.committed.set committed1 = cases
+  State visited unvisited params frag _ value ->
+    State visited unvisited params frag committed1 value
+
+Parser.State.firstResult : [State a] -> Optional (State a)
+Parser.State.firstResult = List.find (isRight << State.value)
+
+Parser.State.frag : State value -> Optional Text
+Parser.State.frag = cases State _ _ _ frag _ _ -> frag
+
+Parser.State.frag.modify :
+  (Optional Text ->{g} Optional Text) -> State value ->{g} State value
+Parser.State.frag.modify f = cases
+  State visited unvisited params frag committed value ->
+    State visited unvisited params (f frag) committed value
+
+Parser.State.frag.set : Optional Text -> State value -> State value
+Parser.State.frag.set frag1 = cases
+  State visited unvisited params _ committed value ->
+    State visited unvisited params frag1 committed value
+
+Parser.State.getFirstMatch : [State a] -> Optional a
+Parser.State.getFirstMatch =
+  Optional.flatMap (Either.toOptional << State.value) << firstResult
+
+Parser.State.map : (a ->{g} b) -> State a ->{g} State b
+Parser.State.map f = cases
+  State visited unvisited params frag committed value ->
+    State visited unvisited params frag committed (Either.mapRight f value)
+
+Parser.State.map.doc : Doc
+Parser.State.map.doc =
+  {{ Transforms the value in the {type State} using the given function. }}
+
+Parser.State.params : State value -> Map Text [Text]
+Parser.State.params = cases State _ _ params _ _ _ -> params
+
+Parser.State.params.modify :
+  (Map Text [Text] ->{g} Map Text [Text]) -> State value ->{g} State value
+Parser.State.params.modify f = cases
+  State visited unvisited params frag committed value ->
+    State visited unvisited (f params) frag committed value
+
+Parser.State.params.set : Map Text [Text] -> State value -> State value
+Parser.State.params.set params1 = cases
+  State visited unvisited _ frag committed value ->
+    State visited unvisited params1 frag committed value
+
+Parser.State.unvisited : State value -> [Text]
+Parser.State.unvisited = cases State _ unvisited _ _ _ _ -> unvisited
+
+Parser.State.unvisited.modify :
+  ([Text] ->{g} [Text]) -> State value ->{g} State value
+Parser.State.unvisited.modify f = cases
+  State visited unvisited params frag committed value ->
+    State visited (f unvisited) params frag committed value
+
+Parser.State.unvisited.set : [Text] -> State value -> State value
+Parser.State.unvisited.set unvisited1 = cases
+  State visited _ params frag committed value ->
+    State visited unvisited1 params frag committed value
+
+Parser.State.value : State value -> Either Expected value
+Parser.State.value = cases State _ _ _ _ _ value -> value
+
+Parser.State.value.modify :
+  (Either Expected value1 ->{g} Either Expected value)
+  -> State value1
+  ->{g} State value
+Parser.State.value.modify f = cases
+  State visited unvisited params frag committed value ->
+    State visited unvisited params frag committed (f value)
+
+Parser.State.value.set : Either Expected value -> State value1 -> State value
+Parser.State.value.set value1 = cases
+  State visited unvisited params frag committed _ ->
+    State visited unvisited params frag committed value1
+
+Parser.State.visited : State value -> [Text]
+Parser.State.visited = cases State visited _ _ _ _ _ -> visited
+
+Parser.State.visited.modify :
+  ([Text] ->{g} [Text]) -> State value ->{g} State value
+Parser.State.visited.modify f = cases
+  State visited unvisited params frag committed value ->
+    State (f visited) unvisited params frag committed value
+
+Parser.State.visited.set : [Text] -> State value -> State value
+Parser.State.visited.set visited1 = cases
+  State _ unvisited params frag committed value ->
+    State visited1 unvisited params frag committed value
+
+Parser.text : Parser (Text -> a) a
+Parser.text = Parser.custom "Text" Some
+
+Parser.text.doc : Doc
+Parser.text.doc =
+  use Parser / text
+  {{
+  Captures a path segment as {type Text}.
+
+  # Examples
+
+    ```
+    parseTextMaybe text "/bob"
+    ```
+
+    ```
+    parseTextMaybe (s "hello" / text) "/hello/alice"
+    ```
+
+    ```
+    parseTextMaybe text "/"
+    ```
+  }}
+
+Parser.top : Parser a a
+Parser.top = Parser (state -> [state])
+
+Parser.top.doc : Doc
+Parser.top.doc =
+  use Parser / map
+  {{
+  A parser that doesn't consume any path segments.
+
+  # Example
+
+    ```
+    blog =
+      s "blog" / Parser.oneOf [map None top, map Some (s "post" / Parser.nat)]
+    [parseTextMaybe blog "/blog/", parseTextMaybe blog "/blog/post/42"]
+    ```
+  }}
+
+Parser.tryParse : Parser (a ->{g} a) a -> URI -> Either UriParseFailure a
+Parser.tryParse p uri =
+  flip
+    Either.flatMapRight
+    (Either.mapLeft BadQuery <| (toEither do Parser.run p uri))
+    cases
+    states ->
+      stateToFailure = cases
+        State visited unvisited params frag committed (Right value) ->
+          Right value
+        State visited unvisited params frag committed (Left e) ->
+          PathParseFailure e unvisited (List.reverse visited) |> Left
+      match partitionMap stateToFailure states with
+        ([], [])     -> Left (BadPath [])
+        (errors, []) -> Left (BadPath errors)
+        (_, v +: _)  -> Right v
+
+Parser.tryParse.doc : Doc
+Parser.tryParse.doc =
+  use Parser / nat text
+  {{
+  Runs a parser on a {type URI}, returning an {type Either} value with the
+  parsed value or a list of {type UriParseFailure} values.
+
+  # Example
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    uris =
+      [ "/topic/wolf"
+      , "/topic/"
+      , "/blog/42"
+      , "/blog/wolf"
+      , "/user/sam"
+      , "/user/bob/comment/42"
+      , "/user/"
+      ]
+        |> List.filterMap parseOptional
+    List.map (tryParse route) uris
+    ```
+  }}
+
+Parser.tryParseText : Parser (a ->{g} a) a -> Text -> Either UriParseFailure a
+Parser.tryParseText p uriText = match parseOptional uriText with
+  Some uri -> tryParse p uri
+  None     -> Left (BadUri uriText)
+
+Parser.tryParseText.doc : Doc
+Parser.tryParseText.doc =
+  use Parser / nat text
+  {{
+  Runs a parser on a {type Text} URI, returning an {type Either} value with the
+  parsed value or a list of {type UriParseFailure} values.
+
+  # Example
+
+        @source{type BlogRoute}
+
+    ```
+    route =
+      Parser.oneOf
+        [ s "topic" / text |> Parser.map Topic
+        , s "blog" / nat |> Parser.map Blog
+        , s "user" / text |> Parser.map User
+        , s "user" / text / s "comment" / nat |> Parser.map Comment
+        ]
+    uris =
+      [ "/topic/wolf"
+      , "/topic/"
+      , "/blog/42"
+      , "/blog/wolf"
+      , "/user/sam"
+      , "/user/bob/comment/42"
+      , "/user/"
+      ]
+    List.map (tryParseText route) uris
+    ```
+  }}
+
+Parser.UriParseFailure.doc : Doc
+Parser.UriParseFailure.doc =
+  use Parser / nat required text
+  use Tuple pair
+  {{
+  A {type UriParseFailure} value represents a failure to parse a {type URI}.
+
+  # Example
+
+    A URI parser can mark a path segment as "required", meaning that if it
+    doesn't match, the whole parser fails with a {type UriParseFailure}. The
+    parser becomes "committed" to the path up to that point, meaning that if
+    the parser fails, the error message will include the path segments that
+    were visited before the failure.
+
+    Here's an example of a parser with required segments:
+
+    ```
+    catch do
+      parseText
+        (s "users" / required text / s "comments" / required nat => pair)
+        "/users/bob/comments/42"
+    ```
+
+    This means that if the parser sees `/users`, then it must see a {type Text}
+    value after that. If it doesn't, the parser fails with a
+    {type UriParseFailure}. If it sees a {type Text} value and then the segment
+    `comments`, then it must see a {type Nat} value after that. If it doesn't,
+    the parser fails with a {type UriParseFailure}.
+
+    Here's how that parser might fail if the URI doesn't match the required
+    structure:
+
+    ```
+    catch do
+      parseText
+        (s "users" / required text / s "comments" / required nat => pair)
+        "/users/bob/comments/forty-two"
+    ```
+
+    Since the path matches up to `/users/bob/comments/`, the parser is
+    committed to that path, so a failure at `forty-two` is reported.
+
+  # Structure of a UriParseFailure value
+
+    A {type UriParseFailure} value can be one of the following:
+
+    * {BadUri} - The given {type Text} value is not a valid {type URI}.
+    * {BadPath} - The given {type URI} doesn't match the given {type Parser}.
+    * {BadQuery} - The given {type URI} doesn't match the given
+      {type ParseQuery}, or the query string is malformed (see
+      {type QueryParseFailure}).
+  }}
+
+Parser.UriParseFailure.toText : UriParseFailure -> Text
+Parser.UriParseFailure.toText = cases
+  BadPath [] -> "No error"
+  BadPath errs@(e +: es) ->
+    use List map
+    use Text ++ join
+    comm = join "/" (PathParseFailure.committed e)
+    expe e = comm ++ "/" ++ Expected.toText (PathParseFailure.expected e)
+    act e = comm ++ "/" ++ join "/" (PathParseFailure.actual e)
+    "Bad path: Expected "
+      ++ join " or " (map expe errs)
+      ++ " but got "
+      ++ Optional.getOrElse "/" (List.last (sortBy Text.size (map act errs)))
+  BadQuery e -> QueryParseFailure.toText e
+  BadUri t -> "Invalid URI: " Text.++ t
+
+README : Doc
+README =
+  use Parser / nat text
+  {{
+  # URI parser
+
+    This library provides a parser to turn URIs into Unison types that are
+    nicer to work with.
+
+    It's centered around the {type Parser} type. See its documentation for more
+    details.
+
+    Based on the [URL parser](https://github.com/elm/url) library for Elm, by
+    Evan Czaplicki and others.
+
+    ## Example usage
+
+           @source{type BlogRoute}
+
+       ```
+       route =
+         Parser.oneOf
+           [ s "topic" / text => Topic
+           , s "blog" / nat => Blog
+           , s "user" / text => User
+           , s "user" / text / s "comment" / nat => Comment
+           ]
+       [ "/topic/wolf"
+       , "/topic/"
+       , "/blog/42"
+       , "/blog/wolf"
+       , "/user/sam"
+       , "/user/bob/comment/42"
+       , "/user/"
+       ]
+         |> List.map (parseTextMaybe route)
+       ```
+
+    ## License
+
+       MIT License. See {LICENSE}.
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{ Upgrade to the lastest version of {{ shareSlug "@unison/base" }}. }}
