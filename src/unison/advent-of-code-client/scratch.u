@@ -1,0 +1,692 @@
+ability AdventOfCode where
+  input : Year -> Day ->{AdventOfCode} Text
+  submit : Year -> Day -> Part -> Text ->{AdventOfCode} SubmissionResult
+
+type AdventOfCode.defaultHandler.Config
+  = { apiBaseUri : URI,
+      apiToken : Token,
+      cacheDir : Optional FilePath,
+      logLevel : Optional LogLevel }
+
+type api.failure.SubmissionError
+  =
+
+type api.failure.UnexpectedResponseStatus
+  =
+
+type api.Token
+  = { toText : Text }
+
+type Day
+  = { toNat : Nat }
+
+type Day.Part
+  = { toNat : Nat }
+
+type SubmissionResult
+  = Correct
+  | Incorrect
+
+AdventOfCode.defaultHandler :
+  '{g, IO, AdventOfCode, Exception, Log Text} r ->{g, IO, Exception} r
+AdventOfCode.defaultHandler thunk =
+  configured defaultHandler.Config.default() thunk
+
+AdventOfCode.defaultHandler.Config.apiBaseUri : defaultHandler.Config -> URI
+AdventOfCode.defaultHandler.Config.apiBaseUri = cases
+  defaultHandler.Config.Config apiBaseUri _ _ _ -> apiBaseUri
+
+AdventOfCode.defaultHandler.Config.apiBaseUri.modify :
+  (URI ->{g} URI) -> defaultHandler.Config ->{g} defaultHandler.Config
+AdventOfCode.defaultHandler.Config.apiBaseUri.modify f = cases
+  defaultHandler.Config.Config apiBaseUri apiToken cacheDir logLevel ->
+    defaultHandler.Config.Config (f apiBaseUri) apiToken cacheDir logLevel
+
+AdventOfCode.defaultHandler.Config.apiBaseUri.set :
+  URI -> defaultHandler.Config -> defaultHandler.Config
+AdventOfCode.defaultHandler.Config.apiBaseUri.set apiBaseUri1 = cases
+  defaultHandler.Config.Config _ apiToken cacheDir logLevel ->
+    defaultHandler.Config.Config apiBaseUri1 apiToken cacheDir logLevel
+
+AdventOfCode.defaultHandler.Config.apiToken : defaultHandler.Config -> Token
+AdventOfCode.defaultHandler.Config.apiToken = cases
+  defaultHandler.Config.Config _ apiToken _ _ -> apiToken
+
+AdventOfCode.defaultHandler.Config.apiToken.modify :
+  (Token ->{g} Token) -> defaultHandler.Config ->{g} defaultHandler.Config
+AdventOfCode.defaultHandler.Config.apiToken.modify f = cases
+  defaultHandler.Config.Config apiBaseUri apiToken cacheDir logLevel ->
+    defaultHandler.Config.Config apiBaseUri (f apiToken) cacheDir logLevel
+
+AdventOfCode.defaultHandler.Config.apiToken.set :
+  Token -> defaultHandler.Config -> defaultHandler.Config
+AdventOfCode.defaultHandler.Config.apiToken.set apiToken1 = cases
+  defaultHandler.Config.Config apiBaseUri _ cacheDir logLevel ->
+    defaultHandler.Config.Config apiBaseUri apiToken1 cacheDir logLevel
+
+AdventOfCode.defaultHandler.Config.cacheDir :
+  defaultHandler.Config -> Optional FilePath
+AdventOfCode.defaultHandler.Config.cacheDir = cases
+  defaultHandler.Config.Config _ _ cacheDir _ -> cacheDir
+
+AdventOfCode.defaultHandler.Config.cacheDir.modify :
+  (Optional FilePath ->{g} Optional FilePath)
+  -> defaultHandler.Config
+  ->{g} defaultHandler.Config
+AdventOfCode.defaultHandler.Config.cacheDir.modify f = cases
+  defaultHandler.Config.Config apiBaseUri apiToken cacheDir logLevel ->
+    defaultHandler.Config.Config apiBaseUri apiToken (f cacheDir) logLevel
+
+AdventOfCode.defaultHandler.Config.cacheDir.set :
+  Optional FilePath -> defaultHandler.Config -> defaultHandler.Config
+AdventOfCode.defaultHandler.Config.cacheDir.set cacheDir1 = cases
+  defaultHandler.Config.Config apiBaseUri apiToken _ logLevel ->
+    defaultHandler.Config.Config apiBaseUri apiToken cacheDir1 logLevel
+
+AdventOfCode.defaultHandler.Config.default :
+  '{IO, Exception} defaultHandler.Config
+AdventOfCode.defaultHandler.Config.default =
+  do
+    defaultHandler.Config.Config
+      defaultApiBaseUri defaultToken() (Some defaultCacheDir()) (Some Debug)
+
+AdventOfCode.defaultHandler.Config.defaultApiBaseUri : URI
+AdventOfCode.defaultHandler.Config.defaultApiBaseUri =
+  authority = Authority None (HostName "adventofcode.com") None
+  URI Scheme.https (Some authority) (Path []) RawQuery.empty Fragment.empty
+
+AdventOfCode.defaultHandler.Config.defaultCacheDir : '{IO, Exception} FilePath
+AdventOfCode.defaultHandler.Config.defaultCacheDir = do
+  use FilePath /
+  mkdirsP =
+    List.foldLeft
+      (base child -> let
+        dir = base / child
+        if isDirectory dir then () else createDirectory dir
+        dir)
+  mkdirsP getTempDirectory() ["unison-advent-of-code", "cache"]
+
+AdventOfCode.defaultHandler.Config.defaultToken : '{IO, Exception} Token
+AdventOfCode.defaultHandler.Config.defaultToken =
+  do
+    match getEnv.impl "ADVENT_OF_CODE_TOKEN" with
+      Right token -> Token token
+      Left e ->
+        use Exception raise
+        use Text ++
+        paths =
+          [ do getEnv "XDG_DATA_HOME"
+          , do getEnv "HOME" ++ "/.local/share"
+          , do getEnv "HOMEPATH" ++ "/.local/share"
+          ]
+        pathTokenFile getPath =
+          handle getPath()
+          with cases
+            { path } ->
+              tokenFile =
+                FilePath (path ++ "/unison-advent-of-code/.token.txt")
+              if FilePath.exists tokenFile then Some tokenFile else None
+            { raise _ -> k } -> None
+        match findMap pathTokenFile paths with
+          None ->
+            raise
+              <| failure
+                "Could not locate Advent of Code Token. Set ADVENT_OF_CODE_TOKEN environment variable to a valid session token, or save one to ~/.local/share/unison-advent-of-code/.token.txt"
+                ()
+          Some tokenFile -> tokenFile |> readFileUtf8 |> trim |> Token
+
+AdventOfCode.defaultHandler.Config.defaultToken.doc : Doc
+AdventOfCode.defaultHandler.Config.defaultToken.doc =
+  {{
+  By default, this client will look for an API token in the following locations
+  (in this order):
+
+  * The `ADVENT_OF_CODE_TOKEN` environment variable
+  * A file located at `$XDG_DATA_HOME/unison-advent-of-code/.token.txt`
+  * A file located at `$HOME/.local/share/unison-advent-of-code/.token.txt`
+  }}
+
+AdventOfCode.defaultHandler.Config.doc : Doc
+AdventOfCode.defaultHandler.Config.doc =
+  {{
+  Configuration for the default {type AdventOfCode} handler.
+
+  {apiBaseUri} is the base URI of the Advent of Code API:
+  `Uri.toText defaultApiBaseUri`
+
+  {apiToken} is a session token for the Advent of Code API. {{ gettingToken }}
+
+  {cacheDir} is an optional directory to cache responses from the Advent of
+  Code API. This is useful so you don't need to repeatedly fetch the input to a
+  problem as you iterate on your answer and move on to the second {type Part}.
+
+  {logLevel} is the level of logging that you'd like to be printed to the
+  console. Pass {None} if you don't want to see any logging.
+  }}
+
+AdventOfCode.defaultHandler.Config.logLevel :
+  defaultHandler.Config -> Optional LogLevel
+AdventOfCode.defaultHandler.Config.logLevel = cases
+  defaultHandler.Config.Config _ _ _ logLevel -> logLevel
+
+AdventOfCode.defaultHandler.Config.logLevel.modify :
+  (Optional LogLevel ->{g} Optional LogLevel)
+  -> defaultHandler.Config
+  ->{g} defaultHandler.Config
+AdventOfCode.defaultHandler.Config.logLevel.modify f = cases
+  defaultHandler.Config.Config apiBaseUri apiToken cacheDir logLevel ->
+    defaultHandler.Config.Config apiBaseUri apiToken cacheDir (f logLevel)
+
+AdventOfCode.defaultHandler.Config.logLevel.set :
+  Optional LogLevel -> defaultHandler.Config -> defaultHandler.Config
+AdventOfCode.defaultHandler.Config.logLevel.set logLevel1 = cases
+  defaultHandler.Config.Config apiBaseUri apiToken cacheDir _ ->
+    defaultHandler.Config.Config apiBaseUri apiToken cacheDir logLevel1
+
+AdventOfCode.defaultHandler.configured :
+  defaultHandler.Config
+  -> '{g, IO, AdventOfCode, Exception, Log Text} r
+  ->{g, IO, Exception} r
+AdventOfCode.defaultHandler.configured config thunk =
+  handle
+    handle toHttp (apiBaseUri config) (cacheDir config) (apiToken config) thunk
+    with Http.handler
+  with defaultLogger.impl
+
+AdventOfCode.defaultHandler.defaultLogger.impl :
+  Request {Log Text} r ->{IO, Exception} r
+AdventOfCode.defaultHandler.defaultLogger.impl =
+  use Text ++
+  format _ lvl component msg =
+    LogLevel.toText lvl
+      ++ " "
+      ++ Component.toText component
+      ++ " "
+      ++ msg
+      ++ "\n"
+  formatter = Formatter format
+  defaultLogger (Component.root "AdventOfCode") formatter (std StdOut)
+
+AdventOfCode.defaultHandler.toHttp :
+  URI
+  -> Optional FilePath
+  -> Token
+  -> '{g, AdventOfCode} r
+  ->{g, IO, Exception, Http, Log Text} r
+AdventOfCode.defaultHandler.toHttp apiBaseUri cachePath token =
+  go : Request {AdventOfCode} x ->{g, IO, Exception, Http, Log Text} x
+  go = cases
+    { r }                                -> r
+    { AdventOfCode.input year day -> k } ->
+      apiCall = do getInput apiBaseUri year day
+      response = match cachePath with
+        None           -> apiCall()
+        Some cachePath -> cacheSuccess cachePath apiCall
+      handle k response with go
+    { submit year day part answer -> k } ->
+      res = submitAnswer apiBaseUri year day part answer
+      handle k res with go
+  thunk -> withApiDefaults token do handle thunk() with go
+
+AdventOfCode.doc : Doc
+AdventOfCode.doc =
+  {{
+  The [Advent of Code](https://adventofcode.com/) API.
+
+  Each Advent of Code problem has user-specific input data that you can fetch
+  with {AdventOfCode.input}.
+
+  You can submit your result to a problem with {submit}.
+
+  If you want to write your own function that solves the problem, run the input
+  through it, and submit your answer all in one go, you can use
+  {solveAndSubmit.impl}.
+  }}
+
+AdventOfCode.solveAndSubmit :
+  Year -> Day -> Part -> (Text ->{g} Text) ->{g, AdventOfCode, Log Text} ()
+AdventOfCode.solveAndSubmit year day part solve =
+  logResult = cases
+    Correct -> info "🎄 That's the correct answer. Great job!"
+    Incorrect ->
+      warn
+        "🎅 Bummer that's not the correct answer. Try again! You might have to wait a little while to submit another answer."
+  solveAndSubmit.impl year day part solve |> logResult
+
+AdventOfCode.solveAndSubmit.doc : Doc
+AdventOfCode.solveAndSubmit.doc =
+  {{
+  Given a problem part and a function that converts the {AdventOfCode.input}
+  into an answer, this function will fetch the input, run it through the
+  solving function, submit the answer, and log the result.
+  }}
+
+AdventOfCode.solveAndSubmit.impl :
+  Year -> Day -> Part -> (Text ->{g} Text) ->{g, AdventOfCode} SubmissionResult
+AdventOfCode.solveAndSubmit.impl year day part solve =
+  AdventOfCode.input year day |> solve |> submit year day part
+
+AdventOfCode.solveAndSubmit.impl.doc : Doc
+AdventOfCode.solveAndSubmit.impl.doc =
+  {{
+  Given a problem part and a function that converts the {AdventOfCode.input}
+  into an answer, this function will fetch the input, run it through the
+  solving function, and submit the answer.
+  }}
+
+api.addRequestDefaults : Token -> HttpRequest -> HttpRequest
+api.addRequestDefaults token req =
+  use Headers orElse
+  defaultHeaders =
+    use Text ++
+    aocHeaders =
+      Headers.fromList
+        [ ( "User-Agent"
+          , "https://share.unison-lang.org/@unison/advent-of-code-client by cody.allen@unison.cloud"
+          )
+        , ("Cookie", "session=" ++ Token.toText token)
+        ]
+    standardHeaders =
+      orElse
+        (req |> HttpRequest.body |> contentLength)
+        (orElse (forURI (HttpRequest.uri req)) acceptEncoding.default)
+    orElse aocHeaders standardHeaders
+  headers.modify (raw -> orElse raw defaultHeaders) req
+
+api.cacheSuccessfulRequest :
+  FilePath -> HttpRequest ->{IO, Exception, Http, Log Text} HttpResponse
+api.cacheSuccessfulRequest cacheDir req =
+  use Exception raise
+  use FilePath /
+  use Text ++
+  filename = hash Sha3_256 req |> toBase64UrlUnpadded |> fromUtf8
+  filePath = cacheDir / filename
+  filePathText = FilePath.toText filePath
+  uriText = req |> HttpRequest.uri |> URI.toText
+  cachedResponse =
+    loaded =
+      catchAll do
+        if FilePath.exists filePath then
+          readFile filePath
+            |> Value.deserialize.impl
+            |> raiseMessage filePath
+            |> load
+            |> (cases
+                 Left neededTerms ->
+                   failure
+                     "cached response contains terms not in codebase"
+                     neededTerms
+                     |> raise
+                 Right r -> Some r)
+        else None
+    match loaded with
+      Left err ->
+        "error attempting to parse cached response "
+          ++ filePathText
+          ++ " - "
+          ++ message err
+          |> warn
+        None
+      Right r -> r
+  match cachedResponse with
+    Some r ->
+      "loaded cached response for " ++ uriText ++ " from " ++ filePathText
+        |> debug
+      r
+    None ->
+      "fetching " ++ uriText |> debug
+      response = request req
+      if HttpResponse.isSuccess response then
+        "caching " ++ uriText ++ " response to " ++ filePathText |> debug
+        handle
+          tryEval do writeFile filePath (value response |> Value.serialize)
+        with cases
+          { x } -> x
+          { raise err -> _ } ->
+            "error writing cached reponse to "
+              ++ filePathText
+              ++ " - "
+              ++ message err
+              |> warn
+      else ()
+      response
+
+api.cacheSuccessfulRequest.doc : Doc
+api.cacheSuccessfulRequest.doc =
+  {{
+  Caches successful responses inside the provided `cacheDir` directory.
+  Requests will be cached in a file whose name is a hash of the request.
+
+  {{
+  docCallout
+    (Some {{ ℹ️ }})
+    {{
+    This assumes that the provided `cacheDir` directory already exists.
+    }} }}
+  }}
+
+api.dayPath : Year -> Day -> Path
+api.dayPath year day = Path [Year.toText year, "day", Day.toText day]
+
+api.expectSuccess : HttpResponse ->{Exception} ()
+api.expectSuccess response =
+  use Text ++
+  if HttpResponse.isSuccess response then ()
+  else
+    responseText =
+      match fromUtf8.impl (response |> HttpResponse.body |> Body.toBytes) with
+        Left _    -> None
+        Right msg -> Some msg
+    Failure
+      (typeLink failure.UnexpectedResponseStatus)
+      ("unexpected response status: "
+        ++ (HttpResponse.status response |> Status.toText))
+      (Any responseText)
+      |> Exception.raise
+
+api.getInput : URI -> Year -> Day ->{Exception, Http} Text
+api.getInput apiBaseUri year day =
+  use Char ==
+  use Path ++ /
+  uri =
+    apiBaseUri
+      |> path.modify (basePath -> (basePath ++ dayPath year day) / "input")
+  req = HttpRequest GET Version.http11 uri Headers.empty Body.empty
+  resp = request req
+  api.expectSuccess resp
+  HttpResponse.body resp
+    |> Body.toBytes
+    |> fromUtf8
+    |> Text.dropRightWhile ((==) ?\n)
+
+api.http.cacheSuccess :
+  FilePath -> '{g, Http} r ->{g, IO, Exception, Http, Log Text} r
+api.http.cacheSuccess cachePath =
+  go = cases
+    { r }                   -> r
+    { tryRequest req -> k } ->
+      resp = catch do cacheSuccessfulRequest cachePath req
+      handle k resp with go
+  thunk -> (handle thunk() with go)
+
+api.submitAnswer :
+  URI -> Year -> Day -> Part -> Text ->{Exception, Http} SubmissionResult
+api.submitAnswer apiBaseUri year day part answer =
+  use Exception raise
+  use Path /
+  uri =
+    apiBaseUri
+      |> path.modify
+        (basePath -> (basePath Path.++ dayPath year day) / "answer")
+  headers =
+    Headers.fromList
+      [ ("Content-Type", "application/x-www-form-urlencoded")
+      , ("Accept", "text/html,application/xhtml+xml,application/xml")
+      ]
+  reqBody =
+    Query.empty & ("level", Part.toText part) & ("answer", answer)
+      |> formEncoded
+  req = HttpRequest POST Version.http11 uri headers reqBody
+  resp = request req
+  api.expectSuccess resp
+  responseBodyText = HttpResponse.body resp |> Body.toBytes |> fromUtf8
+  articlePattern =
+    use Pattern join or
+    p =
+      join
+        [ or (literal "<article>") (literal "<ARTICLE>")
+        , some
+            (or
+              (join
+                [ or (literal "</article>") (literal "</ARTICLE>")
+                , many anyChar
+                ])
+              (Pattern.capture (or (some (notChars "<")) anyChar)))
+        ]
+    some (or p anyChar)
+  mainArticle =
+    Optional.map
+      (at1 >> Text.join "") (Pattern.run articlePattern responseBodyText)
+  match mainArticle with
+    None ->
+      Failure
+        (typeLink SubmissionError)
+        "error parsing response after submitting answer"
+        (Any responseBodyText)
+        |> raise
+    Some mainArticle ->
+      use Text ++
+      lowercaseArticle = Text.toLowercase responseBodyText
+      matches : Text -> Boolean
+      matches needle = Text.contains needle lowercaseArticle
+      if matches "not the right answer" then Incorrect
+      else
+        if matches "that's the right answer" then Correct
+        else
+          Failure
+            (typeLink SubmissionError)
+            ("Error submitting answer. The server returned:\n" ++ mainArticle)
+            (Any ())
+            |> raise
+
+api.Token.doc : Doc
+api.Token.doc =
+  {{
+  An Advent of Code API/session token. You can get one of these by logging into
+  Advent of Code in your browser and copying the value of the `session` cookie.
+  }}
+
+api.Token.toText : Token -> Text
+api.Token.toText = cases Token toText -> toText
+
+api.Token.toText.modify : (Text ->{g} Text) -> Token ->{g} Token
+api.Token.toText.modify f = cases Token toText -> Token (f toText)
+
+api.Token.toText.set : Text -> Token -> Token
+api.Token.toText.set toText1 = cases Token _ -> Token toText1
+
+api.withApiDefaults : Token -> '{g, Http} r ->{g, Http} r
+api.withApiDefaults token =
+  go = cases
+    { x }                   -> x
+    { tryRequest req -> k } ->
+      req' = addRequestDefaults token req
+      res = tryRequest req'
+      handle k res with go
+  thunk -> (handle thunk() with go)
+
+Day.Part.doc : Doc
+Day.Part.doc =
+  {{
+  Each Advent of Code problem has multiple parts; this represents one of the
+  parts.
+
+  At the time of this writing all problems have consisted of exactly 2 parts,
+  so in practices this will probably always wrap `` 1 `` or ``2``.
+  }}
+
+Day.Part.toNat : Part -> Nat
+Day.Part.toNat = cases Part toNat -> toNat
+
+Day.Part.toNat.modify : (Nat ->{g} Nat) -> Part ->{g} Part
+Day.Part.toNat.modify f = cases Part toNat -> Part (f toNat)
+
+Day.Part.toNat.set : Nat -> Part -> Part
+Day.Part.toNat.set toNat1 = cases Part _ -> Part toNat1
+
+Day.Part.toText : Part -> Text
+Day.Part.toText = Part.toNat >> Nat.toText
+
+Day.toNat : Day -> Nat
+Day.toNat = cases Day toNat -> toNat
+
+Day.toNat.modify : (Nat ->{g} Nat) -> Day ->{g} Day
+Day.toNat.modify f = cases Day toNat -> Day (f toNat)
+
+Day.toNat.set : Nat -> Day -> Day
+Day.toNat.set toNat1 = cases Day _ -> Day toNat1
+
+Day.toText : Day -> Text
+Day.toText = Day.toNat >> Nat.toText
+
+docs.beKind : Doc
+docs.beKind =
+  {{
+  __Please__ use this client responsibly. We are very appreciative of the work
+  that goes into creating and maintaining Advent of Code, and we do not want to
+  strain AOC servers with unnecessary requests. This client implements some
+  caching to help avoid repeating requests, but it's a work in progress. Please
+  do not use this (or any other) client to submit requests in quick succession.
+  }}
+
+docs.configuration : Doc
+docs.configuration =
+  {{
+  The only required configuration is an Advent of Code API token. It is used to
+  fetch user-specific input for a problem and to submit answers for a problem.
+
+  {{ gettingToken }}
+
+  {{ defaultToken.doc }}
+
+  For advanced/custom configuration, see {configured}.
+  }}
+
+docs.example : '{IO, Exception} ()
+docs.example =
+  do
+    use Nat +
+    solve : Text -> Text
+    solve input =
+      input
+        |> Text.split ?\n
+        |> List.foldLeft (acc n -> acc + fromTextOrFail n) 0
+        |> Nat.toText
+    defaultHandler do solveAndSubmit (Year 2024) (Day 1) (Part 1) solve
+
+docs.example.doc : Doc
+docs.example.doc =
+  {{
+  This is an example of a function that provides a solution (albeit an
+  incorrect one) to one of the problems and submits the answer via the API:
+
+  You can run it by executing `run` {docs.example} with `ucm`.
+  }}
+
+docs.gettingToken : Doc
+docs.gettingToken =
+  {{
+  You can get your {type Token} by logging into
+  [Advent of Code](https://adventofcode.com/) in your browser, finding the
+  cookie named `session`, and copying its value.
+  }}
+
+README : Doc
+README =
+  {{
+  # Advent of Code API Client
+
+    This library provides a client for the
+    [Advent of Code](https://adventofcode.com/) HTTP API. It supports
+    downloading user-specific input and submitting answers for each problem.
+
+    You most likely would rather check out
+    [Unison Advent Of Code](https://share.unison-lang.org/@unison/code/latest/namespaces/public/advent_of_code)
+    for a forkable Advent of Code template project that includes this
+    dependency as well as other useful helpers to get you running.
+
+  # Be kind
+
+    {{ beKind }}
+
+  # Example Usage
+
+    {{ docs.example.doc }}
+
+        @source{docs.example}
+
+  # Configuration
+
+    {{ configuration }}
+  }}
+
+ReleaseNotes : Doc
+ReleaseNotes =
+  {{
+  * Fixes a bug with caching HTTP responses with the scheme runtime (
+    `run.native` ) if the cache parent directory didn't already exist.
+  }}
+
+up.logging.Log.toStream : '{g, Log a} r -> '{g, Stream (LogLevel, a)} r
+up.logging.Log.toStream thunk = do Log.toStream! thunk
+
+up.logging.Log.toStream! : '{g, Log a} r ->{g, Stream (LogLevel, a)} r
+up.logging.Log.toStream! =
+  go = cases
+    { r }                  -> r
+    { debug msg -> k }     ->
+      emit (Debug, msg)
+      handle k() with go
+    { info msg -> k }      ->
+      emit (Info, msg)
+      handle k() with go
+    { warn msg -> k }      ->
+      emit (Warn, msg)
+      handle k() with go
+    { Log.error msg -> k } ->
+      emit (Error, msg)
+      handle k() with go
+  thunk -> (handle thunk() with go)
+
+up.logging.Log.withLogLevel! :
+  Optional LogLevel -> '{g, Log a} r ->{g, Log a} r
+up.logging.Log.withLogLevel! level =
+  use Log error
+  (debugEnabled, infoEnabled, warnEnabled, errorEnabled) =
+    match level with
+      None       -> (false, false, false, false)
+      Some level ->
+        match level with
+          Debug -> (true, true, true, true)
+          Info  -> (false, true, true, true)
+          Warn  -> (false, false, true, true)
+          Error -> (false, false, false, true)
+  go = cases
+    { x }              -> x
+    { debug msg -> k } ->
+      if debugEnabled then debug msg else ()
+      handle k() with go
+    { info msg -> k }  ->
+      if infoEnabled then info msg else ()
+      handle k() with go
+    { warn msg -> k }  ->
+      if warnEnabled then warn msg else ()
+      handle k() with go
+    { error msg -> k } ->
+      if errorEnabled then error msg else ()
+      handle k() with go
+  thunk -> (handle thunk() with go)
+
+up.logging.Log.withLogLevel!.doc : Doc
+up.logging.Log.withLogLevel!.doc =
+  {{
+  Ignores any log messages that are below the provided logging level.
+
+  For example if `` Some LogLevel.Info `` is passed in, then {Info}, {Warn},
+  and {Error} messages will be logged, but {Debug} messages will be ignored.
+
+  Passing in {None} will result in all messages being ignored. See {nullLogger}
+  for an alternative approach to ignoring messages.
+
+  This function can be applied to the top-level or your program, but it can
+  also be used to filter verbose logs for a subset of your program. For
+  example:
+
+  ```
+  Stream.toList <| (Log.toStream do
+    withLogLevel! (Some Debug) do
+      debug "I will be logged"
+      withLogLevel! (Some Info) do debug "I will be ignored"
+      debug "Back to the outer scope, so I will be logged")
+  ```
+  }}
