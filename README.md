@@ -1,6 +1,6 @@
 # Unison OSS libraries
 
-This repository contains transcripts and transcript outputs that mirror popular OSS Unison libraries from [Unison Share](https://share.unison-lang.org/) to Github, for better discovery and ingestion by AI models. These libraries are open source and written by many excellent developers in the Unison community (see [CONTRIBUTORS](./CONTRIBUTORS)).
+This repository contains transcripts and transcript outputs that mirror popular OSS Unison libraries from [Unison Share](https://share.unison-lang.org/) to Github, for better discovery and ingestion by AI models. These libraries are open source and written by many excellent developers in the Unison community (see [CONTRIBUTORS](./CONTRIBUTORS.md)).
 
 ## Repository purpose
 
