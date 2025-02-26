@@ -11,7 +11,7 @@ All contributions to this library from the Unison community are opt-in, with the
 1. Create a new directory in the `src` folder for your Unison Share username and your library name. It should look like `src/username/library-name`.
 2. Create a [Unison transcript file](https://www.unison-lang.org/docs/tooling/transcripts/) called, `scratch.u.md`, in the new directory for your library
 
-[Here's a sample transcript](.github/add_oss_library_template.md) which you can use as a template:
+Here's a sample transcript which you can use as a template:
 
 `````
 # <Library name>
